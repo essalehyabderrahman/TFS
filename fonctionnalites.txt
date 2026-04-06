@@ -1,0 +1,36 @@
+Viewed ReceivedFiles.tsx:1-458
+
+J'ai parcouru et analysé l'architecture et les composants de l'espace connecté de l'application (`AccountManagement`, `ActiveTransfers`, `AuditLogs`, `ReceivedFiles`, `SecuritySettings`, `TeamManagement`). 
+
+Puisque l'application s'appelle **TFS (Trusted File System)** et vise un standard élevé de sécurité et de conformité ("Enterprise-grade"), voici une analyse de ce qui est, selon moi, **inutile/contradictoire** et de ce qui est **manquant**.
+
+### ❌ 1. Éléments inutiles ou paradoxaux (à retirer ou modifier)
+
+* **"Delete All Transfer History" (SecuritySettings.tsx)** : 
+  * C'est dans la *Danger Zone*. Dans un système de transfert hautement sécurisé conçu pour la "Compliance" (Audits), permettre à un utilisateur d'effacer tout l'historique contredit directement l'intégrité de l'audit. Un tel bouton ne devrait pas exister, ou devrait au moins demander l'intervention du super-admin de l'entreprise avec un délai de rétractation de 30 jours.
+* **Le bouton "Supprimer" sur les logs et fichiers reçus (`ReceivedFiles.tsx`, `AuditLogs.tsx`)** : 
+  * Les vrais fichiers peuvent être supprimés du stockage, mais **la trace** du fichier reçu (le log) devrait rester immuable. Supprimer la ligne de l'interface donne une illusion d'effacement alors qu'on devrait plutôt utiliser un système "archiver" pour nettoyer la vue.
+* **Le select "Encryption Level: Standard vs Enhanced" (`SecuritySettings.tsx`)** :
+  * Dans une vraie application de sécurité moderne, la cryptographie doit toujours utiliser le meilleur standard par défaut (AES-256 robuste). Donner le choix de rétrograder à un niveau "Standard" sous prétexte de performance n'est pas réaliste sur des fichiers. 
+
+### 🔍 2. Fonctionnalités Cruciales Manquantes
+
+* **Pagination et gestion des gros volumes** :
+  * Tes pages de listes (`TeamManagement`, `AuditLogs`, `ReceivedFiles`) affichent tout d'un coup. S'il y a 500 fichiers reçus ou 200 employés, la page va complètement saturées. Il manque des composants de pagination (Page 1, 2, 3...) ou de "Load More" (Infinite scroll).
+* **Bouton d'Export (Reporting)** :
+  * L'absence d'un bouton **"Export to CSV/PDF"** sur la page `AuditLogs.tsx` et dans les statistiques de `AccountManagement.tsx` est un grand manque. Dans un cadre "Entreprise", générer un rapport Excel des transferts actifs et expirés est essentiel.
+* **Copie rapide (Copy-to-Clipboard)** :
+  * Dans les popups "View Details", on voit le Sender, la taille, etc. Il manque cruellement une action rapide (icône "Presse-papiers") pour :
+    * Copier le lien sécurisé du fichier.
+    * Copier le mot de passe généré/la clé de déchiffrement.
+* **Sélection multiple (Bulk Actions)** :
+  * Sur `ReceivedFiles.tsx` et `TeamManagement.tsx`, on ne peut pas cocher plusieurs lignes. S'il y a 10 fichiers reçus à télécharger aujourd'hui, obliger l'utilisateur à les télécharger un par un est frustrant. Des *checkboxes* pour "Tout télécharger" ou "Suspendre 5 employés" manquent.
+* **Historique des Notifications** :
+  * La cloche du `<Header>` ouvre une petite popup éphémère. S'il y a beaucoup d'événements, on les perd une fois fermée. Il n'y a pas de page complète (ex: `/app/notifications`) pour lire les anciennes alertes ou notifications de téléchargement.
+* **Feedback visuel lors des actions** :
+  * Actuellement, les actions ("Download", "Delete", "Send Invitation") se contentent de fermer les modales. L'absence globale d'un composant type **"Toast" (Alerte temporaire verte/rouge en bas de l'écran)** pour confirmer "File downloaded successfully" ou "Invitation sent" est un manque ergonomique.
+
+### 💡 Recommandation visuelle et structurelle 
+Si nous devons prioriser, ajouter l'**Extraction vers CSV des logs** et **corriger la Danger Zone pour empêcher la destruction sauvage des audits** renforceraient considérablement la crédibilité "Entreprise" du projet. 
+
+Veux-tu que l'on commence à implémenter certaines de ces logiques manquantes (par exemple le bouton d'export ou le composant "Toast" pour les feedbacks) ou qu'on s'occupe de supprimer les fonctionnalités paradoxales ?
