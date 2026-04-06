@@ -1,0 +1,70 @@
+import type { TeamMember } from "@/types"
+
+export const MOCK_TEAM_MEMBERS: TeamMember[] = [
+  {
+    id: "tm1",
+    name: "Admin User",
+    email: "admin@company.com",
+    role: "admin",
+    status: "active",
+    joinedAt: new Date(2025, 0, 15),   // 15 jan 2025
+    lastActive: new Date(2026, 2, 6, 10, 15), // 6 mar 2026
+    transfersCount: 234,
+    avatar: "AU",
+  },
+  {
+    id: "tm2",
+    name: "Sarah Chen",
+    email: "s.chen@company.com",
+    role: "editor",
+    status: "active",
+    joinedAt: new Date(2025, 2, 10),
+    lastActive: new Date(2026, 2, 6, 9, 45),
+    transfersCount: 187,
+    avatar: "SC",
+  },
+  {
+    id: "tm3",
+    name: "Michael Roberts",
+    email: "m.roberts@company.com",
+    role: "editor",
+    status: "active",
+    joinedAt: new Date(2025, 4, 22),
+    lastActive: new Date(2026, 2, 5, 16, 30),
+    transfersCount: 142,
+    avatar: "MR",
+  },
+  {
+    id: "tm4",
+    name: "Emily Zhang",
+    email: "e.zhang@company.com",
+    role: "viewer",
+    status: "active",
+    joinedAt: new Date(2025, 6, 8),
+    lastActive: new Date(2026, 2, 6, 8, 20),
+    transfersCount: 56,
+    avatar: "EZ",
+  },
+  {
+    id: "tm5",
+    name: "David Martinez",
+    email: "d.martinez@company.com",
+    role: "editor",
+    status: "active",
+    joinedAt: new Date(2025, 8, 12),
+    lastActive: new Date(2026, 2, 5, 14, 10),
+    transfersCount: 98,
+    avatar: "DM",
+  },
+  {
+    id: "tm6",
+    name: "Lisa Johnson",
+    email: "l.johnson@company.com",
+    role: "viewer",
+    status: "pending",
+    joinedAt: new Date(2026, 2, 5), // 5 mar 2026
+    lastActive: new Date(2026, 2, 5, 15, 20),
+    transfersCount: 0,
+    avatar: "LJ",
+  },
+]

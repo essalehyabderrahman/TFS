@@ -1,0 +1,458 @@
+import { useState } from "react";
+import { Download, FileCheck, Eye, Trash2, Search, Filter, ChevronDown } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "../components/ui/alert-dialog";
+import { format } from "date-fns";
+
+interface ReceivedFile {
+  id: string;
+  fileName: string;
+  sender: string;
+  size: string;
+  receivedAt: Date;
+  expiresAt: Date;
+  status: "available" | "downloaded" | "expired";
+  encryption: string;
+  message?: string;
+}
+
+const mockReceivedFiles: ReceivedFile[] = [
+  {
+    id: "rf1",
+    fileName: "Q1_Financial_Report.pdf",
+    sender: "Sarah Chen",
+    size: "3.2 MB",
+    receivedAt: new Date(2026, 2, 5, 9, 30),
+    expiresAt: new Date(2026, 2, 12, 9, 30),
+    status: "available",
+    encryption: "AES-256",
+    message: "Please review the Q1 financial report for approval.",
+  },
+  {
+    id: "rf2",
+    fileName: "Contract_Draft_v3.docx",
+    sender: "Michael Roberts",
+    size: "1.8 MB",
+    receivedAt: new Date(2026, 2, 4, 14, 15),
+    expiresAt: new Date(2026, 2, 11, 14, 15),
+    status: "downloaded",
+    encryption: "AES-256",
+    message: "Latest contract version with legal team revisions.",
+  },
+  {
+    id: "rf3",
+    fileName: "Product_Mockups.zip",
+    sender: "Emily Zhang",
+    size: "45.7 MB",
+    receivedAt: new Date(2026, 2, 3, 11, 0),
+    expiresAt: new Date(2026, 2, 10, 11, 0),
+    status: "available",
+    encryption: "AES-256",
+  },
+  {
+    id: "rf4",
+    fileName: "Security_Audit_2026.pdf",
+    sender: "David Martinez",
+    size: "2.1 MB",
+    receivedAt: new Date(2026, 2, 1, 16, 45),
+    expiresAt: new Date(2026, 2, 8, 16, 45),
+    status: "downloaded",
+    encryption: "AES-256",
+    message: "Annual security audit results - confidential.",
+  },
+  {
+    id: "rf5",
+    fileName: "Meeting_Recording.mp4",
+    sender: "Lisa Johnson",
+    size: "125.3 MB",
+    receivedAt: new Date(2026, 1, 28, 10, 0),
+    expiresAt: new Date(2026, 2, 7, 10, 0),
+    status: "expired",
+    encryption: "AES-256",
+  },
+];
+
+export function ReceivedFiles() {
+  const [files] = useState<ReceivedFile[]>(mockReceivedFiles);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"all" | "available" | "downloaded" | "expired">("all");
+  const [selectedFile, setSelectedFile] = useState<ReceivedFile | null>(null);
+  const [fileToDelete, setFileToDelete] = useState<string | null>(null);
+  const [showFilterDropdown, setShowFilterDropdown] = useState(false);
+
+  const filteredFiles = files.filter((file) => {
+    const matchesSearch = file.fileName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      file.sender.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesStatus = statusFilter === "all" || file.status === statusFilter;
+    return matchesSearch && matchesStatus;
+  });
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case "available":
+        return "#00E5A0";
+      case "downloaded":
+        return "#0B7FFF";
+      case "expired":
+        return "#94a3b8";
+      default:
+        return "#6b7fa8";
+    }
+  };
+
+  const getStatusLabel = (status: string) => {
+    switch (status) {
+      case "available":
+        return "Available";
+      case "downloaded":
+        return "Downloaded";
+      case "expired":
+        return "Expired";
+      default:
+        return status;
+    }
+  };
+
+  const handleDownload = (file: ReceivedFile) => {
+    console.log("Downloading file:", file.fileName);
+    // Simulate download
+  };
+
+  const handleDelete = (id: string) => {
+    console.log("Deleting file:", id);
+    setFileToDelete(null);
+  };
+
+  return (
+    <div className="flex flex-col gap-4 sm:gap-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-white text-2xl font-bold mb-1">Received Files</h1>
+          <p style={{ color: "#6b7fa8", fontSize: "14px" }}>
+            Files shared with you by other team members
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <span
+            className="inline-flex items-center px-3 py-1.5 rounded-lg"
+            style={{
+              fontSize: "12px",
+              fontWeight: 600,
+              color: "#00E5A0",
+              background: "rgba(0,229,160,0.12)",
+              border: "1px solid rgba(0,229,160,0.2)",
+            }}
+          >
+            {filteredFiles.filter(f => f.status === "available").length} Available
+          </span>
+        </div>
+      </div>
+
+      {/* Search & Filter Bar */}
+      <div
+        className="flex flex-col sm:flex-row gap-3 p-4 rounded-xl"
+        style={{
+          background: "rgba(255,255,255,0.03)",
+          border: "1px solid rgba(255,255,255,0.08)",
+        }}
+      >
+        <div className="flex-1 relative">
+          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: "#6b7fa8" }} />
+          <input
+            type="text"
+            placeholder="Search files or senders..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full pl-10 pr-4 py-2.5 rounded-lg text-white placeholder:text-slate-500 outline-none"
+            style={{
+              background: "rgba(255,255,255,0.04)",
+              border: "1px solid rgba(255,255,255,0.08)",
+              fontSize: "14px",
+            }}
+          />
+        </div>
+        <div className="relative">
+          <button
+            onClick={() => setShowFilterDropdown(!showFilterDropdown)}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-lg transition-colors"
+            style={{
+              background: "rgba(255,255,255,0.04)",
+              border: "1px solid rgba(255,255,255,0.08)",
+              color: "#e2e8f0",
+              fontSize: "14px",
+            }}
+          >
+            <Filter size={16} />
+            <span>{statusFilter === "all" ? "All Status" : getStatusLabel(statusFilter)}</span>
+            <ChevronDown size={14} />
+          </button>
+          {showFilterDropdown && (
+            <div
+              className="absolute right-0 mt-2 w-48 rounded-lg overflow-hidden z-10"
+              style={{
+                background: "#0d1228",
+                border: "1px solid rgba(255,255,255,0.1)",
+                boxShadow: "0 10px 40px rgba(0,0,0,0.5)",
+              }}
+            >
+              {["all", "available", "downloaded", "expired"].map((status) => (
+                <button
+                  key={status}
+                  onClick={() => {
+                    setStatusFilter(status as any);
+                    setShowFilterDropdown(false);
+                  }}
+                  className="w-full px-4 py-2.5 text-left transition-colors hover:bg-white/5"
+                  style={{
+                    color: statusFilter === status ? "#0B7FFF" : "#e2e8f0",
+                    fontSize: "14px",
+                  }}
+                >
+                  {status === "all" ? "All Status" : getStatusLabel(status)}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Files List */}
+      <div className="grid gap-3">
+        {filteredFiles.length === 0 ? (
+          <div
+            className="flex flex-col items-center justify-center py-16 rounded-xl"
+            style={{
+              background: "rgba(255,255,255,0.03)",
+              border: "1px solid rgba(255,255,255,0.08)",
+            }}
+          >
+            <Download size={48} style={{ color: "#3d4f6e", marginBottom: "16px" }} />
+            <p style={{ color: "#6b7fa8", fontSize: "15px" }}>No files found</p>
+          </div>
+        ) : (
+          filteredFiles.map((file) => (
+            <div
+              key={file.id}
+              className="p-4 rounded-xl transition-all hover:bg-white/5"
+              style={{
+                background: "rgba(255,255,255,0.03)",
+                border: "1px solid rgba(255,255,255,0.08)",
+              }}
+            >
+              <div className="flex flex-col gap-4">
+                {/* File Icon & Info */}
+                <div className="flex items-start gap-3 flex-1 min-w-0">
+                  <div
+                    className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0"
+                    style={{
+                      background: "rgba(11,127,255,0.12)",
+                      border: "1px solid rgba(11,127,255,0.2)",
+                    }}
+                  >
+                    <FileCheck size={20} style={{ color: "#0B7FFF" }} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-white font-semibold text-sm truncate">{file.fileName}</p>
+                    <div className="flex flex-wrap items-center gap-2 mt-1">
+                      <span style={{ color: "#6b7fa8", fontSize: "13px" }}>
+                        From {file.sender}
+                      </span>
+                      <span style={{ color: "#3d4f6e", fontSize: "13px" }}>•</span>
+                      <span style={{ color: "#6b7fa8", fontSize: "13px" }}>{file.size}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Date & Status Row - Mobile Optimized */}
+                <div className="flex flex-wrap items-center gap-3">
+                  <div className="flex-1 min-w-[150px] grid grid-cols-2 gap-3">
+                    <div className="flex flex-col">
+                      <span style={{ color: "#4a5578", fontSize: "11px", fontWeight: 600, letterSpacing: "0.05em" }}>
+                        RECEIVED
+                      </span>
+                      <span style={{ color: "#e2e8f0", fontSize: "13px" }}>
+                        {format(file.receivedAt, "MMM d, h:mm a")}
+                      </span>
+                    </div>
+                    <div className="flex flex-col">
+                      <span style={{ color: "#4a5578", fontSize: "11px", fontWeight: 600, letterSpacing: "0.05em" }}>
+                        EXPIRES
+                      </span>
+                      <span style={{ color: file.status === "expired" ? "#94a3b8" : "#e2e8f0", fontSize: "13px" }}>
+                        {format(file.expiresAt, "MMM d, h:mm a")}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Status Badge */}
+                  <span
+                    className="inline-flex items-center px-2.5 py-1 rounded-lg"
+                    style={{
+                      fontSize: "11px",
+                      fontWeight: 700,
+                      letterSpacing: "0.05em",
+                      color: getStatusColor(file.status),
+                      background: `${getStatusColor(file.status)}15`,
+                      border: `1px solid ${getStatusColor(file.status)}30`,
+                    }}
+                  >
+                    {getStatusLabel(file.status).toUpperCase()}
+                  </span>
+                </div>
+
+                {/* Actions - Full Width on Mobile */}
+                <div className="flex items-center gap-2 pt-2 border-t" style={{ borderColor: "rgba(255,255,255,0.08)" }}>
+                  <button
+                    onClick={() => setSelectedFile(file)}
+                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg transition-colors"
+                    style={{ 
+                      background: "rgba(255,255,255,0.04)",
+                      border: "1px solid rgba(255,255,255,0.08)",
+                      color: "#e2e8f0",
+                      fontSize: "13px",
+                      fontWeight: 600,
+                    }}
+                  >
+                    <Eye size={16} />
+                    <span className="hidden sm:inline">View</span>
+                  </button>
+                  {file.status === "available" && (
+                    <button
+                      onClick={() => handleDownload(file)}
+                      className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg transition-all hover:opacity-80"
+                      style={{
+                        background: "linear-gradient(135deg, #0B7FFF 0%, #0960D9 100%)",
+                        color: "white",
+                        fontSize: "13px",
+                        fontWeight: 600,
+                      }}
+                    >
+                      <Download size={16} />
+                      <span className="hidden sm:inline">Download</span>
+                    </button>
+                  )}
+                  <button
+                    onClick={() => setFileToDelete(file.id)}
+                    className="p-2.5 rounded-lg transition-colors hover:bg-red-500/10"
+                    style={{ 
+                      border: "1px solid rgba(239,68,68,0.2)",
+                      color: "#ef4444" 
+                    }}
+                    title="Delete"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+
+      {/* File Details Dialog */}
+      <Dialog open={!!selectedFile} onOpenChange={() => setSelectedFile(null)}>
+        <DialogContent
+          className="sm:max-w-2xl"
+          style={{
+            background: "linear-gradient(180deg, #0d1228 0%, #0b0f20 100%)",
+            border: "1px solid rgba(255,255,255,0.1)",
+          }}
+        >
+          {selectedFile && (
+            <>
+              <DialogHeader>
+                <DialogTitle className="text-white text-xl">File Details</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label style={{ color: "#4a5578", fontSize: "12px", fontWeight: 600, letterSpacing: "0.05em" }}>
+                      FILE NAME
+                    </label>
+                    <p className="text-white mt-1">{selectedFile.fileName}</p>
+                  </div>
+                  <div>
+                    <label style={{ color: "#4a5578", fontSize: "12px", fontWeight: 600, letterSpacing: "0.05em" }}>
+                      SENDER
+                    </label>
+                    <p className="text-white mt-1">{selectedFile.sender}</p>
+                  </div>
+                  <div>
+                    <label style={{ color: "#4a5578", fontSize: "12px", fontWeight: 600, letterSpacing: "0.05em" }}>
+                      SIZE
+                    </label>
+                    <p className="text-white mt-1">{selectedFile.size}</p>
+                  </div>
+                  <div>
+                    <label style={{ color: "#4a5578", fontSize: "12px", fontWeight: 600, letterSpacing: "0.05em" }}>
+                      ENCRYPTION
+                    </label>
+                    <p className="text-white mt-1">{selectedFile.encryption}</p>
+                  </div>
+                  <div>
+                    <label style={{ color: "#4a5578", fontSize: "12px", fontWeight: 600, letterSpacing: "0.05em" }}>
+                      RECEIVED
+                    </label>
+                    <p className="text-white mt-1">{format(selectedFile.receivedAt, "MMMM d, yyyy 'at' h:mm a")}</p>
+                  </div>
+                  <div>
+                    <label style={{ color: "#4a5578", fontSize: "12px", fontWeight: 600, letterSpacing: "0.05em" }}>
+                      EXPIRES
+                    </label>
+                    <p className="text-white mt-1">{format(selectedFile.expiresAt, "MMMM d, yyyy 'at' h:mm a")}</p>
+                  </div>
+                </div>
+                {selectedFile.message && (
+                  <div>
+                    <label style={{ color: "#4a5578", fontSize: "12px", fontWeight: 600, letterSpacing: "0.05em" }}>
+                      MESSAGE
+                    </label>
+                    <p className="text-white mt-1">{selectedFile.message}</p>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation */}
+      <AlertDialog open={!!fileToDelete} onOpenChange={() => setFileToDelete(null)}>
+        <AlertDialogContent
+          style={{
+            background: "linear-gradient(180deg, #0d1228 0%, #0b0f20 100%)",
+            border: "1px solid rgba(255,255,255,0.1)",
+          }}
+        >
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-white">Delete Received File</AlertDialogTitle>
+            <AlertDialogDescription style={{ color: "#6b7fa8" }}>
+              Are you sure you want to delete this file? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel
+              style={{
+                background: "rgba(255,255,255,0.04)",
+                border: "1px solid rgba(255,255,255,0.08)",
+                color: "#e2e8f0",
+              }}
+            >
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => fileToDelete && handleDelete(fileToDelete)}
+              style={{
+                background: "#ef4444",
+                color: "white",
+              }}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+}
