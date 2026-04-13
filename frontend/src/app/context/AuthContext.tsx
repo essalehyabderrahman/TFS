@@ -1,45 +1,46 @@
-import { createContext, useContext, useState, useCallback, useEffect } from "react"
+import { createContext, useState, useCallback, useEffect } from "react"
 import type { ReactNode } from "react"
 import type { AuthUser } from "@/types"
-import { apiGetMe, getToken, clearToken } from "@/app/api/auth"
+import { apiGetMe, apiSignOut } from "@/app/api/auth"
 
 interface AuthContextValue {
   user: AuthUser | null
   isAuthenticated: boolean
+  isMfaPending: boolean
   isInitializing: boolean
   isBackendReachable: boolean
-  signIn: (user: AuthUser) => void
+  signIn: (user: AuthUser, mfaPending?: boolean) => void
+  clearSession: () => void
   signOut: () => void
 }
 
-const AuthContext = createContext<AuthContextValue | null>(null)
+export const AuthContext = createContext<AuthContextValue | null>(null)
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null)
+  const [isMfaPending, setIsMfaPending] = useState(false)
   const [isInitializing, setIsInitializing] = useState(true)
   const [isBackendReachable, setIsBackendReachable] = useState(true)
 
-  // On mount: attempt to restore session from localStorage token
+  // On mount: attempt to restore session by hitting /auth/me
+  // If the browser holds a valid HttpOnly session cookie, this will succeed.
   useEffect(() => {
-    const token = getToken()
-    if (!token) {
-      setIsInitializing(false)
-      setIsBackendReachable(!!import.meta.env.VITE_API_BASE_URL)
-      return
-    }
 
     apiGetMe()
       .then((result) => {
         if (result.ok && result.user) {
           setUser(result.user)
+          setIsMfaPending(false)
+          setIsBackendReachable(true)
+        } else if (result.error === "MFA_REQUIRED") {
+          // Stale MFA-pending cookie on load — treat as unauthenticated.
+          // The cookie will expire naturally (5 min). Don't set isMfaPending
+          // here because no active MFA flow is in progress.
           setIsBackendReachable(true)
         } else if (result.error === "NETWORK_ERROR") {
-          // If it's a network error, don't clear the token!
-          // We keep whatever we had (or null if it's the first load)
           setIsBackendReachable(false)
         } else {
-          // Token is truly stale / invalid
-          clearToken()
+          // 401 Unauthorized or other → no valid session
           setIsBackendReachable(true)
         }
       })
@@ -52,14 +53,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       })
   }, [])
 
-  const signIn = useCallback((u: AuthUser) => {
+  const signIn = useCallback((u: AuthUser, mfaPending = false) => {
     setUser(u)
+    setIsMfaPending(mfaPending)
     setIsBackendReachable(true)
   }, [])
 
-  const signOut = useCallback(() => {
-    clearToken()
+  const clearSession = useCallback(() => {
     setUser(null)
+    setIsMfaPending(false)
+  }, [])
+
+  const signOut = useCallback(async () => {
+    // Explicitly call the backend to nuke the HttpOnly cookie
+    await apiSignOut()
+    setUser(null)
+    setIsMfaPending(false)
   }, [])
 
   return (
@@ -67,10 +76,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       value={{
         user,
         isAuthenticated: user !== null,
+        isMfaPending,
         isInitializing,
         isBackendReachable,
         signIn,
         signOut,
+        clearSession,
       }}
     >
       {children}
@@ -78,8 +89,5 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   )
 }
 
-export function useAuth() {
-  const ctx = useContext(AuthContext)
-  if (!ctx) throw new Error("useAuth doit être utilisé dans <AuthProvider>")
-  return ctx
-}
+
+

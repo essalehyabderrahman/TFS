@@ -1,5 +1,5 @@
-import { Navigate, Outlet } from "react-router"
-import { useAuth } from "@/app/context/AuthContext"
+import { Navigate, Outlet, useLocation } from "react-router"
+import { useAuth } from "@/app/hooks/useAuth"
 
 /**
  * Protège toutes les routes enfants sous /app/*.
@@ -7,7 +7,8 @@ import { useAuth } from "@/app/context/AuthContext"
  * l'utilisateur doit être redirigé vers /signin.
  */
 export function ProtectedRoute() {
-  const { isAuthenticated, isInitializing } = useAuth()
+  const { user, isAuthenticated, isMfaPending, isInitializing } = useAuth()
+  const location = useLocation()
 
   // While we're checking localStorage token → don't redirect yet
   if (isInitializing) {
@@ -34,6 +35,20 @@ export function ProtectedRoute() {
         <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       </div>
     )
+  }
+
+  // Mandatory Login check
+  if (!isAuthenticated && !isMfaPending) {
+    return <Navigate to="/signin" replace />
+  }
+
+  // MFA Flow Enforcement: If session is partial, only allow /mfa-verify or /dashboard/mfa-setup
+  if (isMfaPending) {
+    const allowedFlows = ["/mfa-verify", "/dashboard/mfa-setup"]
+    if (!allowedFlows.includes(location.pathname)) {
+      const targetFlow = user?.mfaEnabled ? "/mfa-verify" : "/dashboard/mfa-setup"
+      return <Navigate to={targetFlow} replace />
+    }
   }
 
   if (!isAuthenticated) {

@@ -39,7 +39,7 @@ with app.app_context():
         created_at=datetime.now(timezone.utc) - timedelta(days=90),
         last_active=datetime.now(timezone.utc) - timedelta(hours=2)
     )
-    admin.set_password("admin123")
+    admin.set_password("Admin@Secure#2026")
     
     sarah = User(
         id="u2_sarah",
@@ -51,7 +51,7 @@ with app.app_context():
         created_at=datetime.now(timezone.utc) - timedelta(days=60),
         last_active=datetime.now(timezone.utc) - timedelta(hours=5)
     )
-    sarah.set_password("password123")
+    sarah.set_password("Sarah@Secure#2026")
 
     michael = User(
         id="u3_michael",
@@ -63,7 +63,7 @@ with app.app_context():
         created_at=datetime.now(timezone.utc) - timedelta(days=20),
         last_active=datetime.now(timezone.utc) - timedelta(minutes=45)
     )
-    michael.set_password("password123")
+    michael.set_password("Michael@Secure#2026")
 
     emily = User(
         id="u4_emily",
@@ -74,7 +74,7 @@ with app.app_context():
         avatar="EZ",
         created_at=datetime.now(timezone.utc) - timedelta(days=10)
     )
-    emily.set_password("password123")
+    emily.set_password("Emily@Secure#2026")
 
     david = User(
         id="u5_david",
@@ -85,7 +85,7 @@ with app.app_context():
         avatar="DM",
         created_at=datetime.now(timezone.utc) - timedelta(days=1)
     )
-    david.set_password("password123")
+    david.set_password("David@Secure#2026")
 
     users = [admin, sarah, michael, emily, david]
     db.session.add_all(users)
@@ -184,6 +184,18 @@ with app.app_context():
     ]
 
     db.session.add_all(logs)
+
+    from app.models.notification import Notification
+
+    # 4. Notifications
+    notifs = [
+        Notification(id=generate_uuid(), user_id=admin.id, title="New secure transfer completed", body="Q4_Financial_Report_2025.pdf was delivered successfully.", type="success", is_read=False, created_at=now - timedelta(minutes=2)),
+        Notification(id=generate_uuid(), user_id=admin.id, title="New file received", body="Q1_Financial_Report.pdf from Sarah Chen.", type="info", is_read=False, created_at=now - timedelta(minutes=15)),
+        Notification(id=generate_uuid(), user_id=admin.id, title="Login from new device", body="A new sign-in was detected from Chrome on Windows.", type="warning", is_read=True, created_at=now - timedelta(hours=1)),
+        # Add notifications for Sarah
+        Notification(id=generate_uuid(), user_id=sarah.id, title="Welcome to TFS", body="Your secure workspace is ready.", type="info", is_read=False, created_at=now - timedelta(days=60))
+    ]
+    db.session.add_all(notifs)
 
     db.session.commit()
     print("Database initialization and data seeding completed successfully!")

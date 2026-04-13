@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from "react"
 import { fetchTeamMembers } from "@/app/api/team"
-import { MOCK_TEAM_MEMBERS } from "@/mocks"
 import type { TeamMember, TeamRole } from "@/types"
 
 interface UseTeamReturn {
@@ -62,6 +61,3 @@ export function useTeam(): UseTeamReturn {
 
   return { members, loading, error, inviteMember, updateRole, removeMember }
 }
-
-// Supprimer quand le backend est branché
-export { MOCK_TEAM_MEMBERS }

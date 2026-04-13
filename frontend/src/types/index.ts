@@ -45,6 +45,10 @@ export interface AuthUser {
   name: string
   email: string
   role: TeamRole
+  avatar?: string
+  company?: string
+  plan?: string
+  mfaEnabled?: boolean
 }
 
 // ─── API ──────────────────────────────────────────────────────────────────────

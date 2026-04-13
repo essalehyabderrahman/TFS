@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router";
+import { useAuth } from "../hooks/useAuth";
 import {
   ArrowUpDown,
   Download,
@@ -12,11 +13,11 @@ import {
 } from "lucide-react";
 
 const navItems = [
-  { icon: ArrowUpDown, label: "Active Transfers", id: "active", path: "/app/active" },
-  { icon: Download, label: "Received Files", id: "received", path: "/app/received" },
-  { icon: ClipboardList, label: "Audit & Compliance Logs", id: "audit", path: "/app/audit" },
-  { icon: Users, label: "Team Management", id: "team", path: "/app/team" },
-  { icon: ShieldCheck, label: "Security Settings", id: "security", path: "/app/security" },
+  { icon: ArrowUpDown, label: "Active Transfers", id: "active", path: "/dashboard/active" },
+  { icon: Download, label: "Received Files", id: "received", path: "/dashboard/received" },
+  { icon: ClipboardList, label: "Audit & Compliance Logs", id: "audit", path: "/dashboard/audit" },
+  { icon: Users, label: "Team Management", id: "team", path: "/dashboard/team" },
+  { icon: ShieldCheck, label: "Security Settings", id: "security", path: "/dashboard/security" },
 ];
 
 interface SidebarProps {
@@ -28,12 +29,14 @@ interface SidebarProps {
 export function Sidebar({ isOpen, onClose, onNewTransfer }: SidebarProps) {
   const navigate = useNavigate();
   const location = useLocation();
+  const { user } = useAuth();
+
   
   // Determine active state from current location
   const getActiveFromPath = (path: string) => {
-    if (path === "/app" || path === "/app/active") return "active";
-    if (path.startsWith("/app/")) {
-      return path.replace("/app/", "");
+    if (path === "/dashboard" || path === "/dashboard/active") return "active";
+    if (path.startsWith("/dashboard/")) {
+      return path.replace("/dashboard/", "");
     }
     return "";
   };
@@ -170,7 +173,7 @@ export function Sidebar({ isOpen, onClose, onNewTransfer }: SidebarProps) {
         <div
           className="mx-3 mb-5 p-3 rounded-xl flex items-center gap-3 cursor-pointer hover:bg-white/5 transition-colors"
           style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)" }}
-          onClick={() => handleNavigation("account", "/app/account")}
+          onClick={() => handleNavigation("account", "/dashboard/account")}
         >
           <div
             className="w-9 h-9 rounded-full flex items-center justify-center shrink-0"
@@ -181,14 +184,14 @@ export function Sidebar({ isOpen, onClose, onNewTransfer }: SidebarProps) {
               color: "#fff",
             }}
           >
-            AU
+            {user?.avatar || "TFS"}
           </div>
           <div className="flex-1 min-w-0">
             <p style={{ fontSize: "13px", color: "#e2e8f0", fontWeight: 600 }} className="truncate">
-              Admin User
+              {user?.name || "Loading..."}
             </p>
             <span
-              className="inline-flex items-center px-1.5 py-0.5 rounded mt-0.5"
+              className="inline-flex items-center px-1.5 py-0.5 rounded mt-0.5 uppercase"
               style={{
                 fontSize: "9px",
                 fontWeight: 700,
@@ -197,9 +200,10 @@ export function Sidebar({ isOpen, onClose, onNewTransfer }: SidebarProps) {
                 background: "rgba(0,210,255,0.1)",
               }}
             >
-              PRO PLAN
+              {user?.plan ? `${user.plan} PLAN` : "FREE PLAN"}
             </span>
           </div>
+
         </div>
       </aside>
     </>

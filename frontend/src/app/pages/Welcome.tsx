@@ -101,13 +101,15 @@ export function Welcome() {
       // Hero Buttons Reveal
       gsap.from(".hero-btns-reveal", {
         opacity: 0,
-        y: 20,
-        duration: 1,
-        ease: "power2.out",
+        y: 30,
+        scale: 0.98,
+        duration: 1.2,
+        ease: "power3.out",
         scrollTrigger: {
           trigger: ".hero-btns-reveal",
           start: "top 95%",
-          toggleActions: "play none none reverse"
+          toggleActions: "play none none none",
+          once: true
         }
       });
 

@@ -1,0 +1,24 @@
+import { apiRequest } from "./client"
+
+export interface AuditLog {
+  id: string
+  timestamp: string
+  user_email: string
+  action: string
+  resource: string
+  ip_address: string
+  location: string
+  status: "success" | "failed" | "warning"
+  details: string
+}
+
+export async function fetchAuditLogs(params: Record<string, any> = {}): Promise<{ logs: AuditLog[]; total: number; error: string | null }> {
+  try {
+    const query = new URLSearchParams(params).toString()
+    const endpoint = `/audit${query ? `?${query}` : ""}`
+    const data = await apiRequest<{ logs: AuditLog[]; total: number }>(endpoint)
+    return { ...data, error: null }
+  } catch (err) {
+    return { logs: [], total: 0, error: String(err) }
+  }
+}

@@ -1,8 +1,10 @@
 import { useState } from "react";
-import { Download, FileCheck, Eye, Trash2, Search, Filter, ChevronDown } from "lucide-react";
+import { Download, FileCheck, Eye, Trash2, Search, Filter, ChevronDown, Loader2 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "../components/ui/alert-dialog";
 import { format } from "date-fns";
+import { useTransfers } from "../hooks/useTransfers";
+import { useAuth } from "../hooks/useAuth";
 
 interface ReceivedFile {
   id: string;
@@ -11,76 +13,35 @@ interface ReceivedFile {
   size: string;
   receivedAt: Date;
   expiresAt: Date;
-  status: "available" | "downloaded" | "expired";
+  status: "available" | "downloaded" | "expired" | "Pending" | "Delivered";
   encryption: string;
   message?: string;
 }
 
-const mockReceivedFiles: ReceivedFile[] = [
-  {
-    id: "rf1",
-    fileName: "Q1_Financial_Report.pdf",
-    sender: "Sarah Chen",
-    size: "3.2 MB",
-    receivedAt: new Date(2026, 2, 5, 9, 30),
-    expiresAt: new Date(2026, 2, 12, 9, 30),
-    status: "available",
-    encryption: "AES-256",
-    message: "Please review the Q1 financial report for approval.",
-  },
-  {
-    id: "rf2",
-    fileName: "Contract_Draft_v3.docx",
-    sender: "Michael Roberts",
-    size: "1.8 MB",
-    receivedAt: new Date(2026, 2, 4, 14, 15),
-    expiresAt: new Date(2026, 2, 11, 14, 15),
-    status: "downloaded",
-    encryption: "AES-256",
-    message: "Latest contract version with legal team revisions.",
-  },
-  {
-    id: "rf3",
-    fileName: "Product_Mockups.zip",
-    sender: "Emily Zhang",
-    size: "45.7 MB",
-    receivedAt: new Date(2026, 2, 3, 11, 0),
-    expiresAt: new Date(2026, 2, 10, 11, 0),
-    status: "available",
-    encryption: "AES-256",
-  },
-  {
-    id: "rf4",
-    fileName: "Security_Audit_2026.pdf",
-    sender: "David Martinez",
-    size: "2.1 MB",
-    receivedAt: new Date(2026, 2, 1, 16, 45),
-    expiresAt: new Date(2026, 2, 8, 16, 45),
-    status: "downloaded",
-    encryption: "AES-256",
-    message: "Annual security audit results - confidential.",
-  },
-  {
-    id: "rf5",
-    fileName: "Meeting_Recording.mp4",
-    sender: "Lisa Johnson",
-    size: "125.3 MB",
-    receivedAt: new Date(2026, 1, 28, 10, 0),
-    expiresAt: new Date(2026, 2, 7, 10, 0),
-    status: "expired",
-    encryption: "AES-256",
-  },
-];
-
 export function ReceivedFiles() {
-  const [files] = useState<ReceivedFile[]>(mockReceivedFiles);
+  const { transfers, loading } = useTransfers();
+  const { user } = useAuth();
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "available" | "downloaded" | "expired">("all");
   const [selectedFile, setSelectedFile] = useState<ReceivedFile | null>(null);
   const [fileToDelete, setFileToDelete] = useState<string | null>(null);
   const [showFilterDropdown, setShowFilterDropdown] = useState(false);
 
-  const filteredFiles = files.filter((file) => {
+  // Filter transfers to only show those received by the current user
+  const receivedFiles: ReceivedFile[] = transfers
+    .filter(t => t.recipient === user?.email)
+    .map(t => ({
+      id: t.id,
+      fileName: t.fileName,
+      sender: t.uploadedBy, // Use the uploader email
+      size: t.size,
+      receivedAt: new Date(t.dateTimestamp),
+      expiresAt: t.expiryDate ? new Date(t.expiryDate) : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      status: (t.status === "Delivered" ? "available" : t.status.toLowerCase()) as any,
+      encryption: t.encryptionType
+    }));
+
+  const filteredFiles = receivedFiles.filter((file) => {
     const matchesSearch = file.fileName.toLowerCase().includes(searchTerm.toLowerCase()) ||
       file.sender.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilter === "all" || file.status === statusFilter;
@@ -219,7 +180,17 @@ export function ReceivedFiles() {
 
       {/* Files List */}
       <div className="grid gap-3">
-        {filteredFiles.length === 0 ? (
+        {loading ? (
+          <div className="flex flex-col items-center justify-center py-24 rounded-xl text-white/40"
+            style={{
+              background: "rgba(255,255,255,0.03)",
+              border: "1px solid rgba(255,255,255,0.08)",
+            }}
+          >
+            <Loader2 size={48} className="animate-spin text-[#00E5A0] mb-4" />
+            <p className="text-[10px] font-black uppercase tracking-[0.4em]">Scanning Secure Channels...</p>
+          </div>
+        ) : filteredFiles.length === 0 ? (
           <div
             className="flex flex-col items-center justify-center py-16 rounded-xl"
             style={{
@@ -346,8 +317,7 @@ export function ReceivedFiles() {
                 </div>
               </div>
             </div>
-          ))
-        )}
+          )))}
       </div>
 
       {/* File Details Dialog */}

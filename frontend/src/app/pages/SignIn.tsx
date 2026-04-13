@@ -1,11 +1,11 @@
-import { useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { toast } from "sonner";
 import { useNavigate, Link } from "react-router";
-import { useAuth } from "../context/AuthContext";
-import { apiSignIn, setToken } from "../api/auth";
+import { useAuth } from "../hooks/useAuth";
+import { apiSignIn } from "../api/auth";
 import { BackgroundParticles } from "../components/ui/BackgroundParticles";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
@@ -17,9 +17,17 @@ export function SignIn() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
   const navigate = useNavigate();
-  const { signIn } = useAuth();
+  const { isAuthenticated, isInitializing, signIn } = useAuth();
   const component = useRef<HTMLDivElement>(null);
+
+  // Redirect if already authenticated
+  useEffect(() => {
+    if (!isInitializing && isAuthenticated) {
+      navigate("/dashboard", { replace: true });
+    }
+  }, [isAuthenticated, isInitializing, navigate]);
 
   useLayoutEffect(() => {
     // Force scroll to top on refresh
@@ -73,27 +81,44 @@ export function SignIn() {
     }
 
     setIsLoading(true);
+    setFormError(null);
     try {
       const result = await apiSignIn({ email, password });
 
       if (!result.ok) {
         const messages: Record<string, string> = {
           INVALID_CREDENTIALS: "Invalid email or password.",
-          ACCOUNT_SUSPENDED:   "Your account has been suspended.",
+          // [Security] Generic message — do not reveal account state to callers
+          ACCOUNT_SUSPENDED:   "Sign in temporarily unavailable. Try again later.",
+          ACCOUNT_LOCKED:      "Sign in temporarily unavailable. Try again later.",
+          TOO_MANY_REQUESTS:   "Too many attempts. Please wait and try again.",
           NETWORK_ERROR:       "Cannot reach the server. Please try again.",
         };
-        toast.error(messages[result.error ?? ""] ?? "Sign in failed. Please try again.");
+        const message = messages[result.error ?? ""] ?? "Sign in failed. Please try again.";
+        setFormError(message);
+        toast.error(message);
         return;
       }
 
-      // Store token
-      if (result.token) setToken(result.token);
+      // Handle MFA requirement
+      if (result.mfaRequired) {
+        if (result.user) signIn(result.user, true);
+        
+        if (result.user && !result.user.mfaEnabled) {
+          toast.info("MFA setup is required to access your dashboard.");
+          navigate("/dashboard/mfa-setup");
+        } else {
+          toast.info("Multi-factor authentication required.");
+          navigate("/mfa-verify");
+        }
+        return;
+      }
 
       // Update global auth state
-      if (result.user) signIn(result.user);
+      if (result.user) signIn(result.user, false);
 
       toast.success("Welcome back!");
-      navigate("/app");
+      navigate("/dashboard");
     } catch {
       toast.error("An unexpected error occurred.");
     } finally {
@@ -174,10 +199,17 @@ export function SignIn() {
                 />
               </div>
 
+              {formError && (
+                <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-4 flex items-center gap-3 animate-in fade-in slide-in-from-top-2 duration-300">
+                  <div className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse"></div>
+                  <p className="text-red-400 text-xs font-bold uppercase tracking-wider">{formError}</p>
+                </div>
+              )}
+
               <Button
                 type="submit"
                 disabled={isLoading}
-                className="w-full h-14 bg-[#00f2ff] hover:bg-white text-black font-black uppercase tracking-widest rounded-2xl transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-blue-500/20"
+                className="w-full h-14 bg-[#00f2ff] hover:bg-white text-black font-black uppercase tracking-widest rounded-2xl transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-blue-500/20 cursor-pointer"
               >
                 {isLoading ? "Authenticating..." : "Authorize Access"}
               </Button>
@@ -186,7 +218,7 @@ export function SignIn() {
             <div className="mt-10 text-center space-y-4 relative z-10">
               <p className="text-white/30 text-[11px] font-bold uppercase tracking-wider">
                 New to the system?{" "}
-                <Link to="/signup" className="text-[#00d2ff] hover:text-white transition-colors">
+                <Link to="/signup" className="text-[#00d2ff] hover:text-white transition-colors cursor-pointer">
                   Create identity
                 </Link>
               </p>
@@ -195,7 +227,7 @@ export function SignIn() {
 
           {/* Links */}
           <div className="mt-8 text-center">
-            <Link to="/" className="text-white/20 hover:text-[#00d2ff] transition-colors text-[10px] uppercase font-black tracking-[0.2em]">
+            <Link to="/" className="text-white/20 hover:text-[#00d2ff] transition-colors text-[10px] uppercase font-black tracking-[0.2em] cursor-pointer">
               ← System Override: Return to Landing
             </Link>
           </div>

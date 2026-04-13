@@ -1,8 +1,10 @@
-import { useState } from "react";
-import { UserPlus, Trash2, Edit, Eye, Search, MoreVertical } from "lucide-react";
+import { useState, useEffect } from "react";
+import { UserPlus, Trash2, Edit, Eye, Search, MoreVertical, Loader2 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "../components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "../components/ui/alert-dialog";
-import { format } from "date-fns";
+import { format, parseISO } from "date-fns";
+import { fetchTeamMembers, apiInviteMember, apiUpdateMember, apiDeleteMember } from "../api/team";
+import { toast } from "sonner";
 
 interface TeamMember {
   id: string;
@@ -16,77 +18,9 @@ interface TeamMember {
   avatar: string;
 }
 
-const mockTeamMembers: TeamMember[] = [
-  {
-    id: "tm1",
-    name: "Admin User",
-    email: "admin@company.com",
-    role: "admin",
-    status: "active",
-    joinedAt: new Date(2025, 0, 15),
-    lastActive: new Date(2026, 2, 6, 10, 15),
-    transfersCount: 234,
-    avatar: "AU",
-  },
-  {
-    id: "tm2",
-    name: "Sarah Chen",
-    email: "sarah.chen@company.com",
-    role: "editor",
-    status: "active",
-    joinedAt: new Date(2025, 2, 10),
-    lastActive: new Date(2026, 2, 6, 9, 45),
-    transfersCount: 187,
-    avatar: "SC",
-  },
-  {
-    id: "tm3",
-    name: "Michael Roberts",
-    email: "michael.roberts@company.com",
-    role: "editor",
-    status: "active",
-    joinedAt: new Date(2025, 4, 22),
-    lastActive: new Date(2026, 2, 5, 16, 30),
-    transfersCount: 142,
-    avatar: "MR",
-  },
-  {
-    id: "tm4",
-    name: "Emily Zhang",
-    email: "emily.zhang@company.com",
-    role: "viewer",
-    status: "active",
-    joinedAt: new Date(2025, 6, 8),
-    lastActive: new Date(2026, 2, 6, 8, 20),
-    transfersCount: 56,
-    avatar: "EZ",
-  },
-  {
-    id: "tm5",
-    name: "David Martinez",
-    email: "david.martinez@company.com",
-    role: "editor",
-    status: "active",
-    joinedAt: new Date(2025, 8, 12),
-    lastActive: new Date(2026, 2, 5, 14, 10),
-    transfersCount: 98,
-    avatar: "DM",
-  },
-  {
-    id: "tm6",
-    name: "Lisa Johnson",
-    email: "lisa.johnson@company.com",
-    role: "viewer",
-    status: "pending",
-    joinedAt: new Date(2026, 2, 5),
-    lastActive: new Date(2026, 2, 5, 15, 20),
-    transfersCount: 0,
-    avatar: "LJ",
-  },
-];
-
 export function TeamManagement() {
-  const [members, setMembers] = useState<TeamMember[]>(mockTeamMembers);
+  const [members, setMembers] = useState<TeamMember[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [showInviteDialog, setShowInviteDialog] = useState(false);
   const [selectedMember, setSelectedMember] = useState<TeamMember | null>(null);
@@ -96,11 +30,34 @@ export function TeamManagement() {
   const [viewMember, setViewMember] = useState<TeamMember | null>(null);
   const [roleMember, setRoleMember] = useState<TeamMember | null>(null);
   const [roleSelection, setRoleSelection] = useState<"admin" | "editor" | "viewer">("viewer");
+  const [isActionLoading, setIsActionLoading] = useState(false);
 
-  const filteredMembers = members.filter((member) =>
-    member.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    member.email.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  useEffect(() => {
+    const loadMembers = async () => {
+      setIsLoading(true);
+      const res = await fetchTeamMembers();
+      if (res.error) {
+        toast.error("Security Node failure: Access to personnel directory denied.");
+      } else {
+        // Map backend schema to frontend interface
+        // Backend User.to_dict typically returns: {id, name, email, role, status, avatar, created_at, last_active}
+        const mapped: TeamMember[] = res.data.map((u: any) => ({
+          id: u.id,
+          name: u.name,
+          email: u.email,
+          role: u.role,
+          status: u.status,
+          joinedAt: u.created_at ? parseISO(u.created_at) : new Date(),
+          lastActive: u.last_active ? parseISO(u.last_active) : new Date(),
+          transfersCount: u.transfersCount ?? 0,
+          avatar: u.avatar || u.name.charAt(0).toUpperCase()
+        }));
+        setMembers(mapped);
+      }
+      setIsLoading(false);
+    };
+    loadMembers();
+  }, []);
 
   const getRoleColor = (role: string) => {
     switch (role) {
@@ -128,17 +85,52 @@ export function TeamManagement() {
     }
   };
 
-  const handleInvite = () => {
-    console.log("Inviting:", inviteEmail, "as", inviteRole);
-    setShowInviteDialog(false);
-    setInviteEmail("");
-    setInviteRole("viewer");
+  const handleInvite = async () => {
+    if (!inviteEmail.trim()) {
+        toast.error("Invitation denied: Valid email address required.");
+        return;
+    }
+    setIsActionLoading(true);
+    const res = await apiInviteMember(inviteEmail.split("@")[0], inviteEmail, inviteRole);
+    if(res.ok && res.data) {
+        toast.success(`Invitation transmitted to ${inviteEmail}.`);
+        setMembers(prev => [...prev, {
+            id: res.data!.id,
+            name: res.data!.name,
+            email: res.data!.email,
+            role: res.data!.role,
+            status: res.data!.status,
+            joinedAt: new Date(),
+            lastActive: new Date(),
+            transfersCount: 0,
+            avatar: res.data!.avatar || res.data!.name.charAt(0).toUpperCase()
+        }]);
+        setShowInviteDialog(false);
+        setInviteEmail("");
+        setInviteRole("viewer");
+    } else {
+        toast.error(res.error || "Personnel registry update failed.");
+    }
+    setIsActionLoading(false);
   };
 
-  const handleDelete = (id: string) => {
-    setMembers(members.filter(m => m.id !== id));
-    setMemberToDelete(null);
+  const handleDelete = async (id: string) => {
+    setIsActionLoading(true);
+    const res = await apiDeleteMember(id);
+    if(res.ok) {
+        toast.success("Personnel record structurally eliminated.");
+        setMembers(prev => prev.filter(m => m.id !== id));
+        setMemberToDelete(null);
+    } else {
+        toast.error(res.error || "Execution failed.");
+    }
+    setIsActionLoading(false);
   };
+
+  const filteredMembers = members.filter((member) =>
+    member.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    member.email.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   return (
     <div className="flex flex-col gap-4 sm:gap-6">
@@ -247,9 +239,19 @@ export function TeamManagement() {
 
       {/* Team Members Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {filteredMembers.map((member) => (
-          <div
-            key={member.id}
+        {isLoading ? (
+          <div className="col-span-1 lg:col-span-2 py-20 flex flex-col items-center justify-center gap-4 text-white/40">
+             <Loader2 size={40} className="animate-spin text-[#0B7FFF]" />
+             <p className="text-[10px] font-black uppercase tracking-[0.4em]">Decrypting Personnel Directory...</p>
+          </div>
+        ) : filteredMembers.length === 0 ? (
+          <div className="col-span-1 lg:col-span-2 py-20 text-center text-slate-500 italic">
+            No personnel records matching your search criteria.
+          </div>
+        ) : (
+          filteredMembers.map((member) => (
+            <div
+              key={member.id}
             className="p-4 rounded-xl transition-all hover:bg-white/5"
             style={{
               background: "rgba(255,255,255,0.03)",
@@ -346,7 +348,7 @@ export function TeamManagement() {
               </div>
             </div>
           </div>
-        ))}
+          )))}
       </div>
 
       {/* Invite Member Dialog */}
@@ -412,12 +414,14 @@ export function TeamManagement() {
             </button>
             <button
               onClick={handleInvite}
-              className="px-4 py-2 rounded-lg transition-all hover:opacity-90"
+              disabled={isActionLoading}
+              className="px-4 py-2 rounded-lg transition-all hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
               style={{
                 background: "linear-gradient(135deg, #0B7FFF 0%, #0960D9 100%)",
                 color: "white",
               }}
             >
+              {isActionLoading && <Loader2 size={16} className="animate-spin" />}
               Send Invitation
             </button>
           </DialogFooter>
@@ -621,20 +625,31 @@ export function TeamManagement() {
                   Cancel
                 </button>
                 <button
-                  onClick={() => {
-                    setMembers((prev) =>
-                      prev.map((m) =>
-                        m.id === roleMember.id ? { ...m, role: roleSelection } : m,
-                      ),
-                    );
-                    setRoleMember(null);
+                  onClick={async () => {
+                    if(!roleMember) return;
+                    setIsActionLoading(true);
+                    const res = await apiUpdateMember(roleMember.id, { role: roleSelection });
+                    if(res.ok) {
+                        toast.success(`Access level for ${roleMember.name} modified.`);
+                        setMembers((prev) =>
+                          prev.map((m) =>
+                            m.id === roleMember.id ? { ...m, role: roleSelection } : m,
+                          ),
+                        );
+                        setRoleMember(null);
+                    } else {
+                        toast.error(res.error || "Security clearance update failed.");
+                    }
+                    setIsActionLoading(false);
                   }}
-                  className="px-4 py-2 rounded-lg transition-all hover:opacity-90"
+                  disabled={isActionLoading}
+                  className="px-4 py-2 rounded-lg transition-all hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                   style={{
                     background: "linear-gradient(135deg, #0B7FFF 0%, #0960D9 100%)",
                     color: "white",
                   }}
                 >
+                  {isActionLoading && <Loader2 size={16} className="animate-spin" />}
                   Save Role
                 </button>
               </DialogFooter>
@@ -669,11 +684,14 @@ export function TeamManagement() {
             </AlertDialogCancel>
             <AlertDialogAction
               onClick={() => memberToDelete && handleDelete(memberToDelete)}
+              disabled={isActionLoading}
+              className="flex items-center gap-2"
               style={{
                 background: "#ef4444",
                 color: "white",
               }}
             >
+              {isActionLoading && <Loader2 size={16} className="animate-spin" />}
               Remove
             </AlertDialogAction>
           </AlertDialogFooter>

@@ -1,58 +1,55 @@
 import type { HttpMethod, RequestOptions } from "@/types";
-import { getToken } from "./auth";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
 /**
- * Generic helper that will try to talk to a real backend first.
- * If no API base URL is configured or the request fails, it falls
- * back to the provided mock data so the UI keeps working.
- * Automatically attaches the JWT Bearer token if one is stored.
+ * Enhanced API request helper.
+ * Strictly communicates with the configured backend and throws on error.
+ * Automatically transmits strictly-enforced HttpOnly session cookies.
  */
-export async function fetchWithFallback<T>(
+export async function apiRequest<T>(
   path: string,
-  fallback: T,
   options: RequestOptions = {},
 ): Promise<T> {
-  // No backend configured – just use the fallback.
   if (!API_BASE_URL) {
-    return Promise.resolve(fallback);
+    throw new Error("API_BASE_URL is not configured. Please check your .env file.");
   }
 
   const url = `${API_BASE_URL}${path}`;
 
-  try {
-    const { method = "GET" as HttpMethod, body, headers = {} } = options;
+  const { method = "GET" as HttpMethod, body, headers = {} } = options;
 
-    // Attach JWT token if available
-    const token = getToken();
-    const authHeader: Record<string, string> = token
-      ? { Authorization: `Bearer ${token}` }
-      : {};
+  // Attach CSRF header for mutation methods
+  const csrfHeader: Record<string, string> = ["POST", "PUT", "DELETE", "PATCH"].includes(method.toUpperCase())
+    ? { "X-TFS-CSRF": "true" }
+    : {};
 
-    const response = await fetch(url, {
-      method,
-      headers: {
-        "Content-Type": "application/json",
-        ...authHeader,
-        ...headers,
-      },
-      body: body != null ? JSON.stringify(body) : undefined,
-    });
+  const response = await fetch(url, {
+    method,
+    credentials: "include", // Important: ensures session cookies are transmitted on all calls
+    headers: {
+      "Content-Type": "application/json",
+      ...csrfHeader,
+      ...headers,
+    },
+    body: body != null ? JSON.stringify(body) : undefined,
+  });
 
-    if (!response.ok) {
-      throw new Error(`Request to ${url} failed with status ${response.status}`);
+  if (!response.ok) {
+    let errorMessage = `Request failed with status ${response.status}`;
+    try {
+      const errorData = await response.json();
+      errorMessage = errorData.error || errorData.message || errorMessage;
+    } catch {
+      // JSON parsing failed, use default message
     }
-
-    // If the backend returns no body for some operations, just return fallback.
-    if (response.status === 204) {
-      return fallback;
-    }
-
-    const data = (await response.json()) as T;
-    return data;
-  } catch (error) {
-    console.warn("[api] Falling back to mock data for", path, error);
-    return fallback;
+    throw new Error(errorMessage);
   }
+
+  if (response.status === 204) {
+    return {} as T;
+  }
+
+  const data = (await response.json()) as T;
+  return data;
 }

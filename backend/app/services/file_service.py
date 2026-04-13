@@ -6,7 +6,7 @@ from datetime import datetime, timezone, timedelta
 from werkzeug.utils import secure_filename
 from werkzeug.datastructures import FileStorage
 
-from cryptography.fernet import Fernet
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.backends import default_backend
@@ -22,30 +22,30 @@ from app.models.user import User
 LOCK_TIMEOUT_MINUTES = 15  # Verrou expiré après 15 min d'inactivité
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Encryption helpers
+# Encryption helpers (AES-256-GCM)
 # ──────────────────────────────────────────────────────────────────────────────
 
-def _get_fernet() -> Fernet:
+def _get_aes_key() -> bytes:
     """
-    Returns a Fernet instance whose key is either:
-      - The value of ENCRYPTION_KEY env var (must be 32 url-safe base64 bytes),
-      - OR a PBKDF2-HMAC-SHA256 key derived from SECRET_KEY (fallback for dev).
+    Returns a 32-byte key for AES-256-GCM.
     """
     raw_key = current_app.config.get("ENCRYPTION_KEY", "")
 
     if raw_key:
-        # Allow raw 32-byte keys stored as hex or base64
         try:
             key = base64.urlsafe_b64decode(raw_key.encode())
-            if len(key) != 32:
-                raise ValueError("Key must be 32 bytes after decoding")
-            fernet_key = base64.urlsafe_b64encode(key)
+            if len(key) == 32:
+                return key
         except Exception:
-            fernet_key = raw_key.encode() if isinstance(raw_key, str) else raw_key
+            pass
+        
+        # Fallback/Normalization
+        import hashlib
+        return hashlib.sha256(raw_key.encode()).digest()
     else:
         # Derive a 32-byte key from Flask SECRET_KEY via PBKDF2
         secret = current_app.config["SECRET_KEY"].encode()
-        salt = b"tfs-file-encryption-salt"  # static salt — acceptable for file encryption
+        salt = b"tfs-file-encryption-salt-v2"  # New salt for AES-256-GCM
         kdf = PBKDF2HMAC(
             algorithm=hashes.SHA256(),
             length=32,
@@ -53,20 +53,26 @@ def _get_fernet() -> Fernet:
             iterations=100_000,
             backend=default_backend(),
         )
-        derived = kdf.derive(secret)
-        fernet_key = base64.urlsafe_b64encode(derived)
-
-    return Fernet(fernet_key)
+        return kdf.derive(secret)
 
 
 def _encrypt_file(data: bytes) -> bytes:
-    """Encrypt raw file bytes and return ciphertext."""
-    return _get_fernet().encrypt(data)
+    """Encrypt raw file bytes using AES-256-GCM and return nonce + ciphertext."""
+    aesgcm = AESGCM(_get_aes_key())
+    nonce = os.urandom(12)  # 12-byte nonce for GCM
+    ciphertext = aesgcm.encrypt(nonce, data, None)
+    return nonce + ciphertext  # Prepend nonce for storage
 
 
 def _decrypt_file(data: bytes) -> bytes:
-    """Decrypt ciphertext and return original file bytes."""
-    return _get_fernet().decrypt(data)
+    """Decrypt ciphertext (nonce + encrypted data) and return original bytes."""
+    if len(data) < 13:
+        raise ValueError("Invalid encrypted data: too short")
+    
+    nonce = data[:12]
+    ciphertext = data[12:]
+    aesgcm = AESGCM(_get_aes_key())
+    return aesgcm.decrypt(nonce, ciphertext, None)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -158,8 +164,22 @@ def upload_file(file: FileStorage, uploader_id: str, recipient_email: str,
     )
     db.session.add(v)
 
+    # Notification for recipient
+    if recipient_email:
+        recipient = User.query.filter_by(email=recipient_email).first()
+        if recipient:
+            from app.models.notification import Notification
+            notif = Notification(
+                id=str(uuid.uuid4()),
+                user_id=recipient.id,
+                title="New file received",
+                body=f"{safe_name} from {uploader.name}.",
+                type="info"
+            )
+            db.session.add(notif)
+
     _log("FILE_UPLOAD", uploader.email, uploader_id, "success", ip,
-         resource=safe_name, details=f"{size_bytes} bytes (encrypted with AES-256-GCM via Fernet)")
+         resource=safe_name, details=f"{size_bytes} bytes (encrypted with AES-256-GCM)")
     db.session.commit()
     return {"ok": True, "transfer": transfer.to_dict()}
 

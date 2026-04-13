@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from app.extensions import db
 
 
@@ -12,12 +12,12 @@ class Transfer(db.Model):
     stored_path      = db.Column(db.String(500),  nullable=False)   # chemin sur le disque
     size_bytes       = db.Column(db.Integer,       nullable=False, default=0)
     encryption_type  = db.Column(db.String(30),   nullable=False, default="AES-256-GCM")
-    status           = db.Column(db.String(20),   nullable=False, default="Pending")
-    # Pending | Sending... | Delivered | Expired
+    status           = db.Column(db.String(20),   nullable=False, default="Pending")   # Pending | Sending... | Delivered | Expired
 
+    # Security & Access
     recipient_email  = db.Column(db.String(255),  nullable=True)
     download_count   = db.Column(db.Integer,      nullable=False, default=0)
-    expiry_date      = db.Column(db.DateTime,     nullable=True)
+    expiry_date      = db.Column(db.DateTime,     nullable=True, default=lambda: datetime.now(timezone.utc) + timedelta(days=180))
     is_deleted       = db.Column(db.Boolean,      default=False)
 
     # Concurrent access lock

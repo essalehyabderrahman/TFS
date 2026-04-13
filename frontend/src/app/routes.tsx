@@ -1,4 +1,6 @@
-import { createBrowserRouter } from "react-router";
+import React, { useEffect } from "react";
+import { createBrowserRouter, Navigate } from "react-router";
+import { useAuth } from "./hooks/useAuth";
 import { MainLayout } from "./components/MainLayout";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { ActiveTransfers } from "./pages/ActiveTransfers";
@@ -10,6 +12,29 @@ import { AccountManagement } from "./pages/AccountManagement";
 import { Welcome } from "./pages/Welcome";
 import { SignIn } from "./pages/SignIn";
 import { SignUp } from "./pages/SignUp";
+import { Mfa } from "./pages/Mfa";
+import { MfaSetup } from "./pages/MfaSetup";
+
+
+function SmartRedirect() {
+  const { isAuthenticated, isMfaPending, isInitializing, user } = useAuth();
+  if (isInitializing) return null;
+  if (isAuthenticated) return <Navigate to="/dashboard" replace />;
+  
+  if (isMfaPending && user) {
+    // [Security] Resume correct MFA state
+    return <Navigate to={user.mfaEnabled ? "/mfa-verify" : "/dashboard/mfa-setup"} replace />;
+  }
+  
+  return <Navigate to="/signin" replace />;
+}
+
+function PublicOnlyRoute({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated, isInitializing } = useAuth();
+  if (isInitializing) return null;
+  if (isAuthenticated) return <Navigate to="/dashboard" replace />;
+  return <>{children}</>;
+}
 
 export const router = createBrowserRouter([
   // Public landing page at the root
@@ -20,17 +45,25 @@ export const router = createBrowserRouter([
   // Authentication pages
   {
     path: "/signin",
-    Component: SignIn,
+    element: <PublicOnlyRoute><SignIn /></PublicOnlyRoute>,
   },
   {
     path: "/signup",
-    Component: SignUp,
+    element: <PublicOnlyRoute><SignUp /></PublicOnlyRoute>,
   },
-  // Authenticated dashboard under /app
   {
-    path: "/app",
+    path: "/mfa-verify",
+    Component: Mfa,
+  },
+  // Protected dashboard structure
+  {
+    path: "/dashboard",
     Component: ProtectedRoute,
     children: [
+      {
+        path: "mfa-setup",
+        Component: MfaSetup,
+      },
       {
         path: "",
         Component: MainLayout,
@@ -46,4 +79,10 @@ export const router = createBrowserRouter([
       },
     ],
   },
+  // Catch-all
+  {
+    path: "*",
+    element: <SmartRedirect />,
+  },
 ]);
+

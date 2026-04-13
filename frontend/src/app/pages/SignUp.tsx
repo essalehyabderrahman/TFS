@@ -1,14 +1,16 @@
-import { useLayoutEffect, useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState, useEffect } from "react";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { toast } from "sonner";
 import { useNavigate, Link } from "react-router";
 import { apiSignUp } from "../api/auth";
+import { useAuth } from "../hooks/useAuth";
 import { BackgroundParticles } from "../components/ui/BackgroundParticles";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import Lenis from "lenis";
+import { Check, X, ShieldCheck } from "lucide-react";
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -20,8 +22,28 @@ export function SignUp() {
     confirmPassword: "",
   });
   const [isLoading, setIsLoading] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
   const navigate = useNavigate();
+  const { isAuthenticated, isInitializing, signIn } = useAuth();
   const component = useRef<HTMLDivElement>(null);
+
+  // Redirect if already authenticated
+  useEffect(() => {
+    if (!isInitializing && isAuthenticated) {
+      navigate("/dashboard", { replace: true });
+    }
+  }, [isAuthenticated, isInitializing, navigate]);
+
+  // [Security] Password policy — must mirror backend _validate_password exactly
+  const passwordRequirements = [
+    { label: "At least 12 characters", test: (p: string) => p.length >= 12 },
+    { label: "Contains a number", test: (p: string) => /\d/.test(p) },
+    { label: "Lowercase & Uppercase", test: (p: string) => /[a-z]/.test(p) && /[A-Z]/.test(p) },
+    { label: "Special character", test: (p: string) => /[!@#$%^&*(),.?":{}|<>_\-+=\[\]\\;'/`~]/.test(p) },
+  ];
+
+  const isPasswordStrong = passwordRequirements.every(req => req.test(formData.password));
+  const doesPasswordMatch = formData.password && formData.password === formData.confirmPassword;
 
   useLayoutEffect(() => {
     // Force scroll to top on refresh
@@ -79,15 +101,16 @@ export function SignUp() {
       return;
     }
     if (formData.password !== formData.confirmPassword) {
-      toast.error("Passwords do not match");
+      setFormError("Identity confirmation failed: Access Keys do not match.");
       return;
     }
-    if (formData.password.length < 8) {
-      toast.error("Password must be at least 8 characters long");
+    if (!isPasswordStrong) {
+      setFormError("Security protocol violation: Access Key strength does not meet requirements.");
       return;
     }
 
     setIsLoading(true);
+    setFormError(null);
     try {
       const result = await apiSignUp({
         name: formData.name,
@@ -96,17 +119,28 @@ export function SignUp() {
       });
 
       if (!result.ok) {
-        const messages: Record<string, string> = {
-          EMAIL_TAKEN:        "An account with this email already exists.",
-          PASSWORD_TOO_SHORT: "Password must be at least 8 characters.",
-          NETWORK_ERROR:      "Cannot reach the server. Please try again.",
+      const messages: Record<string, string> = {
+          EMAIL_TAKEN:           "An account with this email already exists.",
+          PASSWORD_TOO_SHORT:    "Password must be at least 12 characters.",
+          PASSWORD_NO_UPPERCASE: "Password must contain an uppercase letter.",
+          PASSWORD_NO_LOWERCASE: "Password must contain a lowercase letter.",
+          PASSWORD_NO_DIGIT:     "Password must contain a number.",
+          PASSWORD_NO_SYMBOL:    "Password must contain a special character.",
+          MISSING_FIELDS:        "Please provide all required credentials.",
+          NETWORK_ERROR:         "Cannot reach the server. Please try again.",
         };
-        toast.error(messages[result.error ?? ""] ?? "Failed to create account. Please try again.");
+        const message = messages[result.error ?? ""] ?? "Failed to create account. Please try again.";
+        setFormError(message);
+        toast.error(message);
         return;
       }
 
-      toast.success("Account created successfully! Please sign in.");
-      navigate("/signin");
+      // ── MFA Onboarding Flow ───────────────────────────────────────
+      // The backend returns an HttpOnly cookie with mfa_pending: True
+      if (result.user) signIn(result.user, true);
+
+      toast.success("Profile initialized! Security protocol activation required.");
+      navigate("/dashboard/mfa-setup");
     } catch {
       toast.error("An unexpected error occurred.");
     } finally {
@@ -187,7 +221,7 @@ export function SignUp() {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-6">
                 <div className="space-y-2">
                   <Label htmlFor="password" className="text-white/40 text-[10px] uppercase font-black tracking-widest pl-1">Access Key</Label>
                   <Input
@@ -197,12 +231,30 @@ export function SignUp() {
                     value={formData.password}
                     onChange={handleInputChange}
                     placeholder="••••••••"
-                    className="bg-white/5 border-white/10 text-white placeholder:text-white/10 rounded-2xl h-14 focus:border-[#00d2ff]/50 focus:ring-0 transition-all text-xs"
+                    className="bg-white/5 border-white/10 text-white placeholder:text-white/10 rounded-2xl h-14 focus:border-[#00d2ff]/50 focus:ring-0 transition-all"
                     required
                   />
+                  
+                  {formData.password && (
+                    <div className="grid grid-cols-2 gap-2 mt-4 p-4 bg-white/[0.02] border border-white/[0.05] rounded-2xl">
+                      {passwordRequirements.map((req, i) => (
+                        <div key={i} className="flex items-center gap-2">
+                          {req.test(formData.password) ? (
+                            <Check size={10} className="text-[#00d2ff]" />
+                          ) : (
+                            <div className="w-1.5 h-1.5 rounded-full bg-white/10 ml-1"></div>
+                          )}
+                          <span className={`text-[9px] font-black uppercase tracking-tighter ${req.test(formData.password) ? 'text-white/60' : 'text-white/20'}`}>
+                            {req.label}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
+
                 <div className="space-y-2">
-                  <Label htmlFor="confirmPassword" className="text-white/40 text-[10px] uppercase font-black tracking-widest pl-1">Confirm Key</Label>
+                  <Label htmlFor="confirmPassword" className="text-white/40 text-[10px] uppercase font-black tracking-widest pl-1">Confirm Identity Key</Label>
                   <Input
                     id="confirmPassword"
                     name="confirmPassword"
@@ -210,16 +262,39 @@ export function SignUp() {
                     value={formData.confirmPassword}
                     onChange={handleInputChange}
                     placeholder="••••••••"
-                    className="bg-white/5 border-white/10 text-white placeholder:text-white/10 rounded-2xl h-14 focus:border-[#00d2ff]/50 focus:ring-0 transition-all text-xs"
+                    className="bg-white/5 border-white/10 text-white placeholder:text-white/10 rounded-2xl h-14 focus:border-[#00d2ff]/50 focus:ring-0 transition-all"
                     required
                   />
+                  
+                  {formData.confirmPassword && (
+                    <div className={`flex items-center gap-2 mt-1 pl-1 transition-all ${doesPasswordMatch ? 'opacity-100' : 'animate-pulse'}`}>
+                      {doesPasswordMatch ? (
+                        <>
+                          <ShieldCheck size={12} className="text-[#00d2ff]" />
+                          <span className="text-[9px] font-black uppercase tracking-widest text-[#00d2ff]">Cryptographic match confirmed</span>
+                        </>
+                      ) : (
+                        <>
+                          <X size={12} className="text-red-500" />
+                          <span className="text-[9px] font-black uppercase tracking-widest text-red-500/60">Sequence mismatch detected</span>
+                        </>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
+
+              {formError && (
+                <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-4 flex items-center gap-3 animate-in fade-in slide-in-from-top-2 duration-300">
+                  <div className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse"></div>
+                  <p className="text-red-400 text-xs font-bold uppercase tracking-wider">{formError}</p>
+                </div>
+              )}
 
               <Button
                 type="submit"
                 disabled={isLoading}
-                className="w-full h-14 bg-[#00f2ff] hover:bg-white text-black font-black uppercase tracking-widest rounded-2xl transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-blue-500/20 mt-4"
+                className="w-full h-14 bg-[#00f2ff] hover:bg-white text-black font-black uppercase tracking-widest rounded-2xl transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-blue-500/20 mt-4 cursor-pointer"
               >
                 {isLoading ? "Provisioning..." : "Initialize Profile"}
               </Button>
@@ -228,7 +303,7 @@ export function SignUp() {
             <div className="mt-8 text-center space-y-4 relative z-10">
               <p className="text-white/30 text-[11px] font-bold uppercase tracking-wider">
                 Already registered?{" "}
-                <Link to="/signin" className="text-[#00d2ff] hover:text-white transition-colors">
+                <Link to="/signin" className="text-[#00d2ff] hover:text-white transition-colors cursor-pointer">
                   Authorize Access
                 </Link>
               </p>
@@ -237,7 +312,7 @@ export function SignUp() {
 
           {/* Links */}
           <div className="mt-8 text-center">
-            <Link to="/" className="text-white/20 hover:text-[#00d2ff] transition-colors text-[10px] uppercase font-black tracking-[0.2em]">
+            <Link to="/" className="text-white/20 hover:text-[#00d2ff] transition-colors text-[10px] uppercase font-black tracking-[0.2em] cursor-pointer">
               ← System Override: Return to Landing
             </Link>
           </div>

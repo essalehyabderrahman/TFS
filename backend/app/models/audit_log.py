@@ -11,13 +11,12 @@ class AuditLog(db.Model):
     id          = db.Column(db.String(36),  primary_key=True)
     user_id     = db.Column(db.String(36),  db.ForeignKey("users.id"), nullable=True)
     user_email  = db.Column(db.String(255), nullable=False, default="system")
-    action      = db.Column(db.String(100), nullable=False)
+    action      = db.Column(db.String(50), nullable=False)
     # Ex: LOGIN_SUCCESS | LOGIN_FAILED | FILE_UPLOAD | FILE_DOWNLOAD |
-    #     FILE_DELETE | FILE_MODIFY | PERMISSION_CHANGE | UNAUTHORIZED_ACCESS
-
     resource    = db.Column(db.String(255), nullable=True)   # nom du fichier / endpoint
     ip_address  = db.Column(db.String(45),  nullable=True)
     location    = db.Column(db.String(100), nullable=True)
+    user_agent  = db.Column(db.String(255), nullable=True)
     status      = db.Column(db.String(20),  nullable=False, default="success")
     # success | failed | warning
 
@@ -36,6 +35,7 @@ class AuditLog(db.Model):
             "resource":   self.resource or "",
             "ipAddress":  self.ip_address or "",
             "location":   self.location or "",
+            "userAgent":  self.user_agent or "",
             "status":     self.status,
             "details":    self.details or "",
         }

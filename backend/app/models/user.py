@@ -1,7 +1,7 @@
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from app.extensions import db, bcrypt
 
-
+  
 class User(db.Model):
     __tablename__ = "users"
 
@@ -12,10 +12,22 @@ class User(db.Model):
     role          = db.Column(db.String(20),  nullable=False, default="viewer")   # admin | editor | viewer
     status        = db.Column(db.String(20),  nullable=False, default="active")   # active | pending | suspended
     avatar        = db.Column(db.String(10),  nullable=True)                      # initials
+    company       = db.Column(db.String(120), nullable=False, default="Individual")
+    plan          = db.Column(db.String(20),  nullable=False, default="free")     # free | pro | enterprise
+
+    # Security Lockout (sign-in brute-force)
+    failed_login_attempts = db.Column(db.Integer, default=0)
+    lockout_until         = db.Column(db.DateTime, nullable=True)
 
     # MFA
-    mfa_enabled   = db.Column(db.Boolean, default=False)
-    mfa_secret    = db.Column(db.String(64), nullable=True)
+    mfa_enabled          = db.Column(db.Boolean, default=False)
+    mfa_secret           = db.Column(db.String(64), nullable=True)
+    mfa_failed_attempts  = db.Column(db.Integer, default=0)         # MFA verify failure counter (independent)
+    last_used_totp       = db.Column(db.String(6), nullable=True)   # Replay protection: last accepted TOTP code
+    backup_codes         = db.Column(db.String(1000), nullable=True)# Comma-separated bcrypt hashes of backup codes
+
+    # Token Rotation
+    token_version        = db.Column(db.Integer, default=1)         # Incremented on password change to invalidate sessions
 
     # Security settings snapshot (stored per-user)
     session_timeout     = db.Column(db.Integer, default=60)    # minutes
@@ -27,8 +39,8 @@ class User(db.Model):
     last_active  = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
     # Relationships
-    transfers    = db.relationship("Transfer", back_populates="uploader", foreign_keys="Transfer.uploaded_by_id", lazy="select")
-    audit_logs   = db.relationship("AuditLog", back_populates="actor", lazy="select")
+    transfers    = db.relationship("Transfer", back_populates="uploader", foreign_keys="Transfer.uploaded_by_id", lazy="select", cascade="all, delete-orphan")
+    audit_logs   = db.relationship("AuditLog", back_populates="actor", lazy="select", cascade="all, delete-orphan")
 
     # ------------------------------------------------------------------ helpers
     def set_password(self, plain: str) -> None:
@@ -36,6 +48,28 @@ class User(db.Model):
 
     def check_password(self, plain: str) -> bool:
         return bcrypt.check_password_hash(self.password_hash, plain)
+
+    def is_locked(self) -> bool:
+        """Return True if the account is currently under a lockout."""
+        if self.lockout_until is None:
+            return False
+        return datetime.now(timezone.utc) < self.lockout_until.replace(tzinfo=timezone.utc)
+
+    def record_failed_attempt(self) -> None:
+        """
+        Increment the failure counter and apply exponential back-off lockout.
+        Locks the account after 5 consecutive failures.
+        Back-off: 2^(n-5) seconds, capped at 900 s (15 min).
+        """
+        self.failed_login_attempts = (self.failed_login_attempts or 0) + 1
+        if self.failed_login_attempts >= 5:
+            delay = min(2 ** (self.failed_login_attempts - 5), 900)
+            self.lockout_until = datetime.now(timezone.utc) + timedelta(seconds=delay)
+
+    def reset_failed_attempts(self) -> None:
+        """Reset counter and lock on a successful authentication."""
+        self.failed_login_attempts = 0
+        self.lockout_until         = None
 
     def touch(self) -> None:
         """Met à jour last_active."""
@@ -49,6 +83,8 @@ class User(db.Model):
             "role":       self.role,
             "status":     self.status,
             "avatar":     self.avatar or self._initials(),
+            "company":    self.company,
+            "plan":       self.plan,
             "mfaEnabled": self.mfa_enabled,
             "joinedAt":   self.created_at.isoformat(),
             "lastActive": self.last_active.isoformat(),

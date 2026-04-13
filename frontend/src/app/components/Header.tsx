@@ -1,7 +1,9 @@
-import { useMemo, useRef, useState } from "react";
-import { Search, Bell, ShieldCheck, Menu, ArrowRight, Zap, ZapOff } from "lucide-react";
+import { useMemo, useRef, useState, useEffect } from "react";
+import { Search, Bell, ShieldCheck, Menu, ArrowRight, Zap, ZapOff, Loader2 } from "lucide-react";
 import { useLocation, useNavigate } from "react-router";
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "../hooks/useAuth";
+import { fetchNotifications, markNotificationRead, markAllNotificationsRead, DashboardNotification } from "../api/notifications";
+import { formatDistanceToNow, parseISO } from "date-fns";
 
 interface HeaderProps {
   onMenuClick: () => void;
@@ -12,18 +14,47 @@ export function Header({ onMenuClick }: HeaderProps) {
   const [query, setQuery] = useState("");
   const [searchFocused, setSearchFocused] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [notifications, setNotifications] = useState<DashboardNotification[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [loadingNotifs, setLoadingNotifs] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
   const searchInputRef = useRef<HTMLInputElement | null>(null);
 
+  const loadNotifications = async () => {
+    setLoadingNotifs(true);
+    const res = await fetchNotifications({ limit: 10 });
+    setNotifications(res.notifications || []);
+    setUnreadCount(res.unreadCount || 0);
+    setLoadingNotifs(false);
+  };
+
+  useEffect(() => {
+    if (isBackendReachable) {
+      loadNotifications();
+    }
+  }, [isBackendReachable]);
+
+  const handleMarkAllRead = async () => {
+    await markAllNotificationsRead();
+    loadNotifications();
+  };
+
+  const handleNotificationClick = async (notif: DashboardNotification) => {
+    if (!notif.isRead) {
+      await markNotificationRead(notif.id);
+      loadNotifications();
+    }
+  };
+
   const getPageTitle = () => {
     const path = location.pathname;
-    if (path === "/app" || path === "/app/active") return "Welcome back, Admin.";
-    if (path === "/app/received") return "Received Files";
-    if (path === "/app/audit") return "Audit & Compliance";
-    if (path === "/app/team") return "Team Management";
-    if (path === "/app/security") return "Security Settings";
-    if (path === "/app/account") return "Account Management";
+    if (path === "/dashboard" || path === "/dashboard/active") return "Welcome back, Admin.";
+    if (path === "/dashboard/received") return "Received Files";
+    if (path === "/dashboard/audit") return "Audit & Compliance";
+    if (path === "/dashboard/team") return "Team Management";
+    if (path === "/dashboard/security") return "Security Settings";
+    if (path === "/dashboard/account") return "Account Management";
     return "TFS Dashboard";
   };
 
@@ -33,61 +64,67 @@ export function Header({ onMenuClick }: HeaderProps) {
         type: "section",
         label: "Active Transfers",
         description: "View and manage ongoing secure transfers",
-        path: "/app/active",
+        path: "/dashboard/active",
       },
       {
         type: "section",
         label: "Received Files",
         description: "Files that have been shared with you",
-        path: "/app/received",
+        path: "/dashboard/received",
       },
       {
         type: "section",
         label: "Audit & Compliance Logs",
         description: "Security and compliance activity history",
-        path: "/app/audit",
+        path: "/dashboard/audit",
       },
       {
         type: "section",
         label: "Team Management",
         description: "Manage team members and roles",
-        path: "/app/team",
+        path: "/dashboard/team",
       },
       {
         type: "section",
         label: "Security Settings",
         description: "Authentication and file security controls",
-        path: "/app/security",
+        path: "/dashboard/security",
       },
       {
         type: "section",
         label: "Account Management",
         description: "Profile, subscription, and organization settings",
-        path: "/app/account",
+        path: "/dashboard/account",
       },
       {
         type: "file",
         label: "Q4_Financial_Report_2025.pdf",
         description: "Recent transfer in Active Transfers",
-        path: "/app/active",
+        path: "/dashboard/active",
       },
       {
         type: "file",
         label: "Q1_Financial_Report.pdf",
         description: "Received financial report",
-        path: "/app/received",
+        path: "/dashboard/received",
+      },
+      {
+        type: "file",
+        label: "Q1_Financial_Report.pdf",
+        description: "Received financial report",
+        path: "/dashboard/received",
       },
       {
         type: "option",
         label: "New Secure Transfer",
         description: "Open Active Transfers to start a new upload",
-        path: "/app/active",
+        path: "/dashboard/active",
       },
       {
         type: "option",
         label: "Edit Organization Details",
         description: "Organization settings in Account Management",
-        path: "/app/account",
+        path: "/dashboard/account",
       },
     ],
     [],
@@ -285,14 +322,21 @@ export function Header({ onMenuClick }: HeaderProps) {
         <button
           className="relative w-9 h-9 flex items-center justify-center rounded-xl transition-colors duration-200 hover:bg-white/5"
           style={{ border: "1px solid rgba(255,255,255,0.08)" }}
-          onClick={() => setNotificationsOpen((open) => !open)}
+          onClick={() => {
+            if (!notificationsOpen) loadNotifications();
+            setNotificationsOpen((open) => !open);
+          }}
         >
           <Bell size={16} style={{ color: "#6b7fa8" }} />
           {/* Badge */}
-          <span
-            className="absolute top-2 right-2 w-1.5 h-1.5 rounded-full"
-            style={{ background: "#00d2ff" }}
-          />
+          {unreadCount > 0 && (
+            <span
+              className="absolute top-1.5 right-1.5 min-w-[14px] h-[14px] flex items-center justify-center rounded-full text-[9px] font-bold text-[#0b0f20] px-1"
+              style={{ background: "#00d2ff" }}
+            >
+              {unreadCount}
+            </span>
+          )}
         </button>
 
         {/* Notifications dropdown */}
@@ -318,70 +362,92 @@ export function Header({ onMenuClick }: HeaderProps) {
               }}
             >
               <div
-                className="px-4 py-3 border-b"
+                className="px-4 py-3 border-b flex justify-between items-center"
                 style={{ borderColor: "rgba(255,255,255,0.06)" }}
               >
-                <p
-                  style={{
-                    fontSize: "13px",
-                    color: "#e2e8f0",
-                    fontWeight: 600,
-                  }}
-                >
-                  Notifications
-                </p>
-                <p style={{ fontSize: "11px", color: "#64748b", marginTop: 2 }}>
-                  Latest activity across your workspace
-                </p>
-              </div>
-              <div className="max-h-72 overflow-y-auto" style={{ scrollbarWidth: "thin" }}>
-                {[
-                  {
-                    title: "New secure transfer completed",
-                    body: "Q4_Financial_Report_2025.pdf was delivered successfully.",
-                    time: "2 min ago",
-                    accent: "#00E5A0",
-                  },
-                  {
-                    title: "New file received",
-                    body: "Q1_Financial_Report.pdf from Sarah Chen.",
-                    time: "15 min ago",
-                    accent: "#00d2ff",
-                  },
-                  {
-                    title: "Login from new device",
-                    body: "A new sign‑in was detected from Chrome on Windows.",
-                    time: "1 hr ago",
-                    accent: "#eab308",
-                  },
-                ].map((n) => (
-                  <div
-                    key={n.title + n.time}
-                    className="px-4 py-3 flex gap-3 hover:bg-white/5 transition-colors"
+                <div>
+                  <p
+                    style={{
+                      fontSize: "13px",
+                      color: "#e2e8f0",
+                      fontWeight: 600,
+                    }}
                   >
-                    <div
-                      className="mt-1 w-1 h-8 rounded-full flex-shrink-0"
-                      style={{ background: n.accent }}
-                    />
-                    <div className="flex-1 min-w-0">
-                      <p
-                        className="truncate"
-                        style={{ fontSize: "13px", color: "#e2e8f0", fontWeight: 500 }}
-                      >
-                        {n.title}
-                      </p>
-                      <p
-                        className="truncate"
-                        style={{ fontSize: "11px", color: "#94a3b8", marginTop: 2 }}
-                      >
-                        {n.body}
-                      </p>
-                      <p style={{ fontSize: "10px", color: "#64748b", marginTop: 2 }}>
-                        {n.time}
-                      </p>
-                    </div>
+                    Notifications
+                  </p>
+                  <p style={{ fontSize: "11px", color: "#64748b", marginTop: 2 }}>
+                    Latest activity across your workspace
+                  </p>
+                </div>
+                {unreadCount > 0 && (
+                  <button 
+                    onClick={handleMarkAllRead}
+                    className="text-[11px] font-semibold text-blue-400 hover:text-blue-300 transition-colors"
+                  >
+                    Mark all read
+                  </button>
+                )}
+              </div>
+              <div className="max-h-[350px] overflow-y-auto" style={{ scrollbarWidth: "thin" }}>
+                {loadingNotifs && notifications.length === 0 ? (
+                  <div className="flex justify-center p-8">
+                    <Loader2 size={20} className="animate-spin text-slate-500" />
                   </div>
-                ))}
+                ) : notifications.length === 0 ? (
+                  <div className="px-4 py-8 text-center">
+                    <p style={{ fontSize: "12px", color: "#64748b" }}>You're all caught up!</p>
+                  </div>
+                ) : (
+                  notifications.map((n) => {
+                    const timeAgo = formatDistanceToNow(parseISO(n.createdAt), { addSuffix: true });
+                    const accent =
+                      n.type === "success"
+                        ? "#00E5A0"
+                        : n.type === "warning"
+                        ? "#eab308"
+                        : "#00d2ff"; // info
+                        
+                    return (
+                      <button
+                        key={n.id}
+                        onClick={() => handleNotificationClick(n)}
+                        className={`w-full text-left px-4 py-3 flex gap-3 transition-colors ${
+                          n.isRead ? "hover:bg-white/5 opacity-70" : "bg-white/5 hover:bg-white/10"
+                        }`}
+                      >
+                        <div
+                          className="mt-1 w-1.5 h-1.5 rounded-full flex-shrink-0"
+                          style={{ background: n.isRead ? "transparent" : accent }}
+                        />
+                        <div className="flex-1 min-w-0">
+                          <p
+                            className="truncate"
+                            style={{ 
+                              fontSize: "13px", 
+                              color: n.isRead ? "#cbd5e1" : "#ffffff", 
+                              fontWeight: n.isRead ? 500 : 700 
+                            }}
+                          >
+                            {n.title}
+                          </p>
+                          <p
+                            style={{ 
+                              fontSize: "11px", 
+                              color: "#94a3b8", 
+                              marginTop: 2,
+                              whiteSpace: "normal" 
+                            }}
+                          >
+                            {n.body}
+                          </p>
+                          <p style={{ fontSize: "10px", color: "#64748b", marginTop: 4 }}>
+                            {timeAgo}
+                          </p>
+                        </div>
+                      </button>
+                    );
+                  })
+                )}
               </div>
             </div>
           </>

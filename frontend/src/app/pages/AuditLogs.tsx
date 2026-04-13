@@ -1,7 +1,9 @@
-import { useState } from "react";
-import { Shield, Download, Search, Filter, ChevronDown, Eye } from "lucide-react";
-import { format } from "date-fns";
+import { useState, useEffect } from "react";
+import { Shield, Download, Search, Filter, ChevronDown, Eye, Loader2 } from "lucide-react";
+import { format, parseISO } from "date-fns";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../components/ui/dialog";
+import { fetchAuditLogs } from "../api/audit";
+import { toast } from "sonner";
 
 interface AuditLog {
   id: string;
@@ -15,103 +17,39 @@ interface AuditLog {
   details: string;
 }
 
-const mockAuditLogs: AuditLog[] = [
-  {
-    id: "al1",
-    timestamp: new Date(2026, 2, 6, 10, 15),
-    user: "Admin User",
-    action: "File Upload",
-    resource: "Annual_Budget_2026.xlsx",
-    ipAddress: "192.168.1.105",
-    location: "New York, US",
-    status: "success",
-    details: "Successfully uploaded encrypted file with AES-256 encryption",
-  },
-  {
-    id: "al2",
-    timestamp: new Date(2026, 2, 6, 9, 45),
-    user: "Sarah Chen",
-    action: "Access Revoked",
-    resource: "Confidential_Project_Alpha.pdf",
-    ipAddress: "192.168.1.87",
-    location: "San Francisco, US",
-    status: "success",
-    details: "Access revoked for user michael.roberts@company.com",
-  },
-  {
-    id: "al3",
-    timestamp: new Date(2026, 2, 6, 9, 20),
-    user: "Unknown User",
-    action: "Failed Login",
-    resource: "Admin Panel",
-    ipAddress: "203.45.67.89",
-    location: "Unknown",
-    status: "failed",
-    details: "Multiple failed login attempts detected - account temporarily locked",
-  },
-  {
-    id: "al4",
-    timestamp: new Date(2026, 2, 6, 8, 30),
-    user: "Michael Roberts",
-    action: "File Download",
-    resource: "Contract_Template_v2.docx",
-    ipAddress: "192.168.1.92",
-    location: "Boston, US",
-    status: "success",
-    details: "File downloaded and decrypted successfully",
-  },
-  {
-    id: "al5",
-    timestamp: new Date(2026, 2, 5, 16, 45),
-    user: "Emily Zhang",
-    action: "Security Settings Changed",
-    resource: "Two-Factor Authentication",
-    ipAddress: "192.168.1.110",
-    location: "Seattle, US",
-    status: "warning",
-    details: "2FA enabled for account",
-  },
-  {
-    id: "al6",
-    timestamp: new Date(2026, 2, 5, 15, 20),
-    user: "David Martinez",
-    action: "User Added",
-    resource: "Team Member: Lisa Johnson",
-    ipAddress: "192.168.1.75",
-    location: "Chicago, US",
-    status: "success",
-    details: "New team member added with Editor role",
-  },
-  {
-    id: "al7",
-    timestamp: new Date(2026, 2, 5, 14, 10),
-    user: "Admin User",
-    action: "Transfer Deleted",
-    resource: "Old_Project_Files.zip",
-    ipAddress: "192.168.1.105",
-    location: "New York, US",
-    status: "success",
-    details: "Transfer permanently deleted from system",
-  },
-  {
-    id: "al8",
-    timestamp: new Date(2026, 2, 5, 11, 30),
-    user: "Sarah Chen",
-    action: "Access Granted",
-    resource: "Q1_Financial_Report.pdf",
-    ipAddress: "192.168.1.87",
-    location: "San Francisco, US",
-    status: "success",
-    details: "File access granted to external collaborator",
-  },
-];
-
 export function AuditLogs() {
-  const [logs] = useState<AuditLog[]>(mockAuditLogs);
+  const [logs, setLogs] = useState<AuditLog[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "success" | "failed" | "warning">("all");
   const [selectedLog, setSelectedLog] = useState<AuditLog | null>(null);
   const [showFilterDropdown, setShowFilterDropdown] = useState(false);
+
+  useEffect(() => {
+    const loadLogs = async () => {
+      setIsLoading(true);
+      const res = await fetchAuditLogs();
+      if (res.error) {
+        toast.error("Cloud Node failure: Unable to retrieve audit trail.");
+      } else {
+        // Map backend schema to frontend interface
+        const mapped: AuditLog[] = res.logs.map(log => ({
+          id: log.id,
+          timestamp: parseISO(log.timestamp),
+          user: log.user_email,
+          action: log.action,
+          resource: log.resource,
+          ipAddress: log.ip_address,
+          location: log.location,
+          status: log.status,
+          details: log.details
+        }));
+        setLogs(mapped);
+      }
+      setIsLoading(false);
+    };
+    loadLogs();
+  }, []);
 
   const filteredLogs = logs.filter((log) => {
     const matchesSearch = log.user.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -148,8 +86,37 @@ export function AuditLogs() {
   };
 
   const handleExport = () => {
-    console.log("Exporting audit logs...");
-    // Simulate export
+    if (filteredLogs.length === 0) {
+      toast.error("Export denied: No log entries detected in current view.");
+      return;
+    }
+
+    const headers = ["Timestamp", "User", "Action", "Resource", "Status", "IP Address", "Location", "Details"];
+    const csvContent = [
+      headers.join(","),
+      ...filteredLogs.map(log => [
+        `"${format(log.timestamp, 'yyyy-MM-dd HH:mm:ss')}"`,
+        `"${log.user}"`,
+        `"${log.action}"`,
+        `"${log.resource}"`,
+        `"${log.status.toUpperCase()}"`,
+        `"${log.ipAddress}"`,
+        `"${log.location}"`,
+        `"${log.details.replace(/"/g, '""')}"`
+      ].join(","))
+    ].join("\n");
+
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `TFS_Audit_Trail_${format(new Date(), 'yyyy-MM-dd')}.csv`);
+    link.style.visibility = "hidden";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    toast.success("Audit trail report generated and transmitted.");
   };
 
   return (
@@ -356,14 +323,30 @@ export function AuditLogs() {
               </tr>
             </thead>
             <tbody>
-              {filteredLogs.map((log, index) => (
-                <tr
-                  key={log.id}
-                  className="hover:bg-white/5 transition-colors"
-                  style={{
-                    borderBottom: index < filteredLogs.length - 1 ? "1px solid rgba(255,255,255,0.05)" : "none",
-                  }}
-                >
+              {isLoading ? (
+                <tr>
+                  <td colSpan={6} className="px-4 py-20 text-center text-white/40">
+                    <div className="flex flex-col items-center gap-4">
+                      <Loader2 size={32} className="animate-spin text-[#0B7FFF]" />
+                      <p className="text-[10px] font-black uppercase tracking-[0.3em]">Synchronizing Audit Trail...</p>
+                    </div>
+                  </td>
+                </tr>
+              ) : filteredLogs.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-4 py-20 text-center text-slate-500 italic text-sm">
+                    No activity logs detected in the selected timeframe.
+                  </td>
+                </tr>
+              ) : (
+                filteredLogs.map((log, index) => (
+                  <tr
+                    key={log.id}
+                    className="hover:bg-white/5 transition-colors"
+                    style={{
+                      borderBottom: index < filteredLogs.length - 1 ? "1px solid rgba(255,255,255,0.05)" : "none",
+                    }}
+                  >
                   <td className="px-4 py-3" style={{ color: "#e2e8f0", fontSize: "13px" }}>
                     {format(log.timestamp, "MMM d, h:mm a")}
                   </td>
@@ -402,7 +385,7 @@ export function AuditLogs() {
                     </button>
                   </td>
                 </tr>
-              ))}
+              )))}
             </tbody>
           </table>
         </div>

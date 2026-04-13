@@ -4,6 +4,7 @@ from app.extensions import db
 from app.models.user import User
 from app.models.audit_log import AuditLog
 from app.middleware.auth_middleware import jwt_required_custom, require_role, current_user
+from app.middleware.csrf_middleware import csrf_protect
 
 # ══════════════════════════════════════════════════════════════════════════════
 # TEAM
@@ -131,14 +132,18 @@ def get_account():
         db.func.sum(Transfer.size_bytes)
     ).filter_by(uploaded_by_id=user.id, is_deleted=False).scalar() or 0
 
+    total_users = User.query.count()
+    
     return jsonify({
         **user.to_dict(),
         "transfersCount": transfers_count,
         "storageUsedBytes": total_bytes,
+        "totalUsers": total_users,
     }), 200
 
 
 @account_bp.patch("")
+@csrf_protect
 @jwt_required_custom
 def update_account():
     user = current_user()
@@ -146,17 +151,16 @@ def update_account():
 
     if "name" in data and data["name"].strip():
         user.name = data["name"].strip()
-    if "email" in data:
-        new_email = data["email"].strip().lower()
-        if new_email != user.email and User.query.filter_by(email=new_email).first():
-            return jsonify({"error": "EMAIL_TAKEN"}), 409
-        user.email = new_email
+        
+    if "company" in data:
+        user.company = data["company"].strip() or "Individual"
 
     db.session.commit()
     return jsonify(user.to_dict()), 200
 
 
 @account_bp.post("/change-password")
+@csrf_protect
 @jwt_required_custom
 def change_password():
     user = current_user()
@@ -166,10 +170,60 @@ def change_password():
 
     if not user.check_password(current_pw):
         return jsonify({"error": "WRONG_PASSWORD"}), 401
-    if len(new_pw) < 8:
-        return jsonify({"error": "PASSWORD_TOO_SHORT"}), 400
+        
+    # [Security] Enforce strict password policy
+    from app.services.auth_service import _validate_password
+    pw_error = _validate_password(new_pw)
+    if pw_error:
+        return jsonify({"error": pw_error}), 400
 
     user.set_password(new_pw)
+    
+    # [Security] Token Rotation: invalidate ALL existing sessions by bumping token version
+    user.token_version += 1
+    
+    # [Audit] Log password change
+    from app.services.auth_service import _log
+    ip = request.headers.get("X-Forwarded-For", request.remote_addr)
+    _log("PASSWORD_CHANGED", user.email, user.id, "success", ip, details="Password changed. All existing sessions invalidated.")
+    
+    db.session.commit()
+    
+    # Issue a fresh cookie reflecting the new token_version so the current session survives
+    from flask_jwt_extended import create_access_token, set_access_cookies
+    from datetime import datetime, timezone
+    now_ts = int(datetime.now(timezone.utc).timestamp())
+    fresh_token = create_access_token(
+        identity=user.id,
+        additional_claims={
+            "session_created_at": now_ts,
+            "token_version": user.token_version
+        }
+    )
+    response = jsonify({"ok": True})
+    set_access_cookies(response, fresh_token)
+    return response, 200
+
+
+@account_bp.delete("")
+@csrf_protect
+@jwt_required_custom
+def delete_account():
+    user = current_user()
+    
+    # Optional explicitly handle files if they are not stored just in DB (e.g., local storage)
+    from app.models.transfer import Transfer
+    transfers = Transfer.query.filter_by(uploaded_by_id=user.id).all()
+    import os
+    from flask import current_app
+    for t in transfers:
+        if os.path.exists(t.stored_path):
+            try:
+                os.remove(t.stored_path)
+            except Exception:
+                pass
+                
+    db.session.delete(user)
     db.session.commit()
     return jsonify({"ok": True}), 200
 
@@ -193,6 +247,7 @@ def get_settings():
 
 
 @security_bp.patch("/settings")
+@csrf_protect
 @jwt_required_custom
 def update_settings():
     user = current_user()
