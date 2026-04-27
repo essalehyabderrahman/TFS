@@ -3,7 +3,7 @@ import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { toast } from "sonner";
-import { useNavigate, Link } from "react-router";
+import { useNavigate, Link, useSearchParams } from "react-router";
 import { useAuth } from "../hooks/useAuth";
 import { apiSignIn } from "../api/auth";
 import { BackgroundParticles } from "../components/ui/BackgroundParticles";
@@ -19,8 +19,16 @@ export function SignIn() {
   const [isLoading, setIsLoading] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { isAuthenticated, isInitializing, signIn } = useAuth();
   const component = useRef<HTMLDivElement>(null);
+
+  // Show session-expired toast when redirected by the refresh interceptor
+  useEffect(() => {
+    if (searchParams.get("reason") === "session_expired") {
+      toast.warning("Your session has expired. Please sign in again.")
+    }
+  }, [])
 
   // Redirect if already authenticated
   useEffect(() => {

@@ -236,9 +236,7 @@ export async function apiDeleteAccount(): Promise<any> {
       })
       const data = await res.json()
       if (!res.ok) {
-        if (data.error === "CSRF_TOKEN_MISSING" || data.error === "CSRF_TOKEN_INVALID")
-          return { ok: false, error: data.error }
-        return { ok: false, error: data.error }
+        return { ok: false, error: data.error ?? "UNKNOWN_ERROR" }
       }
       return { ok: true, ...data }
     } catch {

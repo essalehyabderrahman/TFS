@@ -3,7 +3,8 @@ import { Download, FileCheck, Eye, Trash2, Search, Filter, ChevronDown, Loader2 
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "../components/ui/alert-dialog";
 import { format } from "date-fns";
-import { useTransfers } from "../hooks/useTransfers";
+import { toast } from "sonner";
+import { useReceivedTransfers } from "../hooks/useReceivedTransfers";
 import { useAuth } from "../hooks/useAuth";
 
 interface ReceivedFile {
@@ -19,7 +20,7 @@ interface ReceivedFile {
 }
 
 export function ReceivedFiles() {
-  const { transfers, loading } = useTransfers();
+  const { transfers, loading, refresh } = useReceivedTransfers();
   const { user } = useAuth();
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "available" | "downloaded" | "expired">("all");
@@ -27,9 +28,8 @@ export function ReceivedFiles() {
   const [fileToDelete, setFileToDelete] = useState<string | null>(null);
   const [showFilterDropdown, setShowFilterDropdown] = useState(false);
 
-  // Filter transfers to only show those received by the current user
+  // /transfers/received already scopes to current user — no client-side filter needed
   const receivedFiles: ReceivedFile[] = transfers
-    .filter(t => t.recipient === user?.email)
     .map(t => ({
       id: t.id,
       fileName: t.fileName,
@@ -74,14 +74,63 @@ export function ReceivedFiles() {
     }
   };
 
-  const handleDownload = (file: ReceivedFile) => {
-    console.log("Downloading file:", file.fileName);
-    // Simulate download
+  const handleDownload = async (file: ReceivedFile) => {
+    const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
+    if (!API_BASE_URL) return
+    try {
+      const res = await fetch(`${API_BASE_URL}/transfers/${file.id}/download`, {
+        method: "GET",
+        credentials: "include",
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        toast.error(data.error === "EXPIRED"
+          ? "This file has expired and can no longer be downloaded."
+          : data.error === "FORBIDDEN"
+          ? "You do not have permission to download this file."
+          : "Download failed. Please try again.")
+        return
+      }
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = file.fileName
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+      toast.success(`${file.fileName} downloaded successfully.`)
+    } catch {
+      toast.error("Network error. Please try again.")
+    }
   };
 
-  const handleDelete = (id: string) => {
-    console.log("Deleting file:", id);
-    setFileToDelete(null);
+  const handleDelete = async (id: string) => {
+    const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
+    if (!API_BASE_URL) return
+    try {
+      const csrfToken = document.cookie.split("; ").find(r => r.startsWith("csrf_token="))?.split("=")[1] ?? ""
+      const res = await fetch(`${API_BASE_URL}/transfers/${id}`, {
+        method: "DELETE",
+        credentials: "include",
+        headers: { "X-CSRF-Token": csrfToken },
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        toast.error(data.error === "FORBIDDEN"
+          ? "You do not have permission to delete this file."
+          : "Delete failed. Please try again.")
+        setFileToDelete(null)
+        return
+      }
+      toast.success("File deleted successfully.")
+      setFileToDelete(null)
+      refresh()
+    } catch {
+      toast.error("Network error. Please try again.")
+      setFileToDelete(null)
+    }
   };
 
   return (

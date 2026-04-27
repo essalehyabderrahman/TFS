@@ -1,702 +1,464 @@
-import { useState, useEffect } from "react";
-import { UserPlus, Trash2, Edit, Eye, Search, MoreVertical, Loader2 } from "lucide-react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "../components/ui/dialog";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "../components/ui/alert-dialog";
-import { format, parseISO } from "date-fns";
-import { fetchTeamMembers, apiInviteMember, apiUpdateMember, apiDeleteMember } from "../api/team";
-import { toast } from "sonner";
-
-interface TeamMember {
-  id: string;
-  name: string;
-  email: string;
-  role: "admin" | "editor" | "viewer";
-  status: "active" | "pending" | "suspended";
-  joinedAt: Date;
-  lastActive: Date;
-  transfersCount: number;
-  avatar: string;
-}
+import { useState, useEffect } from "react"
+import { useNavigate } from "react-router"
+import { useAuth } from "../hooks/useAuth"
+import { toast } from "sonner"
+import { Users, Plus, Trash2, Settings, UserPlus, Loader2, ChevronDown, ChevronRight } from "lucide-react"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "../components/ui/dialog"
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "../components/ui/alert-dialog"
+import { Switch } from "../components/ui/switch"
+import {
+  fetchGroups, createGroup, deleteGroup,
+  fetchGroupMembers, inviteGroupMember, updateGroupMember, removeGroupMember,
+  fetchGroupSettings, updateGroupSettings,
+  type Group, type GroupMember, type GroupSettings
+} from "../api/groups"
 
 export function TeamManagement() {
-  const [members, setMembers] = useState<TeamMember[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [showInviteDialog, setShowInviteDialog] = useState(false);
-  const [selectedMember, setSelectedMember] = useState<TeamMember | null>(null);
-  const [memberToDelete, setMemberToDelete] = useState<string | null>(null);
-  const [inviteEmail, setInviteEmail] = useState("");
-  const [inviteRole, setInviteRole] = useState<"admin" | "editor" | "viewer">("viewer");
-  const [viewMember, setViewMember] = useState<TeamMember | null>(null);
-  const [roleMember, setRoleMember] = useState<TeamMember | null>(null);
-  const [roleSelection, setRoleSelection] = useState<"admin" | "editor" | "viewer">("viewer");
-  const [isActionLoading, setIsActionLoading] = useState(false);
+  const { isAppAdmin } = useAuth()
+  const navigate = useNavigate()
+
+  // Redirect non-admins immediately
+  if (!isAppAdmin) {
+    navigate("/dashboard", { replace: true })
+    return null
+  }
+
+  const [groups, setGroups] = useState<Group[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [expandedGroup, setExpandedGroup] = useState<string | null>(null)
+  const [groupMembers, setGroupMembers] = useState<Record<string, GroupMember[]>>({})
+  const [groupSettings, setGroupSettings] = useState<Record<string, GroupSettings>>({})
+  const [loadingMembers, setLoadingMembers] = useState<Record<string, boolean>>({})
+
+  // Create group dialog
+  const [showCreateDialog, setShowCreateDialog] = useState(false)
+  const [newGroupName, setNewGroupName] = useState("")
+  const [newGroupDesc, setNewGroupDesc] = useState("")
+  const [isCreating, setIsCreating] = useState(false)
+
+  // Invite member dialog
+  const [inviteGroupId, setInviteGroupId] = useState<string | null>(null)
+  const [inviteEmail, setInviteEmail] = useState("")
+  const [inviteRole, setInviteRole] = useState<"admin" | "member">("member")
+  const [isInviting, setIsInviting] = useState(false)
+
+  // Delete group dialog
+  const [groupToDelete, setGroupToDelete] = useState<Group | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
+
+  // Remove member dialog
+  const [memberToRemove, setMemberToRemove] = useState<{ groupId: string; member: GroupMember } | null>(null)
+  const [isRemoving, setIsRemoving] = useState(false)
 
   useEffect(() => {
-    const loadMembers = async () => {
-      setIsLoading(true);
-      const res = await fetchTeamMembers();
-      if (res.error) {
-        toast.error("Security Node failure: Access to personnel directory denied.");
-      } else {
-        // Map backend schema to frontend interface
-        // Backend User.to_dict typically returns: {id, name, email, role, status, avatar, created_at, last_active}
-        const mapped: TeamMember[] = res.data.map((u: any) => ({
-          id: u.id,
-          name: u.name,
-          email: u.email,
-          role: u.role,
-          status: u.status,
-          joinedAt: u.created_at ? parseISO(u.created_at) : new Date(),
-          lastActive: u.last_active ? parseISO(u.last_active) : new Date(),
-          transfersCount: u.transfersCount ?? 0,
-          avatar: u.avatar || u.name.charAt(0).toUpperCase()
-        }));
-        setMembers(mapped);
+    loadGroups()
+  }, [])
+
+  async function loadGroups() {
+    setIsLoading(true)
+    const res = await fetchGroups()
+    if (res.error) {
+      toast.error("Failed to load groups.")
+    } else {
+      setGroups(res.data)
+    }
+    setIsLoading(false)
+  }
+
+  async function handleExpandGroup(groupId: string) {
+    if (expandedGroup === groupId) {
+      setExpandedGroup(null)
+      return
+    }
+    setExpandedGroup(groupId)
+    if (!groupMembers[groupId]) {
+      setLoadingMembers(p => ({ ...p, [groupId]: true }))
+      const [membersRes, settingsRes] = await Promise.all([
+        fetchGroupMembers(groupId),
+        fetchGroupSettings(groupId),
+      ])
+      if (!membersRes.error) setGroupMembers(p => ({ ...p, [groupId]: membersRes.data }))
+      if (!settingsRes.error && settingsRes.data) setGroupSettings(p => ({ ...p, [groupId]: settingsRes.data! }))
+      setLoadingMembers(p => ({ ...p, [groupId]: false }))
+    }
+  }
+
+  async function handleCreateGroup() {
+    if (!newGroupName.trim()) { toast.error("Group name is required."); return }
+    setIsCreating(true)
+    const res = await createGroup(newGroupName.trim(), newGroupDesc.trim())
+    if (res.error) {
+      toast.error(res.error === "GROUP_NAME_TAKEN" ? "A group with this name already exists." : "Failed to create group.")
+    } else {
+      toast.success(`Group "${res.data!.name}" created.`)
+      setGroups(p => [...p, res.data!])
+      setShowCreateDialog(false)
+      setNewGroupName("")
+      setNewGroupDesc("")
+    }
+    setIsCreating(false)
+  }
+
+  async function handleDeleteGroup() {
+    if (!groupToDelete) return
+    setIsDeleting(true)
+    const res = await deleteGroup(groupToDelete.id)
+    if (res.error) {
+      toast.error("Failed to delete group.")
+    } else {
+      toast.success(`Group "${groupToDelete.name}" deleted.`)
+      setGroups(p => p.filter(g => g.id !== groupToDelete.id))
+      setGroupToDelete(null)
+      if (expandedGroup === groupToDelete.id) setExpandedGroup(null)
+    }
+    setIsDeleting(false)
+  }
+
+  async function handleInviteMember() {
+    if (!inviteGroupId || !inviteEmail.trim()) { toast.error("Email is required."); return }
+    setIsInviting(true)
+    const res = await inviteGroupMember(inviteGroupId, inviteEmail.trim(), inviteRole)
+    if (res.error) {
+      const messages: Record<string, string> = {
+        USER_NOT_FOUND: "No user found with that email.",
+        ALREADY_MEMBER: "This user is already a member of this group.",
+        FORBIDDEN: "You do not have permission to invite members.",
       }
-      setIsLoading(false);
-    };
-    loadMembers();
-  }, []);
-
-  const getRoleColor = (role: string) => {
-    switch (role) {
-      case "admin":
-        return "#0B7FFF";
-      case "editor":
-        return "#00E5A0";
-      case "viewer":
-        return "#6b7fa8";
-      default:
-        return "#6b7fa8";
-    }
-  };
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "active":
-        return "#00E5A0";
-      case "pending":
-        return "#f59e0b";
-      case "suspended":
-        return "#ef4444";
-      default:
-        return "#6b7fa8";
-    }
-  };
-
-  const handleInvite = async () => {
-    if (!inviteEmail.trim()) {
-        toast.error("Invitation denied: Valid email address required.");
-        return;
-    }
-    setIsActionLoading(true);
-    const res = await apiInviteMember(inviteEmail.split("@")[0], inviteEmail, inviteRole);
-    if(res.ok && res.data) {
-        toast.success(`Invitation transmitted to ${inviteEmail}.`);
-        setMembers(prev => [...prev, {
-            id: res.data!.id,
-            name: res.data!.name,
-            email: res.data!.email,
-            role: res.data!.role,
-            status: res.data!.status,
-            joinedAt: new Date(),
-            lastActive: new Date(),
-            transfersCount: 0,
-            avatar: res.data!.avatar || res.data!.name.charAt(0).toUpperCase()
-        }]);
-        setShowInviteDialog(false);
-        setInviteEmail("");
-        setInviteRole("viewer");
+      toast.error(messages[res.error] ?? "Failed to invite member.")
     } else {
-        toast.error(res.error || "Personnel registry update failed.");
+      toast.success(`${inviteEmail} invited successfully.`)
+      setGroupMembers(p => ({
+        ...p,
+        [inviteGroupId]: [...(p[inviteGroupId] ?? []), res.data!]
+      }))
+      setGroups(p => p.map(g => g.id === inviteGroupId ? { ...g, memberCount: g.memberCount + 1 } : g))
+      setInviteGroupId(null)
+      setInviteEmail("")
+      setInviteRole("member")
     }
-    setIsActionLoading(false);
-  };
+    setIsInviting(false)
+  }
 
-  const handleDelete = async (id: string) => {
-    setIsActionLoading(true);
-    const res = await apiDeleteMember(id);
-    if(res.ok) {
-        toast.success("Personnel record structurally eliminated.");
-        setMembers(prev => prev.filter(m => m.id !== id));
-        setMemberToDelete(null);
+  async function handleRoleChange(groupId: string, userId: string, newRole: "admin" | "member") {
+    const res = await updateGroupMember(groupId, userId, newRole)
+    if (res.error) {
+      const messages: Record<string, string> = {
+        LAST_GROUP_ADMIN_PROTECTED: "Cannot demote the last group admin.",
+        FORBIDDEN: "Only app admins can promote to group admin.",
+      }
+      toast.error(messages[res.error] ?? "Failed to update role.")
     } else {
-        toast.error(res.error || "Execution failed.");
+      toast.success("Role updated.")
+      setGroupMembers(p => ({
+        ...p,
+        [groupId]: p[groupId].map(m => m.userId === userId ? { ...m, role: newRole } : m)
+      }))
     }
-    setIsActionLoading(false);
-  };
+  }
 
-  const filteredMembers = members.filter((member) =>
-    member.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    member.email.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  async function handleRemoveMember() {
+    if (!memberToRemove) return
+    setIsRemoving(true)
+    const { groupId, member } = memberToRemove
+    const res = await removeGroupMember(groupId, member.userId)
+    if (res.error) {
+      toast.error(res.error === "LAST_GROUP_ADMIN_PROTECTED"
+        ? "Cannot remove the last group admin."
+        : "Failed to remove member.")
+    } else {
+      toast.success(`${member.userEmail} removed from group.`)
+      setGroupMembers(p => ({ ...p, [groupId]: p[groupId].filter(m => m.userId !== member.userId) }))
+      setGroups(p => p.map(g => g.id === groupId ? { ...g, memberCount: g.memberCount - 1 } : g))
+      setMemberToRemove(null)
+    }
+    setIsRemoving(false)
+  }
+
+  async function handleSettingChange(groupId: string, field: string, value: boolean) {
+    const prev = groupSettings[groupId]
+    setGroupSettings(p => ({ ...p, [groupId]: { ...p[groupId], [field]: value } }))
+    const res = await updateGroupSettings(groupId, { [field]: value } as any)
+    if (res.error) {
+      toast.error(res.error === "EXTERNAL_SHARING_DISABLED_GLOBALLY"
+        ? "External sharing is disabled globally by the app admin."
+        : "Failed to update settings.")
+      setGroupSettings(p => ({ ...p, [groupId]: prev }))
+    }
+  }
 
   return (
     <div className="flex flex-col gap-4 sm:gap-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex items-center justify-between">
         <div>
           <h1 className="text-white text-2xl font-bold mb-1">Team Management</h1>
-          <p style={{ color: "#6b7fa8", fontSize: "14px" }}>
-            Manage team members and their access permissions
-          </p>
+          <p style={{ color: "#6b7fa8", fontSize: "14px" }}>Manage groups and their members</p>
         </div>
         <button
-          onClick={() => setShowInviteDialog(true)}
+          onClick={() => setShowCreateDialog(true)}
           className="flex items-center gap-2 px-4 py-2.5 rounded-xl transition-all hover:opacity-90"
-          style={{
-            background: "linear-gradient(135deg, #0B7FFF 0%, #0960D9 100%)",
-            color: "white",
-            fontSize: "14px",
-            fontWeight: 600,
-          }}
+          style={{ background: "linear-gradient(135deg, #0B7FFF 0%, #0960D9 100%)", color: "white", fontSize: "14px", fontWeight: 600 }}
         >
-          <UserPlus size={16} />
-          Invite Member
+          <Plus size={16} />
+          New Group
         </button>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-        <div
-          className="p-4 rounded-xl"
-          style={{
-            background: "rgba(11,127,255,0.08)",
-            border: "1px solid rgba(11,127,255,0.2)",
-          }}
-        >
-          <p style={{ color: "#4a5578", fontSize: "12px", fontWeight: 600, letterSpacing: "0.05em" }}>
-            TOTAL MEMBERS
-          </p>
-          <p className="text-3xl font-bold mt-1" style={{ color: "#0B7FFF" }}>
-            {members.length}
-          </p>
+      {/* Groups List */}
+      {isLoading ? (
+        <div className="flex flex-col items-center justify-center py-24 rounded-xl text-white/40"
+          style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)" }}>
+          <Loader2 size={40} className="animate-spin text-[#0B7FFF] mb-4" />
+          <p className="text-[10px] font-black uppercase tracking-[0.4em]">Loading Groups...</p>
         </div>
-
-        <div
-          className="p-4 rounded-xl"
-          style={{
-            background: "rgba(0,229,160,0.08)",
-            border: "1px solid rgba(0,229,160,0.2)",
-          }}
-        >
-          <p style={{ color: "#4a5578", fontSize: "12px", fontWeight: 600, letterSpacing: "0.05em" }}>
-            ACTIVE
-          </p>
-          <p className="text-3xl font-bold mt-1" style={{ color: "#00E5A0" }}>
-            {members.filter(m => m.status === "active").length}
-          </p>
+      ) : groups.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-24 rounded-xl"
+          style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)" }}>
+          <Users size={48} style={{ color: "#3d4f6e", marginBottom: "16px" }} />
+          <p style={{ color: "#6b7fa8", fontSize: "15px" }}>No groups yet. Create your first group.</p>
         </div>
-
-        <div
-          className="p-4 rounded-xl"
-          style={{
-            background: "rgba(245,158,11,0.08)",
-            border: "1px solid rgba(245,158,11,0.2)",
-          }}
-        >
-          <p style={{ color: "#4a5578", fontSize: "12px", fontWeight: 600, letterSpacing: "0.05em" }}>
-            PENDING
-          </p>
-          <p className="text-3xl font-bold mt-1" style={{ color: "#f59e0b" }}>
-            {members.filter(m => m.status === "pending").length}
-          </p>
-        </div>
-
-        <div
-          className="p-4 rounded-xl"
-          style={{
-            background: "rgba(255,255,255,0.03)",
-            border: "1px solid rgba(255,255,255,0.08)",
-          }}
-        >
-          <p style={{ color: "#4a5578", fontSize: "12px", fontWeight: 600, letterSpacing: "0.05em" }}>
-            ADMINS
-          </p>
-          <p className="text-3xl font-bold mt-1" style={{ color: "#e2e8f0" }}>
-            {members.filter(m => m.role === "admin").length}
-          </p>
-        </div>
-      </div>
-
-      {/* Search Bar */}
-      <div className="relative">
-        <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: "#6b7fa8" }} />
-        <input
-          type="text"
-          placeholder="Search members..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          className="w-full pl-10 pr-4 py-2.5 rounded-lg text-white placeholder:text-slate-500 outline-none"
-          style={{
-            background: "rgba(255,255,255,0.04)",
-            border: "1px solid rgba(255,255,255,0.08)",
-            fontSize: "14px",
-          }}
-        />
-      </div>
-
-      {/* Team Members Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {isLoading ? (
-          <div className="col-span-1 lg:col-span-2 py-20 flex flex-col items-center justify-center gap-4 text-white/40">
-             <Loader2 size={40} className="animate-spin text-[#0B7FFF]" />
-             <p className="text-[10px] font-black uppercase tracking-[0.4em]">Decrypting Personnel Directory...</p>
-          </div>
-        ) : filteredMembers.length === 0 ? (
-          <div className="col-span-1 lg:col-span-2 py-20 text-center text-slate-500 italic">
-            No personnel records matching your search criteria.
-          </div>
-        ) : (
-          filteredMembers.map((member) => (
-            <div
-              key={member.id}
-            className="p-4 rounded-xl transition-all hover:bg-white/5"
-            style={{
-              background: "rgba(255,255,255,0.03)",
-              border: "1px solid rgba(255,255,255,0.08)",
-            }}
-          >
-            <div className="flex items-start gap-4">
-              {/* Avatar */}
-              <div
-                className="w-12 h-12 rounded-full flex items-center justify-center shrink-0"
-                style={{
-                  background: "linear-gradient(135deg, #0B7FFF 0%, #0960D9 100%)",
-                  fontSize: "14px",
-                  fontWeight: 700,
-                  color: "#fff",
-                }}
-              >
-                {member.avatar}
-              </div>
-
-              {/* Info */}
-              <div className="flex-1 min-w-0">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <p className="text-white font-semibold text-sm truncate">{member.name}</p>
-                    <p style={{ color: "#6b7fa8", fontSize: "13px" }} className="truncate">{member.email}</p>
-                  </div>
-                  <button
-                    onClick={() => setSelectedMember(member)}
-                    className="p-1.5 rounded-lg transition-colors hover:bg-white/10 shrink-0"
-                    style={{ color: "#6b7fa8" }}
-                  >
-                    <MoreVertical size={18} />
+      ) : (
+        <div className="flex flex-col gap-3">
+          {groups.map(group => (
+            <div key={group.id} className="rounded-xl overflow-hidden"
+              style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)" }}>
+              {/* Group Header Row */}
+              <div className="flex items-center gap-4 p-4 cursor-pointer hover:bg-white/5 transition-colors"
+                onClick={() => handleExpandGroup(group.id)}>
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
+                  style={{ background: "rgba(11,127,255,0.15)", border: "1px solid rgba(11,127,255,0.2)" }}>
+                  <Users size={20} style={{ color: "#0B7FFF" }} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-white font-semibold">{group.name}</p>
+                  <p style={{ color: "#6b7fa8", fontSize: "13px" }}>
+                    {group.description || "No description"} · {group.memberCount} member{group.memberCount !== 1 ? "s" : ""}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button onClick={e => { e.stopPropagation(); setInviteGroupId(group.id) }}
+                    className="p-2 rounded-lg hover:bg-white/10 transition-colors"
+                    style={{ color: "#00E5A0" }} title="Invite member">
+                    <UserPlus size={16} />
                   </button>
-                </div>
-
-                {/* Badges */}
-                <div className="flex flex-wrap items-center gap-2 mt-2">
-                  <span
-                    className="inline-flex items-center px-2 py-0.5 rounded"
-                    style={{
-                      fontSize: "11px",
-                      fontWeight: 700,
-                      letterSpacing: "0.05em",
-                      color: getRoleColor(member.role),
-                      background: `${getRoleColor(member.role)}15`,
-                      border: `1px solid ${getRoleColor(member.role)}30`,
-                    }}
-                  >
-                    {member.role.toUpperCase()}
-                  </span>
-                  <span
-                    className="inline-flex items-center px-2 py-0.5 rounded"
-                    style={{
-                      fontSize: "11px",
-                      fontWeight: 700,
-                      letterSpacing: "0.05em",
-                      color: getStatusColor(member.status),
-                      background: `${getStatusColor(member.status)}15`,
-                      border: `1px solid ${getStatusColor(member.status)}30`,
-                    }}
-                  >
-                    {member.status.toUpperCase()}
-                  </span>
-                </div>
-
-                {/* Stats */}
-                <div className="grid grid-cols-3 gap-3 mt-3 pt-3" style={{ borderTop: "1px solid rgba(255,255,255,0.08)" }}>
-                  <div>
-                    <p style={{ color: "#4a5578", fontSize: "10px", fontWeight: 600, letterSpacing: "0.05em" }}>
-                      JOINED
-                    </p>
-                    <p style={{ color: "#e2e8f0", fontSize: "12px" }}>
-                      {format(member.joinedAt, "MMM d, yy")}
-                    </p>
-                  </div>
-                  <div>
-                    <p style={{ color: "#4a5578", fontSize: "10px", fontWeight: 600, letterSpacing: "0.05em" }}>
-                      LAST ACTIVE
-                    </p>
-                    <p style={{ color: "#e2e8f0", fontSize: "12px" }}>
-                      {format(member.lastActive, "MMM d")}
-                    </p>
-                  </div>
-                  <div>
-                    <p style={{ color: "#4a5578", fontSize: "10px", fontWeight: 600, letterSpacing: "0.05em" }}>
-                      TRANSFERS
-                    </p>
-                    <p style={{ color: "#e2e8f0", fontSize: "12px" }}>
-                      {member.transfersCount}
-                    </p>
-                  </div>
+                  <button onClick={e => { e.stopPropagation(); setGroupToDelete(group) }}
+                    className="p-2 rounded-lg hover:bg-red-500/10 transition-colors"
+                    style={{ color: "#ef4444" }} title="Delete group">
+                    <Trash2 size={16} />
+                  </button>
+                  {expandedGroup === group.id
+                    ? <ChevronDown size={18} style={{ color: "#6b7fa8" }} />
+                    : <ChevronRight size={18} style={{ color: "#6b7fa8" }} />}
                 </div>
               </div>
-            </div>
-          </div>
-          )))}
-      </div>
 
-      {/* Invite Member Dialog */}
-      <Dialog open={showInviteDialog} onOpenChange={setShowInviteDialog}>
-        <DialogContent
-          style={{
-            background: "linear-gradient(180deg, #0d1228 0%, #0b0f20 100%)",
-            border: "1px solid rgba(255,255,255,0.1)",
-          }}
-        >
-          <DialogHeader>
-            <DialogTitle className="text-white text-xl">Invite Team Member</DialogTitle>
-          </DialogHeader>
+              {/* Expanded Group Content */}
+              {expandedGroup === group.id && (
+                <div className="border-t" style={{ borderColor: "rgba(255,255,255,0.08)" }}>
+                  {loadingMembers[group.id] ? (
+                    <div className="flex justify-center py-8">
+                      <Loader2 size={24} className="animate-spin text-[#0B7FFF]" />
+                    </div>
+                  ) : (
+                    <div className="p-4 flex flex-col gap-4">
+                      {/* Members Table */}
+                      <div>
+                        <p style={{ color: "#4a5578", fontSize: "12px", fontWeight: 600, letterSpacing: "0.1em" }} className="mb-3">
+                          MEMBERS
+                        </p>
+                        {(groupMembers[group.id] ?? []).length === 0 ? (
+                          <p style={{ color: "#6b7fa8", fontSize: "13px" }}>No members yet.</p>
+                        ) : (
+                          <div className="flex flex-col gap-2">
+                            {(groupMembers[group.id] ?? []).map(member => (
+                              <div key={member.id} className="flex items-center gap-3 p-3 rounded-lg"
+                                style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}>
+                                <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 text-xs font-bold text-white"
+                                  style={{ background: "linear-gradient(135deg, #0B7FFF 0%, #0960D9 100%)" }}>
+                                  {member.userAvatar || member.userName.charAt(0).toUpperCase()}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-white text-sm font-medium truncate">{member.userName}</p>
+                                  <p style={{ color: "#6b7fa8", fontSize: "12px" }}>{member.userEmail}</p>
+                                </div>
+                                <select
+                                  value={member.role}
+                                  onChange={e => handleRoleChange(group.id, member.userId, e.target.value as "admin" | "member")}
+                                  className="px-2 py-1 rounded text-xs text-white outline-none"
+                                  style={{ background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.1)" }}>
+                                  <option value="member">Member</option>
+                                  <option value="admin">Admin</option>
+                                </select>
+                                <button onClick={() => setMemberToRemove({ groupId: group.id, member })}
+                                  className="p-1.5 rounded hover:bg-red-500/10 transition-colors"
+                                  style={{ color: "#ef4444" }}>
+                                  <Trash2 size={14} />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Group Settings */}
+                      {groupSettings[group.id] && (
+                        <div className="pt-4 border-t" style={{ borderColor: "rgba(255,255,255,0.08)" }}>
+                          <div className="flex items-center gap-2 mb-3">
+                            <Settings size={16} style={{ color: "#0B7FFF" }} />
+                            <p style={{ color: "#4a5578", fontSize: "12px", fontWeight: 600, letterSpacing: "0.1em" }}>
+                              GROUP SETTINGS
+                            </p>
+                          </div>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            {[
+                              { field: "allowMemberDirectory", label: "Member Directory", desc: "Members can see the group member list" },
+                              { field: "allowMemberInvite", label: "Member Invitations", desc: "Group admins can invite new members" },
+                              { field: "allowExternalSharing", label: "External Sharing", desc: "Files can be shared outside the group" },
+                              { field: "allowGroupTransfers", label: "Group File Access", desc: "All members can see group-scoped files" },
+                            ].map(({ field, label, desc }) => (
+                              <div key={field} className="flex items-center justify-between p-3 rounded-lg"
+                                style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)" }}>
+                                <div>
+                                  <p className="text-white text-sm font-medium">{label}</p>
+                                  <p style={{ color: "#6b7fa8", fontSize: "11px" }}>{desc}</p>
+                                </div>
+                                <Switch
+                                  checked={Boolean((groupSettings[group.id] as any)[field])}
+                                  onCheckedChange={v => handleSettingChange(group.id, field, v)}
+                                />
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Create Group Dialog */}
+      <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
+        <DialogContent style={{ background: "linear-gradient(180deg, #0d1228 0%, #0b0f20 100%)", border: "1px solid rgba(255,255,255,0.1)" }}>
+          <DialogHeader><DialogTitle className="text-white text-xl">Create New Group</DialogTitle></DialogHeader>
           <div className="space-y-4">
             <div>
-              <label style={{ color: "#4a5578", fontSize: "12px", fontWeight: 600, letterSpacing: "0.05em" }}>
-                EMAIL ADDRESS
-              </label>
-              <input
-                type="email"
-                placeholder="colleague@company.com"
-                value={inviteEmail}
-                onChange={(e) => setInviteEmail(e.target.value)}
+              <label style={{ color: "#4a5578", fontSize: "12px", fontWeight: 600, letterSpacing: "0.05em" }}>GROUP NAME</label>
+              <input type="text" placeholder="Engineering Team" value={newGroupName}
+                onChange={e => setNewGroupName(e.target.value)}
                 className="w-full mt-1 px-4 py-2.5 rounded-lg text-white placeholder:text-slate-500 outline-none"
-                style={{
-                  background: "rgba(255,255,255,0.04)",
-                  border: "1px solid rgba(255,255,255,0.08)",
-                  fontSize: "14px",
-                }}
-              />
+                style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", fontSize: "14px" }} />
             </div>
             <div>
-              <label style={{ color: "#4a5578", fontSize: "12px", fontWeight: 600, letterSpacing: "0.05em" }}>
-                ROLE
-              </label>
-              <select
-                value={inviteRole}
-                onChange={(e) => setInviteRole(e.target.value as any)}
-                className="w-full mt-1 px-4 py-2.5 rounded-lg text-white outline-none"
-                style={{
-                  background: "rgba(255,255,255,0.04)",
-                  border: "1px solid rgba(255,255,255,0.08)",
-                  fontSize: "14px",
-                }}
-              >
-                <option value="viewer">Viewer - Can only view files</option>
-                <option value="editor">Editor - Can upload and manage files</option>
-                <option value="admin">Admin - Full access to all features</option>
-              </select>
+              <label style={{ color: "#4a5578", fontSize: "12px", fontWeight: 600, letterSpacing: "0.05em" }}>DESCRIPTION (optional)</label>
+              <input type="text" placeholder="Responsible for backend and infrastructure" value={newGroupDesc}
+                onChange={e => setNewGroupDesc(e.target.value)}
+                className="w-full mt-1 px-4 py-2.5 rounded-lg text-white placeholder:text-slate-500 outline-none"
+                style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", fontSize: "14px" }} />
             </div>
           </div>
           <DialogFooter className="mt-6">
-            <button
-              onClick={() => setShowInviteDialog(false)}
-              className="px-4 py-2 rounded-lg transition-colors"
-              style={{
-                background: "rgba(255,255,255,0.04)",
-                border: "1px solid rgba(255,255,255,0.08)",
-                color: "#e2e8f0",
-              }}
-            >
+            <button onClick={() => setShowCreateDialog(false)}
+              className="px-4 py-2 rounded-lg"
+              style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "#e2e8f0" }}>
               Cancel
             </button>
-            <button
-              onClick={handleInvite}
-              disabled={isActionLoading}
-              className="px-4 py-2 rounded-lg transition-all hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-              style={{
-                background: "linear-gradient(135deg, #0B7FFF 0%, #0960D9 100%)",
-                color: "white",
-              }}
-            >
-              {isActionLoading && <Loader2 size={16} className="animate-spin" />}
-              Send Invitation
+            <button onClick={handleCreateGroup} disabled={isCreating}
+              className="px-4 py-2 rounded-lg flex items-center gap-2 disabled:opacity-50"
+              style={{ background: "linear-gradient(135deg, #0B7FFF 0%, #0960D9 100%)", color: "white" }}>
+              {isCreating && <Loader2 size={16} className="animate-spin" />}
+              Create Group
             </button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Member Actions Dialog */}
-      <Dialog open={!!selectedMember} onOpenChange={() => setSelectedMember(null)}>
-        <DialogContent
-          style={{
-            background: "linear-gradient(180deg, #0d1228 0%, #0b0f20 100%)",
-            border: "1px solid rgba(255,255,255,0.1)",
-          }}
-        >
-          {selectedMember && (
-            <>
-              <DialogHeader>
-                <DialogTitle className="text-white text-xl">Member Actions</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-2">
-                <button
-                  className="w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors hover:bg-white/5 text-left"
-                  style={{ color: "#e2e8f0" }}
-                  onClick={() => {
-                    setViewMember(selectedMember);
-                    setSelectedMember(null);
-                  }}
-                >
-                  <Eye size={18} />
-                  View Details
-                </button>
-                <button
-                  className="w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors hover:bg-white/5 text-left"
-                  style={{ color: "#e2e8f0" }}
-                  onClick={() => {
-                    setRoleMember(selectedMember);
-                    setRoleSelection(selectedMember.role);
-                    setSelectedMember(null);
-                  }}
-                >
-                  <Edit size={18} />
-                  Edit Role
-                </button>
-                <button
-                  onClick={() => {
-                    setMemberToDelete(selectedMember.id);
-                    setSelectedMember(null);
-                  }}
-                  className="w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors hover:bg-red-500/10 text-left"
-                  style={{ color: "#ef4444" }}
-                >
-                  <Trash2 size={18} />
-                  Remove Member
-                </button>
-              </div>
-            </>
-          )}
+      {/* Invite Member Dialog */}
+      <Dialog open={!!inviteGroupId} onOpenChange={() => setInviteGroupId(null)}>
+        <DialogContent style={{ background: "linear-gradient(180deg, #0d1228 0%, #0b0f20 100%)", border: "1px solid rgba(255,255,255,0.1)" }}>
+          <DialogHeader><DialogTitle className="text-white text-xl">Invite to Group</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <label style={{ color: "#4a5578", fontSize: "12px", fontWeight: 600, letterSpacing: "0.05em" }}>USER EMAIL</label>
+              <input type="email" placeholder="user@company.com" value={inviteEmail}
+                onChange={e => setInviteEmail(e.target.value)}
+                className="w-full mt-1 px-4 py-2.5 rounded-lg text-white placeholder:text-slate-500 outline-none"
+                style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", fontSize: "14px" }} />
+            </div>
+            <div>
+              <label style={{ color: "#4a5578", fontSize: "12px", fontWeight: 600, letterSpacing: "0.05em" }}>ROLE</label>
+              <select value={inviteRole} onChange={e => setInviteRole(e.target.value as "admin" | "member")}
+                className="w-full mt-1 px-4 py-2.5 rounded-lg text-white outline-none"
+                style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", fontSize: "14px" }}>
+                <option value="member">Member — standard group access</option>
+                <option value="admin">Admin — can manage this group</option>
+              </select>
+            </div>
+          </div>
+          <DialogFooter className="mt-6">
+            <button onClick={() => setInviteGroupId(null)}
+              className="px-4 py-2 rounded-lg"
+              style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "#e2e8f0" }}>
+              Cancel
+            </button>
+            <button onClick={handleInviteMember} disabled={isInviting}
+              className="px-4 py-2 rounded-lg flex items-center gap-2 disabled:opacity-50"
+              style={{ background: "linear-gradient(135deg, #0B7FFF 0%, #0960D9 100%)", color: "white" }}>
+              {isInviting && <Loader2 size={16} className="animate-spin" />}
+              Send Invite
+            </button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* View Member Details Dialog */}
-      <Dialog open={!!viewMember} onOpenChange={() => setViewMember(null)}>
-        <DialogContent
-          className="sm:max-w-lg"
-          style={{
-            background: "linear-gradient(180deg, #0d1228 0%, #0b0f20 100%)",
-            border: "1px solid rgba(255,255,255,0.1)",
-            maxHeight: "90vh",
-            overflowY: "auto",
-            scrollbarWidth: "thin",
-            scrollbarColor: "rgba(11,127,255,0.2) transparent",
-          }}
-        >
-          {viewMember && (
-            <>
-              <DialogHeader>
-                <DialogTitle className="text-white text-xl">Member Details</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-4">
-                <div className="flex items-center gap-3">
-                  <div
-                    className="w-12 h-12 rounded-full flex items-center justify-center shrink-0"
-                    style={{
-                      background: "linear-gradient(135deg, #0B7FFF 0%, #0960D9 100%)",
-                      fontSize: "14px",
-                      fontWeight: 700,
-                      color: "#fff",
-                    }}
-                  >
-                    {viewMember.avatar}
-                  </div>
-                  <div>
-                    <p className="text-white font-semibold text-lg">{viewMember.name}</p>
-                    <p style={{ color: "#6b7fa8", fontSize: "14px" }}>{viewMember.email}</p>
-                  </div>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <p style={{ color: "#4a5578", fontSize: "11px", fontWeight: 600, letterSpacing: "0.05em" }}>
-                      ROLE
-                    </p>
-                    <p style={{ color: "#e2e8f0", fontSize: "14px", textTransform: "capitalize" }}>
-                      {viewMember.role}
-                    </p>
-                  </div>
-                  <div>
-                    <p style={{ color: "#4a5578", fontSize: "11px", fontWeight: 600, letterSpacing: "0.05em" }}>
-                      STATUS
-                    </p>
-                    <p style={{ color: "#e2e8f0", fontSize: "14px", textTransform: "capitalize" }}>
-                      {viewMember.status}
-                    </p>
-                  </div>
-                  <div>
-                    <p style={{ color: "#4a5578", fontSize: "11px", fontWeight: 600, letterSpacing: "0.05em" }}>
-                      JOINED
-                    </p>
-                    <p style={{ color: "#e2e8f0", fontSize: "14px" }}>
-                      {format(viewMember.joinedAt, "MMM d, yyyy")}
-                    </p>
-                  </div>
-                  <div>
-                    <p style={{ color: "#4a5578", fontSize: "11px", fontWeight: 600, letterSpacing: "0.05em" }}>
-                      LAST ACTIVE
-                    </p>
-                    <p style={{ color: "#e2e8f0", fontSize: "14px" }}>
-                      {format(viewMember.lastActive, "MMM d, yyyy")}
-                    </p>
-                  </div>
-                  <div>
-                    <p style={{ color: "#4a5578", fontSize: "11px", fontWeight: 600, letterSpacing: "0.05em" }}>
-                      TRANSFERS
-                    </p>
-                    <p style={{ color: "#e2e8f0", fontSize: "14px" }}>
-                      {viewMember.transfersCount}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </>
-          )}
-        </DialogContent>
-      </Dialog>
-
-      {/* Edit Role Dialog */}
-      <Dialog open={!!roleMember} onOpenChange={() => setRoleMember(null)}>
-        <DialogContent
-          className="sm:max-w-md"
-          style={{
-            background: "linear-gradient(180deg, #0d1228 0%, #0b0f20 100%)",
-            border: "1px solid rgba(255,255,255,0.1)",
-          }}
-        >
-          {roleMember && (
-            <>
-              <DialogHeader>
-                <DialogTitle className="text-white text-xl">Edit Role</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-4">
-                <div>
-                  <p className="text-white font-semibold">{roleMember.name}</p>
-                  <p style={{ color: "#6b7fa8", fontSize: "13px" }}>{roleMember.email}</p>
-                </div>
-                <div>
-                  <label
-                    style={{
-                      color: "#64748b",
-                      fontSize: "12px",
-                      fontWeight: 600,
-                      letterSpacing: "0.05em",
-                    }}
-                  >
-                    ROLE
-                  </label>
-                  <select
-                    value={roleSelection}
-                    onChange={(e) => setRoleSelection(e.target.value as "admin" | "editor" | "viewer")}
-                    className="w-full mt-1 px-4 py-2.5 rounded-lg text-white outline-none"
-                    style={{
-                      background: "rgba(15,23,42,0.9)",
-                      border: "1px solid rgba(148,163,184,0.4)",
-                      fontSize: "14px",
-                    }}
-                  >
-                    <option value="viewer">Viewer - Can only view files</option>
-                    <option value="editor">Editor - Can upload and manage files</option>
-                    <option value="admin">Admin - Full access to all features</option>
-                  </select>
-                </div>
-              </div>
-              <DialogFooter className="mt-6">
-                <button
-                  onClick={() => setRoleMember(null)}
-                  className="px-4 py-2 rounded-lg transition-colors"
-                  style={{
-                    background: "rgba(255,255,255,0.04)",
-                    border: "1px solid rgba(255,255,255,0.08)",
-                    color: "#e2e8f0",
-                  }}
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={async () => {
-                    if(!roleMember) return;
-                    setIsActionLoading(true);
-                    const res = await apiUpdateMember(roleMember.id, { role: roleSelection });
-                    if(res.ok) {
-                        toast.success(`Access level for ${roleMember.name} modified.`);
-                        setMembers((prev) =>
-                          prev.map((m) =>
-                            m.id === roleMember.id ? { ...m, role: roleSelection } : m,
-                          ),
-                        );
-                        setRoleMember(null);
-                    } else {
-                        toast.error(res.error || "Security clearance update failed.");
-                    }
-                    setIsActionLoading(false);
-                  }}
-                  disabled={isActionLoading}
-                  className="px-4 py-2 rounded-lg transition-all hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                  style={{
-                    background: "linear-gradient(135deg, #0B7FFF 0%, #0960D9 100%)",
-                    color: "white",
-                  }}
-                >
-                  {isActionLoading && <Loader2 size={16} className="animate-spin" />}
-                  Save Role
-                </button>
-              </DialogFooter>
-            </>
-          )}
-        </DialogContent>
-      </Dialog>
-
-      {/* Delete Confirmation */}
-      <AlertDialog open={!!memberToDelete} onOpenChange={() => setMemberToDelete(null)}>
-        <AlertDialogContent
-          style={{
-            background: "linear-gradient(180deg, #0d1228 0%, #0b0f20 100%)",
-            border: "1px solid rgba(255,255,255,0.1)",
-          }}
-        >
+      {/* Delete Group Confirmation */}
+      <AlertDialog open={!!groupToDelete} onOpenChange={() => setGroupToDelete(null)}>
+        <AlertDialogContent style={{ background: "linear-gradient(180deg, #0d1228 0%, #0b0f20 100%)", border: "1px solid rgba(255,255,255,0.1)" }}>
           <AlertDialogHeader>
-            <AlertDialogTitle className="text-white">Remove Team Member</AlertDialogTitle>
+            <AlertDialogTitle className="text-white">Delete Group</AlertDialogTitle>
             <AlertDialogDescription style={{ color: "#6b7fa8" }}>
-              Are you sure you want to remove this team member? They will lose access to all shared files and transfers.
+              Are you sure you want to delete "{groupToDelete?.name}"? All members will lose group access. This cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel
-              style={{
-                background: "rgba(255,255,255,0.04)",
-                border: "1px solid rgba(255,255,255,0.08)",
-                color: "#e2e8f0",
-              }}
-            >
+            <AlertDialogCancel style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "#e2e8f0" }}>
               Cancel
             </AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => memberToDelete && handleDelete(memberToDelete)}
-              disabled={isActionLoading}
+            <AlertDialogAction onClick={handleDeleteGroup} disabled={isDeleting}
               className="flex items-center gap-2"
-              style={{
-                background: "#ef4444",
-                color: "white",
-              }}
-            >
-              {isActionLoading && <Loader2 size={16} className="animate-spin" />}
+              style={{ background: "#ef4444", color: "white" }}>
+              {isDeleting && <Loader2 size={16} className="animate-spin" />}
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Remove Member Confirmation */}
+      <AlertDialog open={!!memberToRemove} onOpenChange={() => setMemberToRemove(null)}>
+        <AlertDialogContent style={{ background: "linear-gradient(180deg, #0d1228 0%, #0b0f20 100%)", border: "1px solid rgba(255,255,255,0.1)" }}>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-white">Remove Member</AlertDialogTitle>
+            <AlertDialogDescription style={{ color: "#6b7fa8" }}>
+              Remove {memberToRemove?.member.userEmail} from this group? Their files will remain but they will lose group access.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "#e2e8f0" }}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction onClick={handleRemoveMember} disabled={isRemoving}
+              className="flex items-center gap-2"
+              style={{ background: "#ef4444", color: "white" }}>
+              {isRemoving && <Loader2 size={16} className="animate-spin" />}
               Remove
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
     </div>
-  );
+  )
 }

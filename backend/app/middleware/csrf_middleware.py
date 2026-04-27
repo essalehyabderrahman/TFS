@@ -3,6 +3,7 @@
 # Implements CSRF protection via the Double Submit Cookie pattern.
 # Rule enforced: "Protect all state-changing endpoints with CSRF tokens."
 
+import os
 import secrets
 from functools import wraps
 from flask import request, jsonify
@@ -24,13 +25,22 @@ def init_csrf(app):
     """
     @app.after_request
     def set_csrf_cookie(response):
-        token = secrets.token_hex(32)   # 256-bit entropy
+        is_production = os.environ.get("FLASK_ENV") == "production"
+
+        # [Security] Rotate CSRF token whenever a new JWT session cookie is being set.
+        # Prevents CSRF token fixation where a pre-login token is reused post-login.
+        jwt_being_set = "access_token_cookie" in response.headers.get("Set-Cookie", "")
+
+        if request.cookies.get(CSRF_COOKIE_NAME) and not jwt_being_set:
+            return response
+
+        token = secrets.token_hex(32)
         response.set_cookie(
             CSRF_COOKIE_NAME,
             token,
-            httponly=False,         # must be readable by JS
-            secure=True,
-            samesite="Strict",
+            httponly=False,
+            secure=is_production,
+            samesite="Strict" if is_production else "Lax",
             max_age=COOKIE_MAX_AGE,
         )
         return response

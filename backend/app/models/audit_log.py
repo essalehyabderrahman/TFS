@@ -22,9 +22,11 @@ class AuditLog(db.Model):
 
     details     = db.Column(db.Text, nullable=True)
     timestamp   = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+    group_id    = db.Column(db.String(36), db.ForeignKey("groups.id"), nullable=True, index=True)
 
-    # Relationship
+    # Relationships
     actor       = db.relationship("User", back_populates="audit_logs")
+    group       = db.relationship("Group", foreign_keys=[group_id])
 
     def to_dict(self) -> dict:
         return {
@@ -38,6 +40,7 @@ class AuditLog(db.Model):
             "userAgent":  self.user_agent or "",
             "status":     self.status,
             "details":    self.details or "",
+            "groupId":    self.group_id or "",
         }
 
     def __repr__(self):

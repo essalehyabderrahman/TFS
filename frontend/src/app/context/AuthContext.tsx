@@ -9,9 +9,18 @@ interface AuthContextValue {
   isMfaPending: boolean
   isInitializing: boolean
   isBackendReachable: boolean
+  isAppAdmin: boolean
+  isGroupAdmin: boolean   // true if user is admin in at least one group
   signIn: (user: AuthUser, mfaPending?: boolean) => void
   clearSession: () => void
   signOut: () => void
+}
+
+// Module-level ref so apiRequest interceptor can trigger signout
+// without needing to be inside the React tree
+let _signOutRef: (() => void) | null = null
+export function getSignOut(): (() => void) | null {
+  return _signOutRef
 }
 
 export const AuthContext = createContext<AuthContextValue | null>(null)
@@ -71,6 +80,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setIsMfaPending(false)
   }, [])
 
+  // Keep module-level ref in sync so apiRequest interceptor can call it
+  useEffect(() => {
+    _signOutRef = signOut
+    return () => { _signOutRef = null }
+  }, [signOut])
+
   return (
     <AuthContext.Provider
       value={{
@@ -79,6 +94,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isMfaPending,
         isInitializing,
         isBackendReachable,
+        isAppAdmin: user?.role === "admin",
+        isGroupAdmin: false, // resolved per-page via fetchGroups — set true if any group has myRole==="admin"
         signIn,
         signOut,
         clearSession,

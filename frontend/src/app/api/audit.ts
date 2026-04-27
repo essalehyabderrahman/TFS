@@ -3,7 +3,7 @@ import { apiRequest } from "./client"
 export interface AuditLog {
   id: string
   timestamp: string
-  user_email: string
+  user: string        // backend to_dict() returns "user" key (mapped from user_email)
   action: string
   resource: string
   ip_address: string

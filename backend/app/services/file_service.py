@@ -222,6 +222,19 @@ def get_transfer_file(transfer_id: str, user: User, ip: str) -> dict:
             db.session.commit()
             return {"ok": False, "error": "FORBIDDEN"}
 
+    from app.models.team_settings import TeamSettings
+    settings = TeamSettings.query.first()
+    if settings and not settings.allow_external_sharing:
+        # External sharing disabled: only uploader, explicit recipient, ACL, or admin may download
+        is_authorized = (
+            user.role == "admin"
+            or t.uploaded_by_id == user.id
+            or t.recipient_email == user.email
+            or any(a.user_id == user.id and a.can_read for a in t.acl_entries)
+        )
+        if not is_authorized:
+            return {"ok": False, "error": "EXTERNAL_SHARING_DISABLED"}
+
     if t.expiry_date and t.expiry_date < datetime.now(timezone.utc):
         t.status = "Expired"
         db.session.commit()
@@ -262,6 +275,23 @@ def delete_transfer(transfer_id: str, user: User, ip: str) -> dict:
             db.session.commit()
             return {"ok": False, "error": "FORBIDDEN"}
 
+    deleted_paths = set()
+    paths_to_delete = [t.stored_path]
+    for v in t.versions:
+        if v.stored_path and v.stored_path not in paths_to_delete:
+            paths_to_delete.append(v.stored_path)
+
+    for path in paths_to_delete:
+        if path and path not in deleted_paths:
+            try:
+                os.remove(path)
+                deleted_paths.add(path)
+            except Exception as e:
+                _log("FILE_DELETE_DISK_ERROR", user.email, user.id, "warning", ip, resource=t.file_name, details=str(e))
+
+    # [Concurrency] Always release lock before deletion to avoid dangling lock state
+    t.locked_by_id = None
+    t.locked_at = None
     t.is_deleted = True
     _log("FILE_DELETE", user.email, user.id, "success", ip, resource=t.file_name)
     db.session.commit()
@@ -286,11 +316,27 @@ def get_versions(transfer_id: str, user: User) -> dict:
 
 def restore_version(transfer_id: str, version_num: int, user: User, ip: str) -> dict:
     t = db.session.get(Transfer, transfer_id)
-    if not t:
+    if not t or t.is_deleted:
         return {"ok": False, "error": "NOT_FOUND"}
 
     if user.role != "admin" and t.uploaded_by_id != user.id:
-        return {"ok": False, "error": "FORBIDDEN"}
+        acl = next((a for a in t.acl_entries if a.user_id == user.id and a.can_write), None)
+        if not acl:
+            _log("UNAUTHORIZED_ACCESS", user.email, user.id, "failed", ip, resource=t.file_name,
+                 details="Restore attempt blocked: no can_write ACL entry.")
+            db.session.commit()
+            return {"ok": False, "error": "FORBIDDEN"}
+
+    # [Concurrency] Reject restore if another user holds the lock
+    if t.locked_by_id and t.locked_by_id != user.id:
+        # Check if lock has expired first
+        if t.locked_at:
+            locked_at_utc = t.locked_at if t.locked_at.tzinfo is not None else t.locked_at.replace(tzinfo=timezone.utc)
+            elapsed = (datetime.now(timezone.utc) - locked_at_utc).total_seconds() / 60
+            if elapsed <= LOCK_TIMEOUT_MINUTES:
+                locked_by = db.session.get(User, t.locked_by_id)
+                return {"ok": False, "error": "FILE_LOCKED",
+                        "lockedBy": locked_by.email if locked_by else "unknown"}
 
     target_v = db.session.execute(
         db.select(FileVersion)
@@ -329,9 +375,19 @@ def acquire_lock(transfer_id: str, user: User, ip: str) -> dict:
     if not t:
         return {"ok": False, "error": "NOT_FOUND"}
 
+    # [ACL] Only owner, admin, or users with can_write may acquire a lock
+    if user.role != "admin" and t.uploaded_by_id != user.id:
+        acl = next((a for a in t.acl_entries if a.user_id == user.id and a.can_write), None)
+        if not acl:
+            _log("UNAUTHORIZED_ACCESS", user.email, user.id, "failed", ip, resource=t.file_name,
+                 details="Lock attempt blocked: no can_write ACL entry.")
+            db.session.commit()
+            return {"ok": False, "error": "FORBIDDEN"}
+
     # Check if lock has expired
     if t.locked_by_id and t.locked_at:
-        elapsed = (datetime.now(timezone.utc) - t.locked_at.replace(tzinfo=timezone.utc)).total_seconds() / 60
+        locked_at_utc = t.locked_at if t.locked_at.tzinfo is not None else t.locked_at.replace(tzinfo=timezone.utc)
+        elapsed = (datetime.now(timezone.utc) - locked_at_utc).total_seconds() / 60
         if elapsed > LOCK_TIMEOUT_MINUTES:
             t.locked_by_id = None
             t.locked_at    = None

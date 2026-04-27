@@ -120,7 +120,7 @@ def signup(name: str, email: str, password: str, ip: str) -> dict:
         id=str(uuid.uuid4()),
         name=name.strip(),
         email=email,
-        role="viewer",
+        role="user",
         status="active",
     )
     # [Security] set_password uses bcrypt internally (Flask-Bcrypt default = 12 rounds)
@@ -180,14 +180,15 @@ def signin(email: str, password: str, ip: str) -> dict:
         db.session.commit()
         return {"ok": False, "error": "INVALID_CREDENTIALS"}
 
-    # 4. Successful credential check — clear lockout state
-    user.reset_failed_attempts()
-    user.mfa_failed_attempts = 0
-
+    # 4. Check suspension BEFORE clearing brute-force state
     if user.status == "suspended":
         _log("LOGIN_FAILED", email, user.id, "failed", ip, details="Account suspended")
         db.session.commit()
         return {"ok": False, "error": "ACCOUNT_SUSPENDED"}
+
+    # 5. Successful credential check — clear lockout state
+    user.reset_failed_attempts()
+    user.mfa_failed_attempts = 0
 
     user.touch()
 
@@ -213,10 +214,15 @@ def setup_mfa(user_id: str) -> dict:
     Generates TOTP secret + QR code.
     [Security] Secret is ≥ 20 bytes (160 bits) of randomness.
     [MFA] Does not yet activate MFA — user must confirm with first code.
+    [Security] Blocked if MFA is already enabled — must disable first.
     """
     user = db.session.get(User, user_id)
     if not user:
         return {"ok": False, "error": "USER_NOT_FOUND"}
+
+    # [Security] Prevent silent overwrite of an active MFA secret
+    if user.mfa_enabled:
+        return {"ok": False, "error": "MFA_ALREADY_ENABLED"}
 
     # [Security] pyotp.random_base32(32) → 32 base32 chars = 20 bytes = 160 bits
     secret = pyotp.random_base32(32)
@@ -229,9 +235,8 @@ def setup_mfa(user_id: str) -> dict:
     hashed_code = bcrypt.generate_password_hash(raw_backup_code).decode("utf-8")
     user.backup_codes = hashed_code
     
-    # Reset MFA failure counter on fresh setup
+    # Reset MFA failure counter on fresh setup (only safe because mfa_enabled=False is enforced above)
     user.mfa_failed_attempts = 0
-    user.last_used_totp = None
     db.session.commit()
 
     totp_uri = pyotp.totp.TOTP(secret).provisioning_uri(
@@ -265,6 +270,10 @@ def verify_mfa(user_id: str, otp_code: str, ip: str) -> dict:
     user = db.session.get(User, user_id)
     if not user or not user.mfa_secret:
         return {"ok": False, "error": "MFA_NOT_CONFIGURED"}
+
+    # [Security] Reject suspended users — single authoritative check here
+    if user.status == "suspended":
+        return {"ok": False, "error": "ACCOUNT_SUSPENDED"}
 
     # [Brute-Force] Check account-level lockout first
     if user.is_locked():
@@ -339,11 +348,22 @@ def verify_mfa(user_id: str, otp_code: str, ip: str) -> dict:
     # The tempToken (mfa_pending=True) is now implicitly superseded.
     # Embed session creation time for 8-hr absolute max enforcement
     # Embed token_version for global session invalidation
+    # [Session] Preserve original session_created_at if re-issuing token mid-session
+    # (e.g. mfa/enable on already-authenticated user) — do not reset the 8-hour clock.
+    existing_claims = {}
+    try:
+        from flask_jwt_extended import get_jwt
+        existing_claims = get_jwt()
+    except Exception:
+        pass
+
     now_ts = int(datetime.now(timezone.utc).timestamp())
+    session_created_at = existing_claims.get("session_created_at", now_ts)
+
     token = create_access_token(
         identity=user.id,
         additional_claims={
-            "session_created_at": now_ts,
+            "session_created_at": session_created_at,
             "token_version": user.token_version
         }
     )
@@ -409,6 +429,49 @@ def regenerate_backup_code(user_id: str, totp_code: str, ip: str) -> dict:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
+# Token Refresh (sliding session)
+# ──────────────────────────────────────────────────────────────────────────────
+def refresh_token(user_id: str, session_created_at: int, token_version: int, ip: str) -> dict:
+    """
+    Issues a fresh 15-min access token carrying the same session_created_at.
+    [Session] Enforces 8-hour absolute max — refuses if session is too old.
+    [Security] Validates token_version matches DB to reject revoked sessions.
+    """
+    user = db.session.get(User, user_id)
+    if not user:
+        return {"ok": False, "error": "USER_NOT_FOUND"}
+
+    if user.status == "suspended":
+        return {"ok": False, "error": "ACCOUNT_SUSPENDED"}
+
+    # [Security] Reject if token version is stale (password changed, etc.)
+    if token_version is not None and token_version < user.token_version:
+        return {"ok": False, "error": "SESSION_REVOKED"}
+
+    # [Session] Enforce 8-hour absolute max
+    from datetime import timedelta
+    created = datetime.fromtimestamp(session_created_at, tz=timezone.utc)
+    if datetime.now(timezone.utc) - created > timedelta(hours=8):
+        _log("SESSION_EXPIRED", user.email, user.id, "info", ip,
+             details="Refresh refused: absolute 8-hour session limit reached.")
+        db.session.commit()
+        return {"ok": False, "error": "SESSION_EXPIRED"}
+
+    user.touch()
+    token = create_access_token(
+        identity=user.id,
+        additional_claims={
+            "session_created_at": session_created_at,
+            "token_version": user.token_version,
+        }
+    )
+    _log("TOKEN_REFRESHED", user.email, user.id, "success", ip,
+         details="Sliding session token refreshed.")
+    db.session.commit()
+    return {"ok": True, "token": token, "user": user.to_dict()}
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # MFA — Disable
 # ──────────────────────────────────────────────────────────────────────────────
 def disable_mfa(user_id: str, otp_code: str, ip: str) -> dict:
@@ -442,11 +505,14 @@ def disable_mfa(user_id: str, otp_code: str, ip: str) -> dict:
 
     user.mfa_enabled = False
     user.mfa_secret  = None
-    user.last_used_totp = None
     user.mfa_failed_attempts = 0
+
+    # [Security] Invalidate all other sessions — MFA downgrade is a critical change
+    user.token_version = (user.token_version or 0) + 1
+
     # [Audit] Log MFA disable event
     _log("MFA_DISABLED", user.email, user.id, "warning", ip,
-         details="MFA disabled by user.")
+         details="MFA disabled by user. All existing sessions invalidated.")
     db.session.commit()
     return {"ok": True}
 

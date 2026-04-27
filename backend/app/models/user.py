@@ -9,7 +9,7 @@ class User(db.Model):
     name          = db.Column(db.String(120), nullable=False)
     email         = db.Column(db.String(255), unique=True, nullable=False, index=True)
     password_hash = db.Column(db.String(255), nullable=False)
-    role          = db.Column(db.String(20),  nullable=False, default="viewer")   # admin | editor | viewer
+    role          = db.Column(db.String(20),  nullable=False, default="user")   # admin | user
     status        = db.Column(db.String(20),  nullable=False, default="active")   # active | pending | suspended
     avatar        = db.Column(db.String(10),  nullable=True)                      # initials
     company       = db.Column(db.String(120), nullable=False, default="Individual")
@@ -23,7 +23,7 @@ class User(db.Model):
     mfa_enabled          = db.Column(db.Boolean, default=False)
     mfa_secret           = db.Column(db.String(64), nullable=True)
     mfa_failed_attempts  = db.Column(db.Integer, default=0)         # MFA verify failure counter (independent)
-    last_used_totp       = db.Column(db.String(6), nullable=True)   # Replay protection: last accepted TOTP code
+    # last_used_totp removed — TOTP replay protection is handled by Redis (totp_replay.py)
     backup_codes         = db.Column(db.String(1000), nullable=True)# Comma-separated bcrypt hashes of backup codes
 
     # Token Rotation
@@ -76,6 +76,7 @@ class User(db.Model):
         self.last_active = datetime.now(timezone.utc)
 
     def to_dict(self) -> dict:
+        """Full profile — for the authenticated user's own data and admin views."""
         return {
             "id":         self.id,
             "name":       self.name,
@@ -88,6 +89,17 @@ class User(db.Model):
             "mfaEnabled": self.mfa_enabled,
             "joinedAt":   self.created_at.isoformat(),
             "lastActive": self.last_active.isoformat(),
+        }
+
+    def to_public_dict(self) -> dict:
+        """Minimal profile — safe for team directory listings visible to non-admins."""
+        return {
+            "id":     self.id,
+            "name":   self.name,
+            "email":  self.email,
+            "role":   self.role,
+            "status": self.status,
+            "avatar": self.avatar or self._initials(),
         }
 
     def _initials(self) -> str:

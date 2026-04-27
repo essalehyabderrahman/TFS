@@ -9,33 +9,71 @@ from app.middleware.csrf_middleware import csrf_protect
 # ══════════════════════════════════════════════════════════════════════════════
 # TEAM
 # ══════════════════════════════════════════════════════════════════════════════
+from app.models.team_settings import TeamSettings
+
 team_bp = Blueprint("team", __name__, url_prefix="/team")
+
+
+def _is_last_admin(exclude_id: str = None) -> bool:
+    q = User.query.filter_by(role="admin", status="active")
+    if exclude_id:
+        q = q.filter(User.id != exclude_id)
+    return q.count() == 0
+
+
+def _get_settings() -> TeamSettings:
+    """Returns the singleton TeamSettings row, creating it if missing."""
+    s = TeamSettings.query.first()
+    if not s:
+        s = TeamSettings()
+        db.session.add(s)
+        db.session.commit()
+    return s
 
 
 @team_bp.get("")
 @jwt_required_custom
 def list_team():
     user = current_user()
-    # Seuls admin et editor voient toute l'équipe
-    if user.role == "viewer":
+    settings = _get_settings()
+
+    # Admins always see the full directory.
+    # Regular users only see it if allow_member_directory is enabled.
+    if user.role != "admin" and not settings.allow_member_directory:
         return jsonify({"error": "FORBIDDEN"}), 403
+
     members = User.query.order_by(User.created_at).all()
-    return jsonify([m.to_dict() for m in members]), 200
+    if user.role == "admin":
+        return jsonify([m.to_dict() for m in members]), 200
+    return jsonify([m.to_public_dict() for m in members]), 200
 
 
 @team_bp.post("")
-@require_role("admin")
+@csrf_protect
+@jwt_required_custom
 def invite_member():
-    data   = request.get_json(silent=True) or {}
-    name   = data.get("name", "").strip()
-    email  = data.get("email", "").strip().lower()
-    role   = data.get("role", "viewer")
+    actor    = current_user()
+    settings = _get_settings()
+
+    # Admins can always invite.
+    # Regular users can only invite if allow_member_invite is enabled.
+    if actor.role != "admin" and not settings.allow_member_invite:
+        return jsonify({"error": "FORBIDDEN"}), 403
+
+    data  = request.get_json(silent=True) or {}
+    name  = data.get("name", "").strip()
+    email = data.get("email", "").strip().lower()
+    role  = data.get("role", "user")
 
     if not name or not email:
         return jsonify({"error": "MISSING_FIELDS"}), 400
 
-    if role not in ("admin", "editor", "viewer"):
+    # Only admins can assign the admin role
+    if role not in ("admin", "user"):
         return jsonify({"error": "INVALID_ROLE"}), 400
+
+    if role == "admin" and actor.role != "admin":
+        return jsonify({"error": "FORBIDDEN"}), 403
 
     if User.query.filter_by(email=email).first():
         return jsonify({"error": "EMAIL_TAKEN"}), 409
@@ -47,32 +85,74 @@ def invite_member():
         role=role,
         status="pending",
     )
-    member.set_password(str(uuid.uuid4()))  # Mot de passe temporaire aléatoire
+    member.set_password(str(uuid.uuid4()))
     db.session.add(member)
+    db.session.commit()
+
+    db.session.add(AuditLog(
+        id=str(uuid.uuid4()),
+        user_id=actor.id,
+        user_email=actor.email,
+        action="MEMBER_INVITED",
+        resource=email,
+        ip_address=request.remote_addr,
+        status="success",
+        details=f"Invited {email} with role '{role}'"
+    ))
     db.session.commit()
     return jsonify(member.to_dict()), 201
 
 
 @team_bp.patch("/<member_id>")
+@csrf_protect
 @require_role("admin")
 def update_member(member_id):
+    actor  = current_user()
     member = db.session.get(User, member_id)
     if not member:
         return jsonify({"error": "NOT_FOUND"}), 404
 
     data = request.get_json(silent=True) or {}
-    if "role" in data and data["role"] in ("admin", "editor", "viewer"):
+
+    if actor.id == member.id and "role" in data:
+        return jsonify({"error": "CANNOT_CHANGE_OWN_ROLE"}), 403
+
+    if "role" in data and data["role"] != "admin" and member.role == "admin":
+        if _is_last_admin(exclude_id=member.id):
+            return jsonify({"error": "LAST_ADMIN_PROTECTED"}), 403
+
+    if actor.id != member.id and member.role == "admin" and "status" in data and data["status"] == "suspended":
+        if _is_last_admin(exclude_id=member.id):
+            return jsonify({"error": "LAST_ADMIN_PROTECTED"}), 403
+
+    if "role" in data and data["role"] in ("admin", "user"):
         member.role = data["role"]
     if "status" in data and data["status"] in ("active", "pending", "suspended"):
         member.status = data["status"]
+        # [Security] Immediately invalidate all sessions on suspension
+        if data["status"] == "suspended":
+            member.token_version = (member.token_version or 0) + 1
     if "name" in data:
         member.name = data["name"].strip()
 
+    db.session.commit()
+
+    db.session.add(AuditLog(
+        id=str(uuid.uuid4()),
+        user_id=actor.id,
+        user_email=actor.email,
+        action="MEMBER_UPDATED",
+        resource=member.email,
+        ip_address=request.remote_addr,
+        status="success",
+        details=f"Updated member {member.email}: {data}"
+    ))
     db.session.commit()
     return jsonify(member.to_dict()), 200
 
 
 @team_bp.delete("/<member_id>")
+@csrf_protect
 @require_role("admin")
 def delete_member(member_id):
     actor  = current_user()
@@ -81,10 +161,73 @@ def delete_member(member_id):
         return jsonify({"error": "NOT_FOUND"}), 404
     if member.id == actor.id:
         return jsonify({"error": "CANNOT_DELETE_SELF"}), 400
+    if member.role == "admin" and _is_last_admin(exclude_id=member.id):
+        return jsonify({"error": "LAST_ADMIN_PROTECTED"}), 403
 
     db.session.delete(member)
     db.session.commit()
+
+    db.session.add(AuditLog(
+        id=str(uuid.uuid4()),
+        user_id=actor.id,
+        user_email=actor.email,
+        action="MEMBER_DELETED",
+        resource=member.email,
+        ip_address=request.remote_addr,
+        status="warning",
+        details=f"Deleted member {member.email} (role: {member.role})"
+    ))
+    db.session.commit()
     return jsonify({"deleted": True}), 200
+
+
+# ── GET /team/settings ────────────────────────────────────────────────────────
+@team_bp.get("/settings")
+@require_role("admin")
+def get_team_settings():
+    return jsonify(_get_settings().to_dict()), 200
+
+
+# ── PATCH /team/settings ──────────────────────────────────────────────────────
+@team_bp.patch("/settings")
+@csrf_protect
+@require_role("admin")
+def update_team_settings():
+    actor    = current_user()
+    settings = _get_settings()
+    data     = request.get_json(silent=True) or {}
+
+    allowed_fields = {
+        "allowMemberDirectory": "allow_member_directory",
+        "allowMemberInvite":    "allow_member_invite",
+        "allowExternalSharing": "allow_external_sharing",
+    }
+
+    changed = []
+    for json_key, db_field in allowed_fields.items():
+        if json_key in data:
+            new_val = bool(data[json_key])
+            setattr(settings, db_field, new_val)
+            changed.append(f"{json_key}={new_val}")
+
+    if not changed:
+        return jsonify({"error": "NO_VALID_FIELDS"}), 400
+
+    settings.updated_by_id = actor.id
+    db.session.commit()
+
+    db.session.add(AuditLog(
+        id=str(uuid.uuid4()),
+        user_id=actor.id,
+        user_email=actor.email,
+        action="TEAM_SETTINGS_UPDATED",
+        resource="team_settings",
+        ip_address=request.remote_addr,
+        status="success",
+        details=f"Updated: {', '.join(changed)}"
+    ))
+    db.session.commit()
+    return jsonify(settings.to_dict()), 200
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -94,9 +237,27 @@ audit_bp = Blueprint("audit", __name__, url_prefix="/audit")
 
 
 @audit_bp.get("")
-@require_role("admin")
+@jwt_required_custom
 def list_logs():
-    # Query params pour filtrage
+    """
+    App admins see all logs.
+    Group admins see only logs scoped to their group(s).
+    Regular members cannot access audit logs.
+    """
+    from app.models.group import GroupMember
+    actor = current_user()
+
+    # Determine accessible group IDs for this user
+    if actor.role == "admin":
+        accessible_group_ids = None  # None = no filter = see all
+    else:
+        admin_memberships = GroupMember.query.filter_by(
+            user_id=actor.id, role="admin"
+        ).all()
+        if not admin_memberships:
+            return jsonify({"error": "FORBIDDEN"}), 403
+        accessible_group_ids = [m.group_id for m in admin_memberships]
+
     user_filter   = request.args.get("user")
     action_filter = request.args.get("action")
     status_filter = request.args.get("status")
@@ -104,6 +265,10 @@ def list_logs():
     offset        = int(request.args.get("offset", 0))
 
     q = AuditLog.query.order_by(AuditLog.timestamp.desc())
+
+    if accessible_group_ids is not None:
+        q = q.filter(AuditLog.group_id.in_(accessible_group_ids))
+
     if user_filter:
         q = q.filter(AuditLog.user_email.ilike(f"%{user_filter}%"))
     if action_filter:
@@ -132,14 +297,17 @@ def get_account():
         db.func.sum(Transfer.size_bytes)
     ).filter_by(uploaded_by_id=user.id, is_deleted=False).scalar() or 0
 
-    total_users = User.query.count()
-    
-    return jsonify({
+    result = {
         **user.to_dict(),
         "transfersCount": transfers_count,
         "storageUsedBytes": total_bytes,
-        "totalUsers": total_users,
-    }), 200
+    }
+
+    # [Security] Only expose org headcount to admins
+    if user.role == "admin":
+        result["totalUsers"] = User.query.count()
+
+    return jsonify(result), 200
 
 
 @account_bp.patch("")
@@ -155,6 +323,9 @@ def update_account():
     if "company" in data:
         user.company = data["company"].strip() or "Individual"
 
+    from app.services.auth_service import _log
+    _log("ACCOUNT_UPDATED", user.email, user.id, "success", request.remote_addr,
+         details=f"Account fields updated: {list(data.keys())}")
     db.session.commit()
     return jsonify(user.to_dict()), 200
 
@@ -184,7 +355,7 @@ def change_password():
     
     # [Audit] Log password change
     from app.services.auth_service import _log
-    ip = request.headers.get("X-Forwarded-For", request.remote_addr)
+    ip = request.remote_addr
     _log("PASSWORD_CHANGED", user.email, user.id, "success", ip, details="Password changed. All existing sessions invalidated.")
     
     db.session.commit()
@@ -210,8 +381,11 @@ def change_password():
 @jwt_required_custom
 def delete_account():
     user = current_user()
-    
-    # Optional explicitly handle files if they are not stored just in DB (e.g., local storage)
+
+    # [Security] Prevent deleting the last active admin
+    if user.role == "admin" and _is_last_admin(exclude_id=user.id):
+        return jsonify({"error": "LAST_ADMIN_PROTECTED"}), 403
+
     from app.models.transfer import Transfer
     transfers = Transfer.query.filter_by(uploaded_by_id=user.id).all()
     import os
@@ -222,10 +396,18 @@ def delete_account():
                 os.remove(t.stored_path)
             except Exception:
                 pass
-                
+
+    from app.services.auth_service import _log
+    _log("ACCOUNT_DELETED", user.email, user.id, "warning", request.remote_addr,
+         details="User self-deleted their account.")
+
     db.session.delete(user)
     db.session.commit()
-    return jsonify({"ok": True}), 200
+
+    from flask_jwt_extended import unset_jwt_cookies
+    response = jsonify({"ok": True})
+    unset_jwt_cookies(response)
+    return response, 200
 
 
 # ══════════════════════════════════════════════════════════════════════════════

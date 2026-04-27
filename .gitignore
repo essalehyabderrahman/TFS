@@ -3,3 +3,15 @@ dist
 .env
 .env.local
 *.local
+
+# Ignore scratch and log files in the root
+/*.txt
+/*.sh
+
+# Ensure requirements.txt is ALWAYS tracked
+!backend/requirements.txt
+!**/requirements.txt
+
+# Ensure fonctionalites.txt is ALWAYS tracked
+!frontend/fonctionalites.txt
+!**/fonctionalites.txt

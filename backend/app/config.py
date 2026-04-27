@@ -35,12 +35,16 @@ class Config:
     BCRYPT_LOG_ROUNDS = int(os.getenv("BCRYPT_LOG_ROUNDS", 12))
 
     # Uploads
-    UPLOAD_FOLDER = os.getenv("UPLOAD_FOLDER", "uploads")
+    UPLOAD_FOLDER = os.getenv("UPLOAD_FOLDER", str(_BASE_DIR / "uploads"))
     MAX_CONTENT_LENGTH = int(os.getenv("MAX_CONTENT_LENGTH", 100 * 1024 * 1024))  # 100 MB
     ALLOWED_EXTENSIONS = {"pdf", "png", "jpg", "jpeg", "gif", "zip", "mp4", "doc", "docx", "txt", "csv"}
 
     # CORS
     FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
+
+    # Default admin seeding (first boot only)
+    ADMIN_EMAIL    = os.getenv("ADMIN_EMAIL", "")
+    ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "")
 
     # Global AES-256-GCM Encryption
     # If not set, a 32-byte key is derived from SECRET_KEY using PBKDF2-HMAC-SHA256
@@ -50,6 +54,7 @@ class Config:
 
 class DevelopmentConfig(Config):
     DEBUG = True
+    JWT_COOKIE_SECURE = False
 
 
 class ProductionConfig(Config):
@@ -64,3 +69,32 @@ config_map = {
 def get_config():
     env = os.getenv("FLASK_ENV", "development")
     return config_map.get(env, DevelopmentConfig)
+
+
+def validate_production_config():
+    if os.getenv("FLASK_ENV") != "production":
+        return
+
+    failures = []
+
+    secret_key = os.getenv("SECRET_KEY", "dev-secret-key")
+    if secret_key == "dev-secret-key":
+        failures.append("SECRET_KEY is using the insecure default value.")
+
+    jwt_secret_key = os.getenv("JWT_SECRET_KEY", "dev-jwt-secret")
+    if jwt_secret_key == "dev-jwt-secret":
+        failures.append("JWT_SECRET_KEY is using the insecure default value.")
+
+    encryption_key = os.getenv("ENCRYPTION_KEY", "")
+    if not encryption_key:
+        failures.append("ENCRYPTION_KEY is not set. Files will use a derived key from SECRET_KEY which is weaker.")
+
+    db_url = os.getenv("DATABASE_URL", f"sqlite:///{Config._DB_PATH}")
+    if "sqlite" in db_url:
+        failures.append("SQLite is not recommended for production. Set DATABASE_URL to a PostgreSQL URI.")
+
+    if failures:
+        raise RuntimeError("Production Configuration Errors:\n  - " + "\n  - ".join(failures))
+
+# NOTE: validate_production_config() is intentionally NOT called here.
+# It is called once inside create_app() after the config is loaded.

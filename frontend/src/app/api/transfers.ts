@@ -46,7 +46,7 @@ export async function uploadTransfer(
     const res = await fetch(`${API_BASE_URL}/transfers`, {
       method: "POST",
       credentials: "include",
-      headers: { "X-TFS-CSRF": "true" },
+      headers: { "X-CSRF-Token": document.cookie.split("; ").find(r => r.startsWith("csrf_token="))?.split("=")[1] ?? "" },
       // Do NOT set Content-Type — browser must compute multipart boundary automatically
       body: formData,
     });
@@ -60,5 +60,59 @@ export async function uploadTransfer(
     return { ok: true, transfer: data as Transfer };
   } catch {
     return { ok: false, error: "NETWORK_ERROR" };
+  }
+}
+
+// ── Shared Access Control (ACL) ────────────────────────────────────────────────
+
+export interface AclEntry {
+  id: string;
+  transferId: string;
+  userId: string;
+  userEmail: string;
+  canRead: boolean;
+  canWrite: boolean;
+  canDelete: boolean;
+  canShare: boolean;
+  grantedAt: string;
+}
+
+export interface AclPayload {
+  userEmail: string;
+  canRead: boolean;
+  canWrite: boolean;
+  canDelete: boolean;
+  canShare: boolean;
+}
+
+export async function fetchAcl(transferId: string): Promise<{ data: AclEntry[]; error: string | null }> {
+  try {
+    const data = await apiRequest<AclEntry[]>(`/transfers/${transferId}/acl`);
+    return { data, error: null };
+  } catch (err) {
+    return { data: [], error: String(err) };
+  }
+}
+
+export async function grantAcl(transferId: string, payload: AclPayload): Promise<{ data: AclEntry | null; error: string | null }> {
+  try {
+    const data = await apiRequest<AclEntry>(`/transfers/${transferId}/acl`, {
+      method: "POST",
+      body: payload
+    });
+    return { data, error: null };
+  } catch (err) {
+    return { data: null, error: String(err) };
+  }
+}
+
+export async function revokeAcl(transferId: string, userId: string): Promise<{ ok: boolean; error: string | null }> {
+  try {
+    await apiRequest(`/transfers/${transferId}/acl/${userId}`, {
+      method: "DELETE"
+    });
+    return { ok: true, error: null };
+  } catch (err) {
+    return { ok: false, error: String(err) };
   }
 }

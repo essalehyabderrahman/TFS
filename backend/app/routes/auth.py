@@ -11,7 +11,7 @@ auth_bp = Blueprint("auth", __name__, url_prefix="/auth")
 
 
 def _ip():
-    return request.headers.get("X-Forwarded-For", request.remote_addr)
+    return request.remote_addr
 
 
 # ── POST /auth/signup ─────────────────────────────────────────────────────────
@@ -83,6 +83,8 @@ def mfa_verify():
     """
     Accepte le token temporaire (mfa_pending=True) + le code OTP.
     Retourne un vrai token JWT si OK.
+    [Security] Suspension is enforced inside auth_service.verify_mfa via
+    the user status check — no need for a duplicate inline check here.
     """
     try:
         verify_jwt_in_request()
@@ -134,7 +136,8 @@ def mfa_setup():
         return jsonify({"error": "USER_NOT_FOUND"}), 404
     result = auth_service.setup_mfa(user.id)
     if not result["ok"]:
-        return jsonify({"error": result["error"]}), 400
+        status = 409 if result["error"] == "MFA_ALREADY_ENABLED" else 400
+        return jsonify({"error": result["error"]}), status
     return jsonify({
         "secret":      result["secret"],
         "qrCode":      result["qrCode"],
@@ -205,12 +208,53 @@ def me():
     return jsonify({"user": user.to_dict()}), 200
 
 
+# ── POST /auth/refresh ────────────────────────────────────────────────────────
+@auth_bp.post("/refresh")
+@csrf_protect
+@limiter.limit("30 per minute")
+def refresh():
+    """
+    Sliding session refresh. Accepts the current valid (non-expired) JWT,
+    returns a fresh 15-min token with the same session_created_at.
+    Refuses if the 8-hour absolute max has been reached.
+    """
+    try:
+        verify_jwt_in_request()
+    except Exception:
+        return jsonify({"error": "UNAUTHORIZED"}), 401
+
+    claims = get_jwt()
+
+    # Block mfa_pending tokens from refreshing into a real session
+    if claims.get("mfa_pending"):
+        return jsonify({"error": "MFA_REQUIRED"}), 403
+
+    user_id            = get_jwt_identity()
+    session_created_at = claims.get("session_created_at")
+    token_version      = claims.get("token_version")
+
+    if not session_created_at:
+        return jsonify({"error": "INVALID_TOKEN"}), 401
+
+    result = auth_service.refresh_token(user_id, session_created_at, token_version, _ip())
+
+    if not result["ok"]:
+        status = 401
+        if result["error"] == "ACCOUNT_SUSPENDED":
+            status = 403
+        return jsonify({"error": result["error"]}), status
+
+    response = jsonify({"user": result["user"]})
+    set_access_cookies(response, result["token"])
+    return response, 200
+
+
 # ── Rate Limit Error Handler ───────────────────────────────────────────────────
 @auth_bp.errorhandler(RateLimitExceeded)
 def handle_rate_limit(e):
     # [Audit] Log rate limit hits — IP logged, no user identity assumed
     from app.services.auth_service import _log
-    ip = request.headers.get("X-Forwarded-For", request.remote_addr)
+    ip = request.remote_addr
     _log("RATE_LIMITED", "anonymous", None, "warning", ip,
          resource=request.path, details="Rate limit exceeded.")
     from app.extensions import db

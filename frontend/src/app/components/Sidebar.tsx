@@ -12,12 +12,12 @@ import {
   X,
 } from "lucide-react";
 
-const navItems = [
-  { icon: ArrowUpDown, label: "Active Transfers", id: "active", path: "/dashboard/active" },
-  { icon: Download, label: "Received Files", id: "received", path: "/dashboard/received" },
-  { icon: ClipboardList, label: "Audit & Compliance Logs", id: "audit", path: "/dashboard/audit" },
-  { icon: Users, label: "Team Management", id: "team", path: "/dashboard/team" },
-  { icon: ShieldCheck, label: "Security Settings", id: "security", path: "/dashboard/security" },
+const allNavItems = [
+  { icon: ArrowUpDown, label: "Active Transfers", id: "active", path: "/dashboard/active", adminOnly: false },
+  { icon: Download, label: "Received Files", id: "received", path: "/dashboard/received", adminOnly: false },
+  { icon: ClipboardList, label: "Audit & Compliance Logs", id: "audit", path: "/dashboard/audit", adminOnly: false },
+  { icon: Users, label: "Team Management", id: "team", path: "/dashboard/team", adminOnly: true },
+  { icon: ShieldCheck, label: "Security Settings", id: "security", path: "/dashboard/security", adminOnly: false },
 ];
 
 interface SidebarProps {
@@ -29,7 +29,9 @@ interface SidebarProps {
 export function Sidebar({ isOpen, onClose, onNewTransfer }: SidebarProps) {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user } = useAuth();
+  const { user, isAppAdmin } = useAuth();
+
+  const navItems = allNavItems.filter(item => !item.adminOnly || isAppAdmin);
 
   
   // Determine active state from current location

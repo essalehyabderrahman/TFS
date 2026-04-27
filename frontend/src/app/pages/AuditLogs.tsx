@@ -36,7 +36,7 @@ export function AuditLogs() {
         const mapped: AuditLog[] = res.logs.map(log => ({
           id: log.id,
           timestamp: parseISO(log.timestamp),
-          user: log.user_email,
+          user: log.user,
           action: log.action,
           resource: log.resource,
           ipAddress: log.ip_address,

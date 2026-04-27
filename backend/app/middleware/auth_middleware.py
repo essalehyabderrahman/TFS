@@ -35,7 +35,7 @@ def jwt_required_custom(fn):
             created = datetime.fromtimestamp(session_created_at, tz=timezone.utc)
             if datetime.now(timezone.utc) - created > timedelta(hours=8):
                 from app.services.auth_service import _log
-                ip = request.headers.get("X-Forwarded-For", request.remote_addr)
+                ip = request.remote_addr
                 user_id = get_jwt_identity()
                 _log("SESSION_EXPIRED", "unknown", user_id, "info", ip, details="Absolute 8-hour session limit reached.")
                 db.session.commit()
@@ -47,12 +47,20 @@ def jwt_required_custom(fn):
         if not user:
             return jsonify({"error": "UNAUTHORIZED", "message": "Session target no longer exists"}), 401
 
+        # [Security] Reject suspended users regardless of token validity
+        if user.status == "suspended":
+            from app.services.auth_service import _log
+            _log("ACCESS_DENIED_SUSPENDED", user.email, user.id, "warning", request.remote_addr,
+                 details="Suspended user attempted to access a protected resource.")
+            db.session.commit()
+            return jsonify({"error": "ACCOUNT_SUSPENDED", "message": "Your account has been suspended."}), 403
+
         # [Security] Assert Token Version matches DB — invalidates old tokens if password was changed
         # We only check this for non-pending tokens as tempTokens don't have a token_version claim
         token_version = claims.get("token_version")
         if token_version is not None and token_version < user.token_version:
             from app.services.auth_service import _log
-            ip = request.headers.get("X-Forwarded-For", request.remote_addr)
+            ip = request.remote_addr
             _log("SESSION_REVOKED", user.email, user.id, "warning", ip, details="Session forcefully revoked due to credential changes.")
             db.session.commit()
             return jsonify({"error": "SESSION_REVOKED", "message": "Session has been revoked due to credential changes. Please sign in again."}), 401
@@ -86,7 +94,7 @@ def jwt_mfa_setup_required(fn):
 # ──────────────────────────────────────────────────────────────────────────────
 # Décorateur : rôle minimum requis
 # ──────────────────────────────────────────────────────────────────────────────
-ROLE_RANK = {"viewer": 0, "editor": 1, "admin": 2}
+ROLE_RANK = {"user": 0, "admin": 1}
 
 def require_role(min_role: str):
     def decorator(fn):

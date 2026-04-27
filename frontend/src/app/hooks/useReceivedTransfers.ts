@@ -1,15 +1,15 @@
 import { useState, useEffect, useCallback } from "react";
-import { fetchTransfers } from "../api/transfers";
+import { apiRequest } from "../api/client";
 import type { Transfer } from "../api/transfers";
 
-interface UseTransfersResult {
+interface UseReceivedTransfersResult {
   transfers: Transfer[];
   loading: boolean;
   error: string | null;
   refresh: () => void;
 }
 
-export function useTransfers(): UseTransfersResult {
+export function useReceivedTransfers(): UseReceivedTransfersResult {
   const [transfers, setTransfers] = useState<Transfer[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -17,10 +17,15 @@ export function useTransfers(): UseTransfersResult {
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
-    const { data, error: err } = await fetchTransfers();
-    setTransfers(data);
-    setError(err);
-    setLoading(false);
+    try {
+      const data = await apiRequest<Transfer[]>("/transfers/received");
+      setTransfers(data);
+    } catch (err) {
+      setError(String(err));
+      setTransfers([]);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => {

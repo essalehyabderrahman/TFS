@@ -35,6 +35,10 @@ export function MfaSetup() {
           setSetupData({ secret: result.secret, qrCode: result.qrCode });
           setBackupCode(result.backupCode ?? null);
         } else {
+          if (result.error === "MFA_ALREADY_ENABLED") {
+            toast.error("MFA is already active on this account. Disable it first before re-enrolling.")
+            return
+          }
           toast.error("Failed to initialize MFA setup. Please try again.")
           const isOnboarding = !user?.mfaEnabled
           navigate(isOnboarding ? "/signin" : "/dashboard/security", { replace: true })

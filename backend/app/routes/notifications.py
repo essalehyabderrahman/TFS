@@ -2,6 +2,7 @@ from flask import Blueprint, jsonify, request
 from app.extensions import db
 from app.models.notification import Notification
 from app.middleware.auth_middleware import jwt_required_custom, current_user
+from app.middleware.csrf_middleware import csrf_protect
 
 notifications_bp = Blueprint("notifications", __name__, url_prefix="/notifications")
 
@@ -20,6 +21,7 @@ def get_notifications():
     }), 200
 
 @notifications_bp.patch("/<notif_id>/read")
+@csrf_protect
 @jwt_required_custom
 def mark_read(notif_id):
     user = current_user()
@@ -32,9 +34,14 @@ def mark_read(notif_id):
     return jsonify(notif.to_dict()), 200
 
 @notifications_bp.patch("/read-all")
+@csrf_protect
 @jwt_required_custom
 def mark_all_read():
     user = current_user()
-    Notification.query.filter_by(user_id=user.id, is_read=False).update({"is_read": True})
+    # [Security] Explicit user_id and is_read filter — never rely on implicit scoping
+    Notification.query.filter(
+        Notification.user_id == user.id,
+        Notification.is_read == False  # noqa: E712
+    ).update({"is_read": True}, synchronize_session="fetch")
     db.session.commit()
     return jsonify({"ok": True}), 200

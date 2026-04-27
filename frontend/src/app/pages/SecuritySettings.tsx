@@ -1,16 +1,62 @@
-import { useState } from "react";
-import { Shield, Bell, Lock, Globe, Clock, Copy } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Shield, Bell, Clock } from "lucide-react";
 import { Switch } from "../components/ui/switch";
 import { toast } from "sonner";
+import { apiRequest } from "../api/client";
 
 export function SecuritySettings() {
+  const [isLoading, setIsLoading] = useState(true);
+  const [mfaEnabled, setMfaEnabled] = useState(false);
+  
   const [emailNotifications, setEmailNotifications] = useState(true);
   const [loginAlerts, setLoginAlerts] = useState(true);
-  const [autoLogout, setAutoLogout] = useState(true);
-  const [allowExternalSharing, setAllowExternalSharing] = useState(true);
-  const [requirePasswordProtection, setRequirePasswordProtection] = useState(false);
+  
 
 
+  useEffect(() => {
+    async function fetchSettings() {
+      try {
+        setIsLoading(true);
+        const data = await apiRequest<{
+          mfaEnabled: boolean;
+          loginNotifications: boolean;
+          sessionTimeout: number;
+          encryptionLevel: string;
+        }>("/security/settings");
+        if (data) {
+          setMfaEnabled(Boolean(data.mfaEnabled));
+          setEmailNotifications(Boolean(data.loginNotifications));
+          setLoginAlerts(Boolean(data.loginNotifications));
+        }
+      } catch (error) {
+        toast.error("Failed to load security settings");
+      } finally {
+        setIsLoading(false);
+      }
+    }
+    fetchSettings();
+  }, []);
+
+  const handleNotificationsToggle = async (newValue: boolean) => {
+    const prevValue = emailNotifications; // they share the same backend field `loginNotifications`
+    
+    // Optimistic update
+    setEmailNotifications(newValue);
+    setLoginAlerts(newValue);
+
+    try {
+      await apiRequest("/security/settings", {
+        method: "PATCH",
+        body: { loginNotifications: newValue },
+      });
+      toast.success("Settings saved.");
+    } catch (error) {
+      toast.error("Failed to save settings.");
+      // Revert on error
+      setEmailNotifications(prevValue);
+      setLoginAlerts(prevValue);
+    }
+  };
 
   return (
     <div className="flex flex-col gap-4 sm:gap-6">
@@ -56,13 +102,15 @@ export function SecuritySettings() {
               </span>
             </div>
             <p style={{ color: "#6b7fa8", fontSize: "14px" }}>
-              Your account is secured with two-factor authentication and military-grade encryption.
+              {isLoading ? (
+                <span className="opacity-50">Loading status...</span>
+              ) : (
+                <>Your account is secured with {mfaEnabled ? "two-factor authentication and " : ""}military-grade encryption.</>
+              )}
             </p>
           </div>
         </div>
       </div>
-
-
 
       {/* Notifications Section */}
       <section
@@ -85,7 +133,8 @@ export function SecuritySettings() {
             </div>
             <Switch
               checked={emailNotifications}
-              onCheckedChange={setEmailNotifications}
+              onCheckedChange={handleNotificationsToggle}
+              disabled={isLoading}
             />
           </div>
 
@@ -96,54 +145,14 @@ export function SecuritySettings() {
             </div>
             <Switch
               checked={loginAlerts}
-              onCheckedChange={setLoginAlerts}
+              onCheckedChange={handleNotificationsToggle}
+              disabled={isLoading}
             />
           </div>
         </div>
       </section>
 
-      {/* File Security Section */}
-      <section
-        className="p-5 rounded-xl"
-        style={{
-          background: "rgba(255,255,255,0.03)",
-          border: "1px solid rgba(255,255,255,0.08)",
-        }}
-      >
-        <div className="flex items-center gap-2 mb-4">
-          <Lock size={20} style={{ color: "#0B7FFF" }} />
-          <h2 className="text-white font-semibold text-lg">File Security</h2>
-        </div>
 
-        <div className="space-y-4">
-          {/* External Sharing */}
-          <div className="flex items-center justify-between py-3 border-b" style={{ borderColor: "rgba(255,255,255,0.08)" }}>
-            <div className="flex items-start gap-3">
-              <Globe size={20} style={{ color: "#6b7fa8", marginTop: "2px" }} />
-              <div>
-                <p className="text-white font-medium">Allow External Sharing</p>
-                <p style={{ color: "#6b7fa8", fontSize: "13px" }}>Share files with people outside your organization</p>
-              </div>
-            </div>
-            <Switch
-              checked={allowExternalSharing}
-              onCheckedChange={setAllowExternalSharing}
-            />
-          </div>
-
-          {/* Password Protection */}
-          <div className="flex items-center justify-between py-3">
-            <div>
-              <p className="text-white font-medium">Require Password Protection</p>
-              <p style={{ color: "#6b7fa8", fontSize: "13px" }}>All transfers must be password protected</p>
-            </div>
-            <Switch
-              checked={requirePasswordProtection}
-              onCheckedChange={setRequirePasswordProtection}
-            />
-          </div>
-        </div>
-      </section>
 
 
       {/* Session Management Section */}
@@ -160,34 +169,25 @@ export function SecuritySettings() {
         </div>
 
         <div className="space-y-4">
-          <div className="flex items-center justify-between py-3 border-b" style={{ borderColor: "rgba(255,255,255,0.08)" }}>
-            <div>
-              <p className="text-white font-medium">Auto Logout</p>
-              <p style={{ color: "#6b7fa8", fontSize: "13px" }}>Automatically logout after 30 minutes of inactivity</p>
-            </div>
-            <Switch
-              checked={autoLogout}
-              onCheckedChange={setAutoLogout}
-            />
-          </div>
-
           <div className="flex items-center justify-between py-3">
             <div>
-              <p className="text-white font-medium">Active Sessions</p>
-              <p style={{ color: "#6b7fa8", fontSize: "13px" }}>You have 2 active sessions</p>
+              <p className="text-white font-medium">Session Timeout</p>
+              <p style={{ color: "#6b7fa8", fontSize: "13px" }}>
+                Sessions automatically expire after 15 minutes of inactivity and 8 hours absolute maximum.
+              </p>
             </div>
-            <button
-              className="px-4 py-2 rounded-lg transition-colors"
+            <span
+              className="px-3 py-1 rounded-lg"
               style={{
-                background: "rgba(239,68,68,0.12)",
-                border: "1px solid rgba(239,68,68,0.2)",
-                color: "#ef4444",
-                fontSize: "14px",
-                fontWeight: 600,
+                fontSize: "12px",
+                fontWeight: 700,
+                color: "#00E5A0",
+                background: "rgba(0,229,160,0.1)",
+                border: "1px solid rgba(0,229,160,0.2)",
               }}
             >
-              End All
-            </button>
+              ENFORCED
+            </span>
           </div>
         </div>
       </section>
