@@ -67,6 +67,19 @@ def _validate_password(password: str) -> str | None:
     return None
 
 
+def _validate_new_password(new_password: str, current_hash: str) -> str | None:
+    """
+    Runs full policy check then rejects if new password is identical to the current one.
+    [Security] Prevents silent no-op password changes.
+    """
+    error = _validate_password(new_password)
+    if error:
+        return error
+    if _bcrypt.checkpw(new_password.encode("utf-8"), current_hash.encode("utf-8")):
+        return "PASSWORD_SAME_AS_CURRENT"
+    return None
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Helpers
 # ──────────────────────────────────────────────────────────────────────────────
@@ -186,22 +199,39 @@ def signin(email: str, password: str, ip: str) -> dict:
         db.session.commit()
         return {"ok": False, "error": "ACCOUNT_SUSPENDED"}
 
-    # 5. Successful credential check — clear lockout state
+    # 5. Successful credential check — clear login lockout state only.
+    # [Security] Do NOT reset mfa_failed_attempts here — MFA hasn't been verified yet.
+    # Resetting it here would allow an attacker with valid credentials to reset the
+    # MFA brute-force counter on every attempt, making MFA lockout ineffective.
     user.reset_failed_attempts()
-    user.mfa_failed_attempts = 0
 
     user.touch()
 
-    # [Security] Zero-Trust Paradigm: MFA is universally mandatory.
-    # No user may receive a full session token directly from password verification.
-    # We universally issue a restricted `mfa_pending` token.
+    # [Security] If MFA is not configured, issue a full session token directly.
+    # Users who have disabled MFA should not be forced through the MFA setup flow.
+    if not user.mfa_enabled:
+        now_ts = int(datetime.now(timezone.utc).timestamp())
+        token = create_access_token(
+            identity=user.id,
+            additional_claims={
+                "session_created_at": now_ts,
+                "token_version": user.token_version,
+            }
+        )
+        _log("SESSION_CREATED", email, user.id, "success", ip,
+             details="Full session issued — MFA not enabled on this account.")
+        db.session.commit()
+        return {"ok": True, "mfaRequired": False, "token": token, "user": user.to_dict()}
+
+    # [Security] Zero-Trust Paradigm: MFA is enabled — issue restricted mfa_pending token.
+    # Full session token only issued after MFA verification.
     temp_token = create_access_token(
         identity=user.id,
         additional_claims={"mfa_pending": True},
         expires_delta=timedelta(minutes=5),
     )
     _log("LOGIN_MFA_PENDING", email, user.id, "warning", ip,
-         details="MFA challenge or setup required")
+         details="MFA challenge required.")
     db.session.commit()
     return {"ok": True, "mfaRequired": True, "tempToken": temp_token, "user": user.to_dict()}
 

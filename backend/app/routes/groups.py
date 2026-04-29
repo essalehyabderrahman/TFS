@@ -175,8 +175,8 @@ def invite_member(group_id):
     if role not in ("admin", "member"):
         return jsonify({"error": "INVALID_ROLE"}), 400
 
-    # Only app admins can promote someone to group admin
-    if role == "admin" and actor.role != "admin":
+    # Only root can promote someone to group admin
+    if role == "admin" and not actor.is_root:
         return jsonify({"error": "FORBIDDEN"}), 403
 
     target = User.query.filter_by(email=user_email).first()
@@ -234,8 +234,8 @@ def update_member(group_id, user_id):
     if new_role not in ("admin", "member"):
         return jsonify({"error": "INVALID_ROLE"}), 400
 
-    # Only app admins can promote to group admin
-    if new_role == "admin" and actor.role != "admin":
+    # Only root can promote to group admin
+    if new_role == "admin" and not actor.is_root:
         return jsonify({"error": "FORBIDDEN"}), 403
 
     # Protect last group admin

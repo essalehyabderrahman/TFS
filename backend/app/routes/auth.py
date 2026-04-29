@@ -128,8 +128,8 @@ def signout():
 # ── POST /auth/mfa/setup ──────────────────────────────────────────────────────
 @auth_bp.post("/mfa/setup")
 @csrf_protect
-@limiter.limit("10 per minute")
 @jwt_mfa_setup_required
+@limiter.limit("10 per minute")
 def mfa_setup():
     user = current_user()
     if not user:
@@ -148,8 +148,8 @@ def mfa_setup():
 # ── POST /auth/mfa/enable ─────────────────────────────────────────────────────
 @auth_bp.post("/mfa/enable")
 @csrf_protect
-@limiter.limit("5 per minute")
 @jwt_mfa_setup_required
+@limiter.limit("5 per minute")
 def mfa_enable():
     """Confirme l'activation MFA via un code OTP après setup."""
     user = current_user()
@@ -214,34 +214,43 @@ def me():
 @limiter.limit("30 per minute")
 def refresh():
     """
-    Sliding session refresh. Accepts the current valid (non-expired) JWT,
-    returns a fresh 15-min token with the same session_created_at.
+    Sliding session refresh.
+    [Session] Intentionally uses decode_token(allow_expired=True) so that a
+    just-expired token can still obtain a new one — this is the sliding window.
+    verify_jwt_in_request() would hard-reject expired tokens before we could
+    act on them, which is wrong for a refresh endpoint.
     Refuses if the 8-hour absolute max has been reached.
     """
-    try:
-        verify_jwt_in_request()
-    except Exception:
+    from flask import current_app
+    from flask_jwt_extended import decode_token
+
+    # Extract raw token from the HttpOnly cookie
+    cookie_name = current_app.config.get("JWT_ACCESS_COOKIE_NAME", "access_token_cookie")
+    raw_token = request.cookies.get(cookie_name)
+    if not raw_token:
         return jsonify({"error": "UNAUTHORIZED"}), 401
 
-    claims = get_jwt()
+    try:
+        # [Session] allow_expired=True is the whole point — we are refreshing it
+        claims = decode_token(raw_token, allow_expired=True)
+    except Exception:
+        return jsonify({"error": "INVALID_TOKEN"}), 401
 
     # Block mfa_pending tokens from refreshing into a real session
     if claims.get("mfa_pending"):
         return jsonify({"error": "MFA_REQUIRED"}), 403
 
-    user_id            = get_jwt_identity()
+    user_id            = claims.get("sub")
     session_created_at = claims.get("session_created_at")
     token_version      = claims.get("token_version")
 
-    if not session_created_at:
+    if not user_id or not session_created_at:
         return jsonify({"error": "INVALID_TOKEN"}), 401
 
     result = auth_service.refresh_token(user_id, session_created_at, token_version, _ip())
 
     if not result["ok"]:
-        status = 401
-        if result["error"] == "ACCOUNT_SUSPENDED":
-            status = 403
+        status = 403 if result["error"] == "ACCOUNT_SUSPENDED" else 401
         return jsonify({"error": result["error"]}), status
 
     response = jsonify({"user": result["user"]})

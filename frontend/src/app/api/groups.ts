@@ -32,6 +32,22 @@ export interface GroupSettings {
   updatedBy: string | null
 }
 
+export interface UserSuggestion {
+  id: string
+  email: string
+  name: string
+  avatar: string
+}
+
+export async function searchUsers(q: string): Promise<UserSuggestion[]> {
+  if (q.length < 2) return []
+  try {
+    return await apiRequest<UserSuggestion[]>(`/team/search?q=${encodeURIComponent(q)}`)
+  } catch {
+    return []
+  }
+}
+
 export async function fetchGroups(): Promise<{ data: Group[]; error: string | null }> {
   try {
     const data = await apiRequest<Group[]>("/groups")

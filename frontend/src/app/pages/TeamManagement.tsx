@@ -9,19 +9,21 @@ import { Switch } from "../components/ui/switch"
 import {
   fetchGroups, createGroup, deleteGroup,
   fetchGroupMembers, inviteGroupMember, updateGroupMember, removeGroupMember,
-  fetchGroupSettings, updateGroupSettings,
+  fetchGroupSettings, updateGroupSettings, searchUsers,
   type Group, type GroupMember, type GroupSettings
 } from "../api/groups"
 
 export function TeamManagement() {
-  const { isAppAdmin } = useAuth()
+  const { isAppAdmin, isRootAdmin, isInitializing } = useAuth()
   const navigate = useNavigate()
 
-  // Redirect non-admins immediately
-  if (!isAppAdmin) {
-    navigate("/dashboard", { replace: true })
-    return null
-  }
+  useEffect(() => {
+    if (!isInitializing && !isAppAdmin) {
+      navigate("/dashboard", { replace: true })
+    }
+  }, [isInitializing, isAppAdmin, navigate])
+
+  if (!isAppAdmin) return null
 
   const [groups, setGroups] = useState<Group[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -41,6 +43,10 @@ export function TeamManagement() {
   const [inviteEmail, setInviteEmail] = useState("")
   const [inviteRole, setInviteRole] = useState<"admin" | "member">("member")
   const [isInviting, setIsInviting] = useState(false)
+  const [showRoleDropdown, setShowRoleDropdown] = useState(false)
+  const [emailSuggestions, setEmailSuggestions] = useState<import("../api/groups").UserSuggestion[]>([])
+  const [showSuggestions, setShowSuggestions] = useState(false)
+  const [suggestionDebounce, setSuggestionDebounce] = useState<ReturnType<typeof setTimeout> | null>(null)
 
   // Delete group dialog
   const [groupToDelete, setGroupToDelete] = useState<Group | null>(null)
@@ -114,6 +120,25 @@ export function TeamManagement() {
     setIsDeleting(false)
   }
 
+  function handleEmailInput(value: string) {
+    setInviteEmail(value)
+    setShowSuggestions(false)
+    if (suggestionDebounce) clearTimeout(suggestionDebounce)
+    if (value.length < 2) { setEmailSuggestions([]); return }
+    const t = setTimeout(async () => {
+      const results = await searchUsers(value)
+      setEmailSuggestions(results)
+      setShowSuggestions(results.length > 0)
+    }, 250)
+    setSuggestionDebounce(t)
+  }
+
+  function handleSuggestionSelect(email: string) {
+    setInviteEmail(email)
+    setEmailSuggestions([])
+    setShowSuggestions(false)
+  }
+
   async function handleInviteMember() {
     if (!inviteGroupId || !inviteEmail.trim()) { toast.error("Email is required."); return }
     setIsInviting(true)
@@ -122,7 +147,8 @@ export function TeamManagement() {
       const messages: Record<string, string> = {
         USER_NOT_FOUND: "No user found with that email.",
         ALREADY_MEMBER: "This user is already a member of this group.",
-        FORBIDDEN: "You do not have permission to invite members.",
+        FORBIDDEN: "Only the root admin can invite members as group admin.",
+        ROOT_PROTECTED: "The root admin account cannot be modified.",
       }
       toast.error(messages[res.error] ?? "Failed to invite member.")
     } else {
@@ -144,7 +170,8 @@ export function TeamManagement() {
     if (res.error) {
       const messages: Record<string, string> = {
         LAST_GROUP_ADMIN_PROTECTED: "Cannot demote the last group admin.",
-        FORBIDDEN: "Only app admins can promote to group admin.",
+        FORBIDDEN: "Only the root admin can promote to group admin.",
+        ROOT_PROTECTED: "The root admin account cannot be modified.",
       }
       toast.error(messages[res.error] ?? "Failed to update role.")
     } else {
@@ -164,7 +191,9 @@ export function TeamManagement() {
     if (res.error) {
       toast.error(res.error === "LAST_GROUP_ADMIN_PROTECTED"
         ? "Cannot remove the last group admin."
-        : "Failed to remove member.")
+        : res.error === "ROOT_PROTECTED"
+          ? "The root admin account cannot be modified."
+          : "Failed to remove member.")
     } else {
       toast.success(`${member.userEmail} removed from group.`)
       setGroupMembers(p => ({ ...p, [groupId]: p[groupId].filter(m => m.userId !== member.userId) }))
@@ -278,17 +307,29 @@ export function TeamManagement() {
                                   {member.userAvatar || member.userName.charAt(0).toUpperCase()}
                                 </div>
                                 <div className="flex-1 min-w-0">
-                                  <p className="text-white text-sm font-medium truncate">{member.userName}</p>
+                                  <div className="flex items-center gap-2">
+                                    <p className="text-white text-sm font-medium truncate">{member.userName}</p>
+                                    {/* Root badge — data comes from GroupMember which doesn't carry isRoot,
+                                        so we skip it here; root badge is shown in the global team list */}
+                                  </div>
                                   <p style={{ color: "#6b7fa8", fontSize: "12px" }}>{member.userEmail}</p>
                                 </div>
-                                <select
-                                  value={member.role}
-                                  onChange={e => handleRoleChange(group.id, member.userId, e.target.value as "admin" | "member")}
-                                  className="px-2 py-1 rounded text-xs text-white outline-none"
-                                  style={{ background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.1)" }}>
-                                  <option value="member">Member</option>
-                                  <option value="admin">Admin</option>
-                                </select>
+                                {/* Only root can change group-member roles */}
+                                {isRootAdmin ? (
+                                  <select
+                                    value={member.role}
+                                    onChange={e => handleRoleChange(group.id, member.userId, e.target.value as "admin" | "member")}
+                                    className="px-2 py-1 rounded text-xs text-white outline-none"
+                                    style={{ background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.1)" }}>
+                                    <option value="member">Member</option>
+                                    <option value="admin">Admin</option>
+                                  </select>
+                                ) : (
+                                  <span className="px-2 py-1 rounded text-xs capitalize"
+                                    style={{ color: member.role === "admin" ? "#0B7FFF" : "#6b7fa8", background: "rgba(255,255,255,0.04)" }}>
+                                    {member.role}
+                                  </span>
+                                )}
                                 <button onClick={() => setMemberToRemove({ groupId: group.id, member })}
                                   className="p-1.5 rounded hover:bg-red-500/10 transition-colors"
                                   style={{ color: "#ef4444" }}>
@@ -349,6 +390,7 @@ export function TeamManagement() {
               <label style={{ color: "#4a5578", fontSize: "12px", fontWeight: 600, letterSpacing: "0.05em" }}>GROUP NAME</label>
               <input type="text" placeholder="Engineering Team" value={newGroupName}
                 onChange={e => setNewGroupName(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter" && !isCreating) handleCreateGroup() }}
                 className="w-full mt-1 px-4 py-2.5 rounded-lg text-white placeholder:text-slate-500 outline-none"
                 style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", fontSize: "14px" }} />
             </div>
@@ -356,6 +398,7 @@ export function TeamManagement() {
               <label style={{ color: "#4a5578", fontSize: "12px", fontWeight: 600, letterSpacing: "0.05em" }}>DESCRIPTION (optional)</label>
               <input type="text" placeholder="Responsible for backend and infrastructure" value={newGroupDesc}
                 onChange={e => setNewGroupDesc(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter" && !isCreating) handleCreateGroup() }}
                 className="w-full mt-1 px-4 py-2.5 rounded-lg text-white placeholder:text-slate-500 outline-none"
                 style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", fontSize: "14px" }} />
             </div>
@@ -377,25 +420,106 @@ export function TeamManagement() {
       </Dialog>
 
       {/* Invite Member Dialog */}
-      <Dialog open={!!inviteGroupId} onOpenChange={() => setInviteGroupId(null)}>
+      <Dialog open={!!inviteGroupId} onOpenChange={() => { setInviteGroupId(null); setShowRoleDropdown(false); setEmailSuggestions([]); setShowSuggestions(false) }}>
         <DialogContent style={{ background: "linear-gradient(180deg, #0d1228 0%, #0b0f20 100%)", border: "1px solid rgba(255,255,255,0.1)" }}>
           <DialogHeader><DialogTitle className="text-white text-xl">Invite to Group</DialogTitle></DialogHeader>
           <div className="space-y-4">
             <div>
               <label style={{ color: "#4a5578", fontSize: "12px", fontWeight: 600, letterSpacing: "0.05em" }}>USER EMAIL</label>
-              <input type="email" placeholder="user@company.com" value={inviteEmail}
-                onChange={e => setInviteEmail(e.target.value)}
-                className="w-full mt-1 px-4 py-2.5 rounded-lg text-white placeholder:text-slate-500 outline-none"
-                style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", fontSize: "14px" }} />
+              <div className="relative mt-1">
+                <input
+                  type="email"
+                  placeholder="user@company.com"
+                  value={inviteEmail}
+                  onChange={e => handleEmailInput(e.target.value)}
+                  onKeyDown={e => { if (e.key === "Enter" && !isInviting) handleInviteMember() }}
+                  onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
+                  onFocus={() => emailSuggestions.length > 0 && setShowSuggestions(true)}
+                  className="w-full px-4 py-2.5 rounded-lg text-white placeholder:text-slate-500 outline-none"
+                  style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", fontSize: "14px" }}
+                />
+                {showSuggestions && (
+                  <div
+                    className="absolute left-0 right-0 mt-1 rounded-lg overflow-hidden z-20"
+                    style={{
+                      background: "#0d1228",
+                      border: "1px solid rgba(255,255,255,0.1)",
+                      boxShadow: "0 10px 40px rgba(0,0,0,0.5)",
+                    }}
+                  >
+                    {emailSuggestions.map(s => (
+                      <button
+                        key={s.id}
+                        type="button"
+                        onMouseDown={() => handleSuggestionSelect(s.email)}
+                        className="w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-white/5"
+                      >
+                        <div
+                          className="w-7 h-7 rounded-full flex items-center justify-center shrink-0 text-xs font-bold text-white"
+                          style={{ background: "linear-gradient(135deg, #0B7FFF 0%, #0960D9 100%)" }}
+                        >
+                          {s.avatar}
+                        </div>
+                        <div className="min-w-0">
+                          <p style={{ color: "#e2e8f0", fontSize: "13px", fontWeight: 500 }} className="truncate">{s.name}</p>
+                          <p style={{ color: "#6b7fa8", fontSize: "11px" }} className="truncate">{s.email}</p>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
             <div>
               <label style={{ color: "#4a5578", fontSize: "12px", fontWeight: 600, letterSpacing: "0.05em" }}>ROLE</label>
-              <select value={inviteRole} onChange={e => setInviteRole(e.target.value as "admin" | "member")}
-                className="w-full mt-1 px-4 py-2.5 rounded-lg text-white outline-none"
-                style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", fontSize: "14px" }}>
-                <option value="member">Member — standard group access</option>
-                <option value="admin">Admin — can manage this group</option>
-              </select>
+              {isRootAdmin ? (
+                <div className="relative mt-1">
+                  <button
+                    type="button"
+                    onClick={() => setShowRoleDropdown(v => !v)}
+                    className="w-full flex items-center justify-between px-4 py-2.5 rounded-lg transition-colors"
+                    style={{
+                      background: "rgba(255,255,255,0.04)",
+                      border: "1px solid rgba(255,255,255,0.08)",
+                      color: "#e2e8f0",
+                      fontSize: "14px",
+                    }}
+                  >
+                    <span>{inviteRole === "member" ? "Member — standard group access" : "Admin — can manage this group"}</span>
+                    <ChevronDown size={14} style={{ color: "#6b7fa8", flexShrink: 0 }} />
+                  </button>
+                  {showRoleDropdown && (
+                    <div
+                      className="absolute left-0 right-0 mt-2 rounded-lg overflow-hidden z-10"
+                      style={{
+                        background: "#0d1228",
+                        border: "1px solid rgba(255,255,255,0.1)",
+                        boxShadow: "0 10px 40px rgba(0,0,0,0.5)",
+                      }}
+                    >
+                      {(["member", "admin"] as const).map(r => (
+                        <button
+                          key={r}
+                          type="button"
+                          onClick={() => { setInviteRole(r); setShowRoleDropdown(false) }}
+                          className="w-full px-4 py-2.5 text-left transition-colors hover:bg-white/5"
+                          style={{
+                            color: inviteRole === r ? "#0B7FFF" : "#e2e8f0",
+                            fontSize: "14px",
+                          }}
+                        >
+                          {r === "member" ? "Member — standard group access" : "Admin — can manage this group"}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="w-full mt-1 px-4 py-2.5 rounded-lg"
+                  style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.3)", fontSize: "14px" }}>
+                  Member — standard group access
+                </div>
+              )}
             </div>
           </div>
           <DialogFooter className="mt-6">

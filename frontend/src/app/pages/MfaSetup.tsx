@@ -3,7 +3,7 @@ import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { toast } from "sonner";
-import { useNavigate, Link } from "react-router";
+import { useNavigate } from "react-router";
 import { apiSetupMfa, apiEnableMfa } from "../api/auth";
 import { useAuth } from "../hooks/useAuth";
 import { BackgroundParticles } from "../components/ui/BackgroundParticles";
@@ -24,7 +24,7 @@ export function MfaSetup() {
   const [hasCopied, setHasCopied] = useState(false);
   
   const navigate = useNavigate();
-  const { user, isInitializing: authInitializing, signIn, isMfaPending, clearSession } = useAuth();
+  const { user, signIn, isMfaPending } = useAuth();
   const component = useRef<HTMLDivElement>(null);
 
   useEffect(() => {

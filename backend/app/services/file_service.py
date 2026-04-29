@@ -214,26 +214,24 @@ def get_transfer_file(transfer_id: str, user: User, ip: str) -> dict:
     if not t or t.is_deleted:
         return {"ok": False, "error": "NOT_FOUND"}
 
-    # ACL check (admins always pass)
-    if user.role != "admin" and t.uploaded_by_id != user.id and t.recipient_email != user.email:
-        acl = next((a for a in t.acl_entries if a.user_id == user.id and a.can_read), None)
-        if not acl:
+    # Access control
+    # Step 1: determine if the user is a "core" authorized party
+    is_core = (
+        user.role == "admin"
+        or t.uploaded_by_id == user.id
+        or t.recipient_email == user.email
+        or any(a.user_id == user.id and a.can_read for a in t.acl_entries)
+    )
+
+    if not is_core:
+        # Step 2: if not core, external sharing must be enabled to allow access
+        from app.models.team_settings import TeamSettings
+        settings = TeamSettings.query.first()
+        if not settings or not settings.allow_external_sharing:
             _log("UNAUTHORIZED_ACCESS", user.email, user.id, "failed", ip, resource=t.file_name)
             db.session.commit()
             return {"ok": False, "error": "FORBIDDEN"}
-
-    from app.models.team_settings import TeamSettings
-    settings = TeamSettings.query.first()
-    if settings and not settings.allow_external_sharing:
-        # External sharing disabled: only uploader, explicit recipient, ACL, or admin may download
-        is_authorized = (
-            user.role == "admin"
-            or t.uploaded_by_id == user.id
-            or t.recipient_email == user.email
-            or any(a.user_id == user.id and a.can_read for a in t.acl_entries)
-        )
-        if not is_authorized:
-            return {"ok": False, "error": "EXTERNAL_SHARING_DISABLED"}
+        # External sharing is on — allow the request to proceed
 
     if t.expiry_date and t.expiry_date < datetime.now(timezone.utc):
         t.status = "Expired"

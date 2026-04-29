@@ -22,7 +22,7 @@ class AuditLog(db.Model):
 
     details     = db.Column(db.Text, nullable=True)
     timestamp   = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), index=True)
-    group_id    = db.Column(db.String(36), db.ForeignKey("groups.id"), nullable=True, index=True)
+    group_id    = db.Column(db.String(36), db.ForeignKey("groups.id", ondelete="SET NULL"), nullable=True, index=True)
 
     # Relationships
     actor       = db.relationship("User", back_populates="audit_logs")

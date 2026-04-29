@@ -6,6 +6,7 @@ export type FileType = "pdf" | "img" | "zip" | "video" | "doc" | "other"
 
 export interface Transfer {
   id: string
+  groupId: string
   fileName: string
   fileType: FileType
   recipient: string
@@ -18,6 +19,8 @@ export interface Transfer {
   downloadCount: number
   expiryDate: string
   uploadedBy: string
+  isLocked: boolean
+  currentVersion: number
 }
 
 // ─── Team ─────────────────────────────────────────────────────────────────────
@@ -49,6 +52,7 @@ export interface AuthUser {
   company?: string
   plan?: string
   mfaEnabled?: boolean
+  isRoot?: boolean
 }
 
 // ─── API ──────────────────────────────────────────────────────────────────────

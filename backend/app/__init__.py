@@ -136,6 +136,7 @@ def _seed_default_admin(app) -> None:
         email=email,
         role="admin",
         status="active",
+        is_root=True,   # [Security] Superadmin — cannot be deleted, demoted, or suspended
     )
     admin.set_password(password)
     db.session.add(admin)

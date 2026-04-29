@@ -1,12 +1,13 @@
 import { useState, useEffect, useCallback } from "react";
-import { User, Building2, Mail, Shield, Trash2, Key, Loader2, RefreshCw } from "lucide-react";
+import { User, Building2, Mail, Shield, Trash2, Key, Loader2, RefreshCw, Copy, LogOut, Check, X, ShieldCheck } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "../components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "../components/ui/alert-dialog";
 import { toast } from "sonner";
 import { apiRequest } from "../api/client";
-import { apiGetAccount, apiChangePassword, apiDeleteAccount } from "../api/auth";
+import { apiGetAccount, apiChangePassword, apiDeleteAccount, apiRegenerateBackupCode } from "../api/auth";
 import { useAuth } from "../hooks/useAuth";
 import { useNavigate } from "react-router";
+import { csrfFetch } from "../lib/csrfFetch";
 
 interface AccountData {
   id: string;
@@ -18,6 +19,7 @@ interface AccountData {
   company: string;
   plan: string;
   mfaEnabled: boolean;
+  backupCodeExists: boolean;
   joinedAt: string;
   lastActive: string;
   transfersCount: number;
@@ -50,8 +52,27 @@ export function AccountManagement() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [isPasswordLoading, setIsPasswordLoading] = useState(false);
 
+  const passwordRequirements = [
+    { label: "At least 12 characters", test: (p: string) => p.length >= 12 },
+    { label: "Contains a number",       test: (p: string) => /\d/.test(p) },
+    { label: "Lowercase & Uppercase",   test: (p: string) => /[a-z]/.test(p) && /[A-Z]/.test(p) },
+    { label: "Special character",       test: (p: string) => /[!@#$%^&*(),.?":{}|<>_\-+=\[\]\\;'/`~]/.test(p) },
+  ];
+  const isNewPasswordStrong    = passwordRequirements.every(req => req.test(newPassword));
+  const doesPasswordMatch      = newPassword.length > 0 && newPassword === confirmPassword;
+  const isSameAsCurrent        = newPassword.length > 0 && newPassword === currentPassword;
+
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [isDeleteLoading, setIsDeleteLoading] = useState(false);
+
+  const [showMfaDisableDialog, setShowMfaDisableDialog] = useState(false);
+  const [mfaDisableCode, setMfaDisableCode] = useState("");
+  const [isMfaDisableLoading, setIsMfaDisableLoading] = useState(false);
+
+  const [showBackupRegenDialog, setShowBackupRegenDialog] = useState(false);
+  const [backupRegenCode, setBackupRegenCode] = useState("");
+  const [newBackupCode, setNewBackupCode] = useState<string | null>(null);
+  const [isBackupRegenLoading, setIsBackupRegenLoading] = useState(false);
 
   const loadAccount = useCallback(async () => {
     setIsLoading(true);
@@ -110,6 +131,7 @@ export function AccountManagement() {
     } else {
       const messages: Record<string, string> = {
         WRONG_PASSWORD: "Current password is incorrect.",
+        PASSWORD_SAME_AS_CURRENT: "New password must differ from your current password.",
         PASSWORD_TOO_SHORT: "Password must be at least 12 characters.",
         PASSWORD_NO_UPPERCASE: "Password must contain an uppercase letter.",
         PASSWORD_NO_LOWERCASE: "Password must contain a lowercase letter.",
@@ -138,6 +160,57 @@ export function AccountManagement() {
       }
     }
     setIsDeleteLoading(false);
+  };
+
+  const handleDisableMfa = async () => {
+    if (!mfaDisableCode.trim()) { toast.error("Please enter your current TOTP code."); return; }
+    setIsMfaDisableLoading(true);
+    try {
+      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
+      const res = await csrfFetch(`${API_BASE_URL}/auth/mfa/disable`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: mfaDisableCode }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        const messages: Record<string, string> = {
+          INVALID_CODE: "Invalid TOTP code.",
+          MFA_MAX_ATTEMPTS_EXCEEDED: "Too many failed attempts. Please sign in again.",
+          MFA_CODE_ALREADY_USED: "Code already used. Wait for the next code.",
+        };
+        toast.error(messages[data.error] ?? "Failed to disable MFA.");
+      } else {
+        toast.success("MFA disabled. All existing sessions have been invalidated.");
+        setShowMfaDisableDialog(false);
+        setMfaDisableCode("");
+        setAccount(prev => prev ? { ...prev, mfaEnabled: false } : prev);
+      }
+    } catch { toast.error("Network error."); }
+    finally { setIsMfaDisableLoading(false); }
+  };
+
+  const handleRegenerateBackupCode = async () => {
+    if (!backupRegenCode.trim() || backupRegenCode.length !== 6) {
+      toast.error("Please enter your 6-digit TOTP code."); return;
+    }
+    setIsBackupRegenLoading(true);
+    const result = await apiRegenerateBackupCode(backupRegenCode);
+    if (!result.ok) {
+      const messages: Record<string, string> = {
+        INVALID_CODE: "Invalid TOTP code.",
+        MFA_MAX_ATTEMPTS_EXCEEDED: "Too many failed attempts.",
+        MFA_CODE_ALREADY_USED: "Code already used. Wait for the next code.",
+        TOTP_REQUIRED: "You must use a 6-digit TOTP code, not a backup code.",
+        MFA_NOT_CONFIGURED: "MFA is not enabled on this account.",
+      };
+      toast.error(messages[result.error ?? ""] ?? "Failed to regenerate backup code.");
+    } else {
+      setNewBackupCode(result.backupCode ?? null);
+      setBackupRegenCode("");
+    }
+    setIsBackupRegenLoading(false);
   };
 
   if (isLoading) {
@@ -170,10 +243,17 @@ export function AccountManagement() {
           <h1 className="text-white text-2xl font-bold mb-1">Account Management</h1>
           <p style={{ color: "#6b7fa8", fontSize: "14px" }}>Manage your profile and account settings</p>
         </div>
-        <button onClick={openEditDialog} className="flex items-center gap-2 px-4 py-2.5 rounded-xl transition-all hover:opacity-90"
-          style={{ background: "linear-gradient(135deg, #0B7FFF 0%, #0960D9 100%)", color: "white", fontSize: "14px", fontWeight: 600 }}>
-          <User size={16} /> Edit Profile
-        </button>
+        <div className="flex items-center gap-3">
+          <button onClick={() => { signOut(); navigate("/signin"); }}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl transition-all hover:opacity-90"
+            style={{ background: "rgba(239,68,68,0.12)", border: "1px solid rgba(239,68,68,0.25)", color: "#ef4444", fontSize: "14px", fontWeight: 600 }}>
+            <LogOut size={16} /> Sign Out
+          </button>
+          <button onClick={openEditDialog} className="flex items-center gap-2 px-4 py-2.5 rounded-xl transition-all hover:opacity-90"
+            style={{ background: "linear-gradient(135deg, #0B7FFF 0%, #0960D9 100%)", color: "white", fontSize: "14px", fontWeight: 600 }}>
+            <User size={16} /> Edit Profile
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -248,6 +328,51 @@ export function AccountManagement() {
             <Key size={14} /> Change
           </button>
         </div>
+        <div className="flex items-center justify-between py-3 border-t" style={{ borderColor: "rgba(255,255,255,0.06)" }}>
+          {account.mfaEnabled ? (
+            <>
+              <div>
+                <p className="text-white font-medium">Two-Factor Authentication</p>
+                <p style={{ color: "#6b7fa8", fontSize: "13px" }}>MFA is currently active on your account</p>
+              </div>
+              <button onClick={() => setShowMfaDisableDialog(true)}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg transition-colors hover:opacity-90"
+                style={{ background: "rgba(239,68,68,0.12)", border: "1px solid rgba(239,68,68,0.2)", color: "#ef4444", fontSize: "14px", fontWeight: 600 }}>
+                <Shield size={14} /> Disable MFA
+              </button>
+            </>
+          ) : (
+            <>
+              <div>
+                <p className="text-white font-medium">Two-Factor Authentication</p>
+                <p style={{ color: "#ef4444", fontSize: "13px" }}>MFA is not active — your account is less secure</p>
+              </div>
+              <button onClick={() => navigate("/dashboard/mfa-setup")}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg transition-colors hover:opacity-90"
+                style={{ background: "rgba(0,229,160,0.12)", border: "1px solid rgba(0,229,160,0.2)", color: "#00E5A0", fontSize: "14px", fontWeight: 600 }}>
+                <Shield size={14} /> Enable MFA
+              </button>
+            </>
+          )}
+        </div>
+        
+        {account.mfaEnabled && (
+          <div className="flex items-center justify-between py-3 border-t" style={{ borderColor: "rgba(255,255,255,0.06)" }}>
+            <div>
+              <p className="text-white font-medium">Backup Code</p>
+              <p style={{ color: "#6b7fa8", fontSize: "13px" }}>
+                {account.backupCodeExists
+                  ? "Regenerate your emergency single-use backup code"
+                  : "No backup code — generate one to use if you lose access to your authenticator"}
+              </p>
+            </div>
+            <button onClick={() => setShowBackupRegenDialog(true)}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg transition-colors hover:opacity-90"
+              style={{ background: "rgba(245,158,11,0.12)", border: "1px solid rgba(245,158,11,0.2)", color: "#f59e0b", fontSize: "14px", fontWeight: 600 }}>
+              <RefreshCw size={14} /> {account.backupCodeExists ? "Regenerate" : "Generate"}
+            </button>
+          </div>
+        )}
       </section>
 
       <section className="p-5 rounded-xl"
@@ -271,6 +396,7 @@ export function AccountManagement() {
               <div key={label}>
                 <label style={{ color: "#4a5578", fontSize: "12px", fontWeight: 600, letterSpacing: "0.05em" }}>{label}</label>
                 <input type={type} value={value} onChange={(e) => setter(e.target.value)}
+                  onKeyDown={e => { if (e.key === "Enter" && !isEditLoading) handleSaveProfile() }}
                   className="w-full mt-1 px-4 py-2.5 rounded-lg text-white outline-none"
                   style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", fontSize: "14px" }} />
               </div>
@@ -293,23 +419,83 @@ export function AccountManagement() {
         <DialogContent style={{ background: "linear-gradient(180deg, #0d1228 0%, #0b0f20 100%)", border: "1px solid rgba(255,255,255,0.1)" }}>
           <DialogHeader><DialogTitle className="text-white text-xl">Change Password</DialogTitle></DialogHeader>
           <div className="space-y-4">
-            {[{ label: "CURRENT PASSWORD", value: currentPassword, setter: setCurrentPassword },
-              { label: "NEW PASSWORD", value: newPassword, setter: setNewPassword },
-              { label: "CONFIRM NEW PASSWORD", value: confirmPassword, setter: setConfirmPassword }].map(({ label, value, setter }) => (
-              <div key={label}>
-                <label style={{ color: "#4a5578", fontSize: "12px", fontWeight: 600, letterSpacing: "0.05em" }}>{label}</label>
-                <input type="password" value={value} onChange={(e) => setter(e.target.value)}
-                  className="w-full mt-1 px-4 py-2.5 rounded-lg text-white outline-none"
-                  style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", fontSize: "14px" }} />
-              </div>
-            ))}
-            <p style={{ color: "#4a5578", fontSize: "12px" }}>Min 12 chars · uppercase · lowercase · number · symbol</p>
+
+            {/* Current password */}
+            <div>
+              <label style={{ color: "#4a5578", fontSize: "12px", fontWeight: 600, letterSpacing: "0.05em" }}>CURRENT PASSWORD</label>
+              <input type="password" value={currentPassword} onChange={e => setCurrentPassword(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter" && !isPasswordLoading && isNewPasswordStrong && doesPasswordMatch && !isSameAsCurrent) handleChangePassword() }}
+                className="w-full mt-1 px-4 py-2.5 rounded-lg text-white outline-none"
+                style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", fontSize: "14px" }} />
+            </div>
+
+            {/* New password + live requirements */}
+            <div>
+              <label style={{ color: "#4a5578", fontSize: "12px", fontWeight: 600, letterSpacing: "0.05em" }}>NEW PASSWORD</label>
+              <input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter" && !isPasswordLoading && isNewPasswordStrong && doesPasswordMatch && !isSameAsCurrent) handleChangePassword() }}
+                className="w-full mt-1 px-4 py-2.5 rounded-lg text-white outline-none"
+                style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", fontSize: "14px" }} />
+              {newPassword && isSameAsCurrent && (
+                <div className="flex items-center gap-2 mt-2 pl-1 animate-pulse">
+                  <X size={12} style={{ color: "#ef4444" }} />
+                  <span style={{ fontSize: "9px", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(239,68,68,0.6)" }}>
+                    New password must differ from current password
+                  </span>
+                </div>
+              )}
+              {newPassword && !isSameAsCurrent && (
+                <div className="grid grid-cols-2 gap-2 mt-3 p-3 rounded-xl"
+                  style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)" }}>
+                  {passwordRequirements.map((req, i) => (
+                    <div key={i} className="flex items-center gap-2">
+                      {req.test(newPassword)
+                        ? <Check size={10} style={{ color: "#00d2ff" }} />
+                        : <div className="w-1.5 h-1.5 rounded-full ml-0.5" style={{ background: "rgba(255,255,255,0.1)" }} />}
+                      <span style={{
+                        fontSize: "9px", fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase",
+                        color: req.test(newPassword) ? "rgba(255,255,255,0.6)" : "rgba(255,255,255,0.2)"
+                      }}>{req.label}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Confirm password + match indicator */}
+            <div>
+              <label style={{ color: "#4a5578", fontSize: "12px", fontWeight: 600, letterSpacing: "0.05em" }}>CONFIRM NEW PASSWORD</label>
+              <input type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter" && !isPasswordLoading && isNewPasswordStrong && doesPasswordMatch && !isSameAsCurrent) handleChangePassword() }}
+                className="w-full mt-1 px-4 py-2.5 rounded-lg text-white outline-none"
+                style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", fontSize: "14px" }} />
+              {confirmPassword && (
+                <div className={`flex items-center gap-2 mt-1 pl-1 ${doesPasswordMatch ? "" : "animate-pulse"}`}>
+                  {doesPasswordMatch ? (
+                    <>
+                      <ShieldCheck size={12} style={{ color: "#00d2ff" }} />
+                      <span style={{ fontSize: "9px", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "#00d2ff" }}>
+                        Passwords match
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <X size={12} style={{ color: "#ef4444" }} />
+                      <span style={{ fontSize: "9px", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(239,68,68,0.6)" }}>
+                        Passwords do not match
+                      </span>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
+
           <DialogFooter className="mt-6">
             <button onClick={() => { setShowPasswordDialog(false); setCurrentPassword(""); setNewPassword(""); setConfirmPassword(""); }}
               className="px-4 py-2 rounded-lg"
               style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "#e2e8f0" }}>Cancel</button>
-            <button onClick={handleChangePassword} disabled={isPasswordLoading}
+            <button onClick={handleChangePassword} disabled={isPasswordLoading || !isNewPasswordStrong || !doesPasswordMatch || isSameAsCurrent}
               className="px-4 py-2 rounded-lg flex items-center gap-2 disabled:opacity-50"
               style={{ background: "linear-gradient(135deg, #0B7FFF 0%, #0960D9 100%)", color: "white" }}>
               {isPasswordLoading && <Loader2 size={16} className="animate-spin" />} Change Password
@@ -336,6 +522,80 @@ export function AccountManagement() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Disable MFA Dialog */}
+      <Dialog open={showMfaDisableDialog} onOpenChange={v => { setShowMfaDisableDialog(v); setMfaDisableCode(""); }}>
+        <DialogContent style={{ background: "linear-gradient(180deg, #0d1228 0%, #0b0f20 100%)", border: "1px solid rgba(255,255,255,0.1)" }}>
+          <DialogHeader><DialogTitle className="text-white text-xl">Disable Two-Factor Authentication</DialogTitle></DialogHeader>
+          <p style={{ color: "#6b7fa8", fontSize: "13px" }}>Enter your current TOTP code from your authenticator app to confirm. All existing sessions will be invalidated.</p>
+          <div className="mt-4">
+            <label style={{ color: "#4a5578", fontSize: "12px", fontWeight: 600, letterSpacing: "0.05em" }}>TOTP CODE</label>
+            <input type="text" maxLength={6} value={mfaDisableCode}
+              onChange={e => setMfaDisableCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+              onKeyDown={e => { if (e.key === "Enter" && !isMfaDisableLoading && mfaDisableCode.length === 6) handleDisableMfa() }}
+              placeholder="000000"
+              className="w-full mt-1 px-4 py-3 rounded-lg text-white text-center text-2xl tracking-[0.3em] outline-none"
+              style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }} />
+          </div>
+          <DialogFooter className="mt-6">
+            <button onClick={() => { setShowMfaDisableDialog(false); setMfaDisableCode(""); }}
+              className="px-4 py-2 rounded-lg"
+              style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "#e2e8f0" }}>Cancel</button>
+            <button onClick={handleDisableMfa} disabled={isMfaDisableLoading}
+              className="px-4 py-2 rounded-lg flex items-center gap-2 disabled:opacity-50"
+              style={{ background: "#ef4444", color: "white" }}>
+              {isMfaDisableLoading && <Loader2 size={16} className="animate-spin" />} Disable MFA
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Regenerate Backup Code Dialog */}
+      <Dialog open={showBackupRegenDialog} onOpenChange={v => { setShowBackupRegenDialog(v); setBackupRegenCode(""); setNewBackupCode(null); }}>
+        <DialogContent style={{ background: "linear-gradient(180deg, #0d1228 0%, #0b0f20 100%)", border: "1px solid rgba(255,255,255,0.1)" }}>
+          <DialogHeader><DialogTitle className="text-white text-xl">Regenerate Backup Code</DialogTitle></DialogHeader>
+          {newBackupCode ? (
+            <div className="space-y-4">
+              <p style={{ color: "#6b7fa8", fontSize: "13px" }}>Your new backup code is shown below. Store it somewhere safe — it will never be shown again.</p>
+              <div className="bg-black/50 border border-white/10 rounded-xl px-4 py-5 text-center font-mono text-white text-2xl tracking-[0.4em] select-all">
+                {newBackupCode}
+              </div>
+              <button type="button" onClick={() => { navigator.clipboard.writeText(newBackupCode); toast.success("Backup code copied."); }}
+                className="w-full py-3 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center gap-3 hover:bg-white/10 transition-all cursor-pointer">
+                <Copy size={14} className="text-white/40" />
+                <span className="text-white/70 text-[9px] uppercase font-black tracking-widest">Copy to Clipboard</span>
+              </button>
+              <button onClick={() => { setShowBackupRegenDialog(false); setNewBackupCode(null); }}
+                className="w-full h-12 bg-[#00f2ff] hover:bg-white text-black font-black uppercase tracking-widest rounded-xl transition-all">
+                I have saved it — Close
+              </button>
+            </div>
+          ) : (
+            <>
+              <p style={{ color: "#6b7fa8", fontSize: "13px" }}>Enter your current TOTP code to generate a new backup code. The old code is immediately invalidated.</p>
+              <div className="mt-4">
+                <label style={{ color: "#4a5578", fontSize: "12px", fontWeight: 600, letterSpacing: "0.05em" }}>TOTP CODE</label>
+                <input type="text" maxLength={6} value={backupRegenCode}
+                  onChange={e => setBackupRegenCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                  onKeyDown={e => { if (e.key === "Enter" && !isBackupRegenLoading && backupRegenCode.length === 6) handleRegenerateBackupCode() }}
+                  placeholder="000000"
+                  className="w-full mt-1 px-4 py-3 rounded-lg text-white text-center text-2xl tracking-[0.3em] outline-none"
+                  style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }} />
+              </div>
+              <DialogFooter className="mt-6">
+                <button onClick={() => { setShowBackupRegenDialog(false); setBackupRegenCode(""); }}
+                  className="px-4 py-2 rounded-lg"
+                  style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "#e2e8f0" }}>Cancel</button>
+                <button onClick={handleRegenerateBackupCode} disabled={isBackupRegenLoading}
+                  className="px-4 py-2 rounded-lg flex items-center gap-2 disabled:opacity-50"
+                  style={{ background: "rgba(245,158,11,0.15)", border: "1px solid rgba(245,158,11,0.3)", color: "#f59e0b" }}>
+                  {isBackupRegenLoading && <Loader2 size={16} className="animate-spin" />} Generate New Code
+                </button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

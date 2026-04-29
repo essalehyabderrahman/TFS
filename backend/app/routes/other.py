@@ -31,6 +31,46 @@ def _get_settings() -> TeamSettings:
     return s
 
 
+@team_bp.get("/search")
+@jwt_required_custom
+def search_users():
+    """
+    Email prefix search for invite autocomplete.
+    [Security] Admin-only. Returns at most 5 non-suspended, non-root users.
+    Requires at least 2 characters to prevent full-directory enumeration.
+    """
+    actor = current_user()
+    if actor.role != "admin":
+        return jsonify({"error": "FORBIDDEN"}), 403
+
+    q = request.args.get("q", "").strip().lower()
+    if len(q) < 2:
+        return jsonify([]), 200
+
+    users = (
+        User.query
+        .filter(
+            User.email.ilike(f"%{q}%"),
+            User.status != "suspended",
+            User.is_root == False,          # noqa: E712 — SQLAlchemy requires ==
+            User.id != actor.id,
+        )
+        .order_by(User.email)
+        .limit(5)
+        .all()
+    )
+
+    return jsonify([
+        {
+            "id":     u.id,
+            "email":  u.email,
+            "name":   u.name,
+            "avatar": u.avatar or u._initials(),
+        }
+        for u in users
+    ]), 200
+
+
 @team_bp.get("")
 @jwt_required_custom
 def list_team():
@@ -72,7 +112,8 @@ def invite_member():
     if role not in ("admin", "user"):
         return jsonify({"error": "INVALID_ROLE"}), 400
 
-    if role == "admin" and actor.role != "admin":
+    # [Security] Only root may invite with the admin role
+    if role == "admin" and not actor.is_root:
         return jsonify({"error": "FORBIDDEN"}), 403
 
     if User.query.filter_by(email=email).first():
@@ -114,22 +155,29 @@ def update_member(member_id):
 
     data = request.get_json(silent=True) or {}
 
+    # [Security] Root account is immutable — no one may touch it (not even another root)
+    if member.is_root:
+        return jsonify({"error": "ROOT_PROTECTED"}), 403
+
+    # [Security] No admin may change their own role
     if actor.id == member.id and "role" in data:
         return jsonify({"error": "CANNOT_CHANGE_OWN_ROLE"}), 403
 
-    if "role" in data and data["role"] != "admin" and member.role == "admin":
-        if _is_last_admin(exclude_id=member.id):
-            return jsonify({"error": "LAST_ADMIN_PROTECTED"}), 403
-
-    if actor.id != member.id and member.role == "admin" and "status" in data and data["status"] == "suspended":
-        if _is_last_admin(exclude_id=member.id):
-            return jsonify({"error": "LAST_ADMIN_PROTECTED"}), 403
+    # [Security] Only root may promote/demote roles
+    if "role" in data and not actor.is_root:
+        return jsonify({"error": "FORBIDDEN"}), 403
 
     if "role" in data and data["role"] in ("admin", "user"):
+        if member.role == "admin" and data["role"] != "admin":
+            if _is_last_admin(exclude_id=member.id):
+                return jsonify({"error": "LAST_ADMIN_PROTECTED"}), 403
         member.role = data["role"]
+
     if "status" in data and data["status"] in ("active", "pending", "suspended"):
+        if data["status"] == "suspended" and member.role == "admin":
+            if _is_last_admin(exclude_id=member.id):
+                return jsonify({"error": "LAST_ADMIN_PROTECTED"}), 403
         member.status = data["status"]
-        # [Security] Immediately invalidate all sessions on suspension
         if data["status"] == "suspended":
             member.token_version = (member.token_version or 0) + 1
     if "name" in data:
@@ -161,6 +209,9 @@ def delete_member(member_id):
         return jsonify({"error": "NOT_FOUND"}), 404
     if member.id == actor.id:
         return jsonify({"error": "CANNOT_DELETE_SELF"}), 400
+    # [Security] Root account can never be deleted
+    if member.is_root:
+        return jsonify({"error": "ROOT_PROTECTED"}), 403
     if member.role == "admin" and _is_last_admin(exclude_id=member.id):
         return jsonify({"error": "LAST_ADMIN_PROTECTED"}), 403
 
@@ -343,8 +394,8 @@ def change_password():
         return jsonify({"error": "WRONG_PASSWORD"}), 401
         
     # [Security] Enforce strict password policy
-    from app.services.auth_service import _validate_password
-    pw_error = _validate_password(new_pw)
+    from app.services.auth_service import _validate_new_password
+    pw_error = _validate_new_password(new_pw, user.password_hash)
     if pw_error:
         return jsonify({"error": pw_error}), 400
 

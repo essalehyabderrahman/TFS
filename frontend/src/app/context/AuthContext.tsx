@@ -3,6 +3,8 @@ import type { ReactNode } from "react"
 import type { AuthUser } from "@/types"
 import { apiGetMe, apiSignOut } from "@/app/api/auth"
 
+export type SessionExpiredReason = "inactivity" | "absolute" | "revoked"
+
 interface AuthContextValue {
   user: AuthUser | null
   isAuthenticated: boolean
@@ -10,17 +12,27 @@ interface AuthContextValue {
   isInitializing: boolean
   isBackendReachable: boolean
   isAppAdmin: boolean
+  isRootAdmin: boolean    // true only for the seeded superadmin (root-like account)
   isGroupAdmin: boolean   // true if user is admin in at least one group
+  sessionExpiredReason: SessionExpiredReason | null
+  setIsGroupAdmin: (value: boolean) => void
   signIn: (user: AuthUser, mfaPending?: boolean) => void
   clearSession: () => void
   signOut: () => void
+  expireSession: (reason: SessionExpiredReason) => void
+  dismissExpiredSession: () => void
 }
 
-// Module-level ref so apiRequest interceptor can trigger signout
+// Module-level refs so apiRequest interceptor can trigger signout / session expiry
 // without needing to be inside the React tree
 let _signOutRef: (() => void) | null = null
+let _expireSessionRef: ((reason: SessionExpiredReason) => void) | null = null
+
 export function getSignOut(): (() => void) | null {
   return _signOutRef
+}
+export function getExpireSession(): ((reason: SessionExpiredReason) => void) | null {
+  return _expireSessionRef
 }
 
 export const AuthContext = createContext<AuthContextValue | null>(null)
@@ -30,6 +42,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isMfaPending, setIsMfaPending] = useState(false)
   const [isInitializing, setIsInitializing] = useState(true)
   const [isBackendReachable, setIsBackendReachable] = useState(true)
+  const [isGroupAdmin, setIsGroupAdmin] = useState(false)
+  const [sessionExpiredReason, setSessionExpiredReason] = useState<SessionExpiredReason | null>(null)
 
   // On mount: attempt to restore session by hitting /auth/me
   // If the browser holds a valid HttpOnly session cookie, this will succeed.
@@ -71,20 +85,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const clearSession = useCallback(() => {
     setUser(null)
     setIsMfaPending(false)
+    setIsGroupAdmin(false)
   }, [])
 
   const signOut = useCallback(async () => {
-    // Explicitly call the backend to nuke the HttpOnly cookie
     await apiSignOut()
     setUser(null)
     setIsMfaPending(false)
+    setSessionExpiredReason(null)
   }, [])
 
-  // Keep module-level ref in sync so apiRequest interceptor can call it
+  // [Security] expireSession: clears the server-side HttpOnly cookie immediately,
+  // wipes all local auth state, then surfaces the modal with the correct reason.
+  // The cookie is destroyed before the modal renders — the user has no valid session
+  // during the modal window regardless of how they interact with it.
+  const expireSession = useCallback(async (reason: SessionExpiredReason) => {
+    await apiSignOut()          // nuke HttpOnly cookie server-side first
+    setUser(null)
+    setIsMfaPending(false)
+    setIsGroupAdmin(false)
+    setSessionExpiredReason(reason)
+  }, [])
+
+  const dismissExpiredSession = useCallback(() => {
+    setSessionExpiredReason(null)
+  }, [])
+
+  // Keep module-level refs in sync so apiRequest interceptor can call them
   useEffect(() => {
     _signOutRef = signOut
-    return () => { _signOutRef = null }
-  }, [signOut])
+    _expireSessionRef = expireSession
+    return () => {
+      _signOutRef = null
+      _expireSessionRef = null
+    }
+  }, [signOut, expireSession])
 
   return (
     <AuthContext.Provider
@@ -95,10 +130,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isInitializing,
         isBackendReachable,
         isAppAdmin: user?.role === "admin",
-        isGroupAdmin: false, // resolved per-page via fetchGroups — set true if any group has myRole==="admin"
+        isRootAdmin: user?.role === "admin" && user?.isRoot === true,
+        isGroupAdmin,
+        sessionExpiredReason,
+        setIsGroupAdmin,
         signIn,
         signOut,
         clearSession,
+        expireSession,
+        dismissExpiredSession,
       }}
     >
       {children}

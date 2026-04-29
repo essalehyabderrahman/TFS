@@ -1,4 +1,5 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
+import { toast } from "sonner";
 import {
   FileText,
   FileImage,
@@ -90,9 +91,9 @@ export function TransfersTable() {
   const [revokeTransfer, setRevokeTransfer] = useState<Transfer | null>(null);
   const [resendTransfer, setResendTransfer] = useState<Transfer | null>(null);
 
-  // Sync fetched transfers into local state (allows local mutations: delete/resend/revoke)
+  // Sync fetched transfers into local state (allows local mutations: delete/revoke/resend)
   // We use a separate useState so UI actions (delete/revoke/resend) update instantly
-  useMemo(() => setTransfers(fetchedTransfers), [fetchedTransfers]);
+  useEffect(() => { setTransfers(fetchedTransfers); }, [fetchedTransfers]);
 
   // Sorting state
   const [sortField, setSortField] = useState<SortField | null>(null);
@@ -166,37 +167,128 @@ export function TransfersTable() {
   }, [transfers, filterStatus, filterFileType, sortField, sortDirection]);
 
   // Handle actions
-  const handleDelete = (transfer: Transfer) => {
-    setTransfers((prev) => prev.filter((t) => t.id !== transfer.id));
-    setDeleteTransfer(null);
-    setOpenMenu(null);
+  const handleDelete = async (transfer: Transfer) => {
+    const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
+    try {
+      const res = await fetch(`${API_BASE_URL}/transfers/${transfer.id}`, {
+        method: "DELETE",
+        credentials: "include",
+        headers: {
+          "X-CSRF-Token": document.cookie.split("; ").find(r => r.startsWith("csrf_token="))?.split("=")[1] ?? "",
+        },
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        toast.error(data.error === "FORBIDDEN" ? "You do not have permission to delete this file." : "Delete failed. Please try again.");
+        return;
+      }
+      setTransfers((prev) => prev.filter((t) => t.id !== transfer.id));
+      toast.success(`"${transfer.fileName}" deleted.`);
+    } catch {
+      toast.error("Network error. Please try again.");
+    } finally {
+      setDeleteTransfer(null);
+      setOpenMenu(null);
+    }
   };
 
-  const handleResend = (transfer: Transfer) => {
-    // Simulate resend
-    setTransfers((prev) =>
-      prev.map((t) =>
-        t.id === transfer.id ? { ...t, status: "Sending..." as Status, date: "Mar 5, 2026", dateTimestamp: Date.now() } : t
-      )
-    );
-    setResendTransfer(null);
-    setOpenMenu(null);
+  const handleResend = async (transfer: Transfer) => {
+    const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
+    if (!API_BASE_URL) return;
+    try {
+      const csrfToken = document.cookie.split("; ").find(r => r.startsWith("csrf_token="))?.split("=")[1] ?? "";
+      const res = await fetch(`${API_BASE_URL}/transfers/${transfer.id}/resend`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "X-CSRF-Token": csrfToken, "Content-Type": "application/json" },
+      });
+      if (!res.ok) {
+        // Endpoint may not exist yet — fall back to optimistic UI update so UX isn't broken
+        toast.info("Resend queued (pending backend support).");
+        setTransfers((prev) =>
+          prev.map((t) =>
+            t.id === transfer.id ? { ...t, status: "Sending..." as Status } : t
+          )
+        );
+      } else {
+        const data = await res.json();
+        setTransfers((prev) =>
+          prev.map((t) => (t.id === transfer.id ? { ...t, ...data } : t))
+        );
+        toast.success(`"${transfer.fileName}" resent successfully.`);
+      }
+    } catch {
+      toast.error("Network error. Please try again.");
+    } finally {
+      setResendTransfer(null);
+      setOpenMenu(null);
+    }
   };
 
-  const handleRevokeAccess = (transfer: Transfer) => {
-    // Simulate revoke
-    setTransfers((prev) =>
-      prev.map((t) =>
-        t.id === transfer.id ? { ...t, status: "Expired" as Status } : t
-      )
-    );
-    setRevokeTransfer(null);
-    setOpenMenu(null);
+  const handleRevokeAccess = async (transfer: Transfer) => {
+    const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
+    if (!API_BASE_URL) return;
+    try {
+      const csrfToken = document.cookie.split("; ").find(r => r.startsWith("csrf_token="))?.split("=")[1] ?? "";
+      const res = await fetch(`${API_BASE_URL}/transfers/${transfer.id}/revoke`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "X-CSRF-Token": csrfToken, "Content-Type": "application/json" },
+      });
+      if (!res.ok) {
+        // Endpoint may not exist yet — apply optimistic update locally
+        toast.info("Access revoked locally (pending backend support).");
+        setTransfers((prev) =>
+          prev.map((t) =>
+            t.id === transfer.id ? { ...t, status: "Expired" as Status } : t
+          )
+        );
+      } else {
+        setTransfers((prev) =>
+          prev.map((t) =>
+            t.id === transfer.id ? { ...t, status: "Expired" as Status } : t
+          )
+        );
+        toast.success(`Access to "${transfer.fileName}" revoked.`);
+      }
+    } catch {
+      toast.error("Network error. Please try again.");
+    } finally {
+      setRevokeTransfer(null);
+      setOpenMenu(null);
+    }
   };
 
-  const handleDownload = (transfer: Transfer) => {
-    // Simulate download
-    console.log("Downloading:", transfer.fileName);
+  const handleDownload = async (transfer: Transfer) => {
+    const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
+    if (!API_BASE_URL) return;
+    try {
+      const res = await fetch(`${API_BASE_URL}/transfers/${transfer.id}/download`, {
+        method: "GET",
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        toast.error(
+          data.error === "EXPIRED" ? "This file has expired and can no longer be downloaded."
+          : data.error === "FORBIDDEN" ? "You do not have permission to download this file."
+          : "Download failed. Please try again."
+        );
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = transfer.fileName;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      toast.success(`"${transfer.fileName}" downloaded.`);
+    } catch {
+      toast.error("Network error. Please try again.");
+    }
     setOpenMenu(null);
   };
 

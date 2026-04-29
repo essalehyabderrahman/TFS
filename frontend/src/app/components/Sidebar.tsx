@@ -6,6 +6,7 @@ import {
   Download,
   ClipboardList,
   Users,
+  UserCog,
   ShieldCheck,
   Plus,
   ChevronRight,
@@ -13,11 +14,12 @@ import {
 } from "lucide-react";
 
 const allNavItems = [
-  { icon: ArrowUpDown, label: "Active Transfers", id: "active", path: "/dashboard/active", adminOnly: false },
-  { icon: Download, label: "Received Files", id: "received", path: "/dashboard/received", adminOnly: false },
-  { icon: ClipboardList, label: "Audit & Compliance Logs", id: "audit", path: "/dashboard/audit", adminOnly: false },
-  { icon: Users, label: "Team Management", id: "team", path: "/dashboard/team", adminOnly: true },
-  { icon: ShieldCheck, label: "Security Settings", id: "security", path: "/dashboard/security", adminOnly: false },
+  { icon: ArrowUpDown,   label: "Active Transfers",        id: "active",    path: "/dashboard/active",    adminOnly: false, hideForAdmin: false },
+  { icon: Download,      label: "Received Files",          id: "received",  path: "/dashboard/received",  adminOnly: false, hideForAdmin: true  },
+  { icon: ClipboardList, label: "Audit & Compliance Logs", id: "audit",     path: "/dashboard/audit",     adminOnly: false, hideForAdmin: false },
+  { icon: UserCog,       label: "User Management",         id: "users",     path: "/dashboard/users",     adminOnly: true,  hideForAdmin: false },
+  { icon: Users,         label: "Team Management",         id: "team",      path: "/dashboard/team",      adminOnly: true,  hideForAdmin: false },
+  { icon: ShieldCheck,   label: "Security Settings",       id: "security",  path: "/dashboard/security",  adminOnly: false, hideForAdmin: false },
 ];
 
 interface SidebarProps {
@@ -31,7 +33,9 @@ export function Sidebar({ isOpen, onClose, onNewTransfer }: SidebarProps) {
   const location = useLocation();
   const { user, isAppAdmin } = useAuth();
 
-  const navItems = allNavItems.filter(item => !item.adminOnly || isAppAdmin);
+  const navItems = allNavItems.filter(item =>
+    (!item.adminOnly || isAppAdmin) && (!item.hideForAdmin || !isAppAdmin)
+  );
 
   
   // Determine active state from current location

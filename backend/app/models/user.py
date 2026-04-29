@@ -28,6 +28,8 @@ class User(db.Model):
 
     # Token Rotation
     token_version        = db.Column(db.Integer, default=1)         # Incremented on password change to invalidate sessions
+    # [Security] Root account flag — set only on the seeded superadmin. Immutable after creation.
+    is_root = db.Column(db.Boolean, nullable=False, default=False)
 
     # Security settings snapshot (stored per-user)
     session_timeout     = db.Column(db.Integer, default=60)    # minutes
@@ -86,7 +88,9 @@ class User(db.Model):
             "avatar":     self.avatar or self._initials(),
             "company":    self.company,
             "plan":       self.plan,
-            "mfaEnabled": self.mfa_enabled,
+            "mfaEnabled":       self.mfa_enabled,
+            "backupCodeExists": self.backup_codes is not None,
+            "isRoot":           self.is_root,
             "joinedAt":   self.created_at.isoformat(),
             "lastActive": self.last_active.isoformat(),
         }
@@ -99,6 +103,7 @@ class User(db.Model):
             "email":  self.email,
             "role":   self.role,
             "status": self.status,
+            "isRoot": self.is_root,
             "avatar": self.avatar or self._initials(),
         }
 

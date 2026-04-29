@@ -21,16 +21,7 @@ async function attemptRefresh(): Promise<boolean> {
           "X-CSRF-Token": getCsrfToken(),
         },
       })
-      if (!res.ok) {
-        // Refresh failed — session truly expired or revoked
-        const { getSignOut } = await import("@/app/context/AuthContext")
-        const signOut = getSignOut()
-        if (signOut) await signOut()
-        // Redirect to signin with expired notice
-        window.location.href = "/signin?reason=session_expired"
-        return false
-      }
-      return true
+      return res.ok
     } catch {
       return false
     } finally {
@@ -74,7 +65,11 @@ export async function apiRequest<T>(
 
   let response = await makeRequest()
 
-  // [Session] Intercept TOKEN_EXPIRED — attempt silent refresh then retry once
+  // [Session] Intercept expired/invalidated sessions.
+  // UNAUTHORIZED  → token expired (15-min idle)  → try silent refresh first; show modal if refresh fails
+  // SESSION_EXPIRED → 8-hour absolute wall hit    → no refresh attempt; show modal immediately
+  // SESSION_REVOKED → password changed elsewhere  → no refresh attempt; show modal immediately
+  // All other 401s (INVALID_CREDENTIALS etc.) pass through untouched.
   if (response.status === 401) {
     let errorCode: string | null = null
     try {
@@ -83,18 +78,31 @@ export async function apiRequest<T>(
       errorCode = errorData.error ?? null
     } catch { /* ignore */ }
 
-    if (errorCode === "TOKEN_EXPIRED") {
+    if (errorCode === "UNAUTHORIZED") {
+      // May be a naturally expired token — attempt a silent refresh first
       const refreshed = await attemptRefresh()
       if (refreshed) {
-        // Update CSRF header with potentially new cookie after refresh
         if (csrfHeader["X-CSRF-Token"] !== undefined) {
           csrfHeader["X-CSRF-Token"] = getCsrfToken()
         }
         response = await makeRequest()
       } else {
-        // attemptRefresh already signed out and redirected
+        // Refresh failed (8-hr wall or truly invalid) — surface the modal
+        const { getExpireSession } = await import("@/app/context/AuthContext")
+        const expireSession = getExpireSession()
+        if (expireSession) expireSession("inactivity")
         throw new Error("SESSION_EXPIRED")
       }
+    } else if (errorCode === "SESSION_EXPIRED") {
+      const { getExpireSession } = await import("@/app/context/AuthContext")
+      const expireSession = getExpireSession()
+      if (expireSession) expireSession("absolute")
+      throw new Error("SESSION_EXPIRED")
+    } else if (errorCode === "SESSION_REVOKED") {
+      const { getExpireSession } = await import("@/app/context/AuthContext")
+      const expireSession = getExpireSession()
+      if (expireSession) expireSession("revoked")
+      throw new Error("SESSION_REVOKED")
     }
   }
 

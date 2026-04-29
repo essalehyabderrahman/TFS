@@ -49,8 +49,9 @@ def upload():
         expiry_days = int(request.form.get("expiryDays", 7))
     except (ValueError, TypeError):
         expiry_days = 7
-    # [Security] Clamp to sane bounds: minimum 1 day, maximum 365 days
-    expiry_days = max(1, min(expiry_days, 365))
+    # [Security] 0 = never expires (no clamp). Otherwise clamp to 1–365 days.
+    if expiry_days != 0:
+        expiry_days = max(1, min(expiry_days, 365))
 
     result = file_service.upload_file(
         file=file,

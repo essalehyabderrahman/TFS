@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React from "react";
 import { createBrowserRouter, Navigate } from "react-router";
 import { useAuth } from "./hooks/useAuth";
 import { MainLayout } from "./components/MainLayout";
@@ -7,6 +7,7 @@ import { ActiveTransfers } from "./pages/ActiveTransfers";
 import { ReceivedFiles } from "./pages/ReceivedFiles";
 import { AuditLogs } from "./pages/AuditLogs";
 import { TeamManagement } from "./pages/TeamManagement";
+import { UserManagement } from "./pages/UserManagement";
 import { SecuritySettings } from "./pages/SecuritySettings";
 import { AccountManagement } from "./pages/AccountManagement";
 import { Welcome } from "./pages/Welcome";
@@ -72,6 +73,7 @@ export const router = createBrowserRouter([
           { path: "active", Component: ActiveTransfers },
           { path: "received", Component: ReceivedFiles },
           { path: "audit", Component: AuditLogs },
+          { path: "users", Component: UserManagement },
           { path: "team", Component: TeamManagement },
           { path: "security", Component: SecuritySettings },
           { path: "account", Component: AccountManagement },

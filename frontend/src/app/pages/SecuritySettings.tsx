@@ -8,8 +8,7 @@ export function SecuritySettings() {
   const [isLoading, setIsLoading] = useState(true);
   const [mfaEnabled, setMfaEnabled] = useState(false);
   
-  const [emailNotifications, setEmailNotifications] = useState(true);
-  const [loginAlerts, setLoginAlerts] = useState(true);
+  const [loginNotifications, setLoginNotifications] = useState(true);
   
 
 
@@ -25,8 +24,7 @@ export function SecuritySettings() {
         }>("/security/settings");
         if (data) {
           setMfaEnabled(Boolean(data.mfaEnabled));
-          setEmailNotifications(Boolean(data.loginNotifications));
-          setLoginAlerts(Boolean(data.loginNotifications));
+          setLoginNotifications(Boolean(data.loginNotifications));
         }
       } catch (error) {
         toast.error("Failed to load security settings");
@@ -38,23 +36,17 @@ export function SecuritySettings() {
   }, []);
 
   const handleNotificationsToggle = async (newValue: boolean) => {
-    const prevValue = emailNotifications; // they share the same backend field `loginNotifications`
-    
-    // Optimistic update
-    setEmailNotifications(newValue);
-    setLoginAlerts(newValue);
-
+    const prevValue = loginNotifications;
+    setLoginNotifications(newValue);
     try {
       await apiRequest("/security/settings", {
         method: "PATCH",
         body: { loginNotifications: newValue },
       });
       toast.success("Settings saved.");
-    } catch (error) {
+    } catch {
       toast.error("Failed to save settings.");
-      // Revert on error
-      setEmailNotifications(prevValue);
-      setLoginAlerts(prevValue);
+      setLoginNotifications(prevValue);
     }
   };
 
@@ -126,25 +118,13 @@ export function SecuritySettings() {
         </div>
 
         <div className="space-y-4">
-          <div className="flex items-center justify-between py-3 border-b" style={{ borderColor: "rgba(255,255,255,0.08)" }}>
-            <div>
-              <p className="text-white font-medium">Email Notifications</p>
-              <p style={{ color: "#6b7fa8", fontSize: "13px" }}>Receive security alerts via email</p>
-            </div>
-            <Switch
-              checked={emailNotifications}
-              onCheckedChange={handleNotificationsToggle}
-              disabled={isLoading}
-            />
-          </div>
-
           <div className="flex items-center justify-between py-3">
             <div>
-              <p className="text-white font-medium">Login Alerts</p>
-              <p style={{ color: "#6b7fa8", fontSize: "13px" }}>Get notified of new device logins</p>
+              <p className="text-white font-medium">Login Notifications</p>
+              <p style={{ color: "#6b7fa8", fontSize: "13px" }}>Receive alerts for new sign-ins and security events</p>
             </div>
             <Switch
-              checked={loginAlerts}
+              checked={loginNotifications}
               onCheckedChange={handleNotificationsToggle}
               disabled={isLoading}
             />

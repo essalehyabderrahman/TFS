@@ -48,7 +48,7 @@ export function StatsBar() {
     },
     {
       label: "Authorized Users",
-      value: statsData?.totalUsers?.toString() || "1",
+      value: statsData?.totalUsers != null ? statsData.totalUsers.toString() : "—",
       sub: "Verified platform users",
       icon: CheckCircle2,
       color: "#0B7FFF",

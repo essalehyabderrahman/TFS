@@ -1,11 +1,10 @@
 import { useState } from "react";
-import { Download, FileCheck, Eye, Trash2, Search, Filter, ChevronDown, Loader2 } from "lucide-react";
+import { Download, FileCheck, Eye, Search, Filter, ChevronDown, Loader2 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../components/ui/dialog";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "../components/ui/alert-dialog";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { useReceivedTransfers } from "../hooks/useReceivedTransfers";
-import { useAuth } from "../hooks/useAuth";
+// import { useAuth } from "../hooks/useAuth"; // unused
 
 interface ReceivedFile {
   id: string;
@@ -20,12 +19,11 @@ interface ReceivedFile {
 }
 
 export function ReceivedFiles() {
-  const { transfers, loading, refresh } = useReceivedTransfers();
-  const { user } = useAuth();
+  const { transfers, loading } = useReceivedTransfers();
+  // const { user } = useAuth(); // unused
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "available" | "downloaded" | "expired">("all");
   const [selectedFile, setSelectedFile] = useState<ReceivedFile | null>(null);
-  const [fileToDelete, setFileToDelete] = useState<string | null>(null);
   const [showFilterDropdown, setShowFilterDropdown] = useState(false);
 
   // /transfers/received already scopes to current user — no client-side filter needed
@@ -37,7 +35,11 @@ export function ReceivedFiles() {
       size: t.size,
       receivedAt: new Date(t.dateTimestamp),
       expiresAt: t.expiryDate ? new Date(t.expiryDate) : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-      status: (t.status === "Delivered" ? "available" : t.status.toLowerCase()) as any,
+      status: (
+        t.status === "Delivered" ? "available" :
+        t.status === "Expired"   ? "expired" :
+        "available"  // Pending / Sending... files addressed to this user are treated as available
+      ) as ReceivedFile["status"],
       encryption: t.encryptionType
     }));
 
@@ -106,32 +108,6 @@ export function ReceivedFiles() {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
-    if (!API_BASE_URL) return
-    try {
-      const csrfToken = document.cookie.split("; ").find(r => r.startsWith("csrf_token="))?.split("=")[1] ?? ""
-      const res = await fetch(`${API_BASE_URL}/transfers/${id}`, {
-        method: "DELETE",
-        credentials: "include",
-        headers: { "X-CSRF-Token": csrfToken },
-      })
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
-        toast.error(data.error === "FORBIDDEN"
-          ? "You do not have permission to delete this file."
-          : "Delete failed. Please try again.")
-        setFileToDelete(null)
-        return
-      }
-      toast.success("File deleted successfully.")
-      setFileToDelete(null)
-      refresh()
-    } catch {
-      toast.error("Network error. Please try again.")
-      setFileToDelete(null)
-    }
-  };
 
   return (
     <div className="flex flex-col gap-4 sm:gap-6">
@@ -352,17 +328,6 @@ export function ReceivedFiles() {
                       <span className="hidden sm:inline">Download</span>
                     </button>
                   )}
-                  <button
-                    onClick={() => setFileToDelete(file.id)}
-                    className="p-2.5 rounded-lg transition-colors hover:bg-red-500/10"
-                    style={{ 
-                      border: "1px solid rgba(239,68,68,0.2)",
-                      color: "#ef4444" 
-                    }}
-                    title="Delete"
-                  >
-                    <Trash2 size={16} />
-                  </button>
                 </div>
               </div>
             </div>
@@ -436,42 +401,6 @@ export function ReceivedFiles() {
         </DialogContent>
       </Dialog>
 
-      {/* Delete Confirmation */}
-      <AlertDialog open={!!fileToDelete} onOpenChange={() => setFileToDelete(null)}>
-        <AlertDialogContent
-          style={{
-            background: "linear-gradient(180deg, #0d1228 0%, #0b0f20 100%)",
-            border: "1px solid rgba(255,255,255,0.1)",
-          }}
-        >
-          <AlertDialogHeader>
-            <AlertDialogTitle className="text-white">Delete Received File</AlertDialogTitle>
-            <AlertDialogDescription style={{ color: "#6b7fa8" }}>
-              Are you sure you want to delete this file? This action cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel
-              style={{
-                background: "rgba(255,255,255,0.04)",
-                border: "1px solid rgba(255,255,255,0.08)",
-                color: "#e2e8f0",
-              }}
-            >
-              Cancel
-            </AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => fileToDelete && handleDelete(fileToDelete)}
-              style={{
-                background: "#ef4444",
-                color: "white",
-              }}
-            >
-              Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
   );
 }

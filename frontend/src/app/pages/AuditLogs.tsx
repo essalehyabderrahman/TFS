@@ -39,7 +39,7 @@ export function AuditLogs() {
           user: log.user,
           action: log.action,
           resource: log.resource,
-          ipAddress: log.ip_address,
+          ipAddress: log.ipAddress,
           location: log.location,
           status: log.status,
           details: log.details

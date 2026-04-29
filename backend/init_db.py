@@ -1,4 +1,5 @@
 import os
+import sqlite3
 import uuid
 import random
 from datetime import datetime, timezone, timedelta
@@ -12,6 +13,9 @@ from app.extensions import db
 from app.models.user import User
 from app.models.transfer import Transfer, FileVersion
 from app.models.audit_log import AuditLog
+from app.models.group import Group, GroupMember, GroupSettings
+from app.models.team_settings import TeamSettings
+from app.models.notification import Notification
 
 # Create the flask app configured appropriately
 app = create_app()
@@ -32,8 +36,9 @@ with app.app_context():
     admin = User(
         id="u1_admin",
         name="Admin User",
-        email="admin@company.com",
+        email="admin@tfs.com",
         role="admin",
+        is_root=True,
         status="active",
         avatar="AU",
         created_at=datetime.now(timezone.utc) - timedelta(days=90),
@@ -44,8 +49,8 @@ with app.app_context():
     sarah = User(
         id="u2_sarah",
         name="Sarah Chen",
-        email="sarah.chen@company.com",
-        role="editor",
+        email="sarah.chen@tfs.com",
+        role="user",
         status="active",
         avatar="SC",
         created_at=datetime.now(timezone.utc) - timedelta(days=60),
@@ -56,8 +61,8 @@ with app.app_context():
     michael = User(
         id="u3_michael",
         name="Michael Roberts",
-        email="michael.roberts@company.com",
-        role="editor",
+        email="michael.roberts@tfs.com",
+        role="user",
         status="active",
         avatar="MR",
         created_at=datetime.now(timezone.utc) - timedelta(days=20),
@@ -68,8 +73,8 @@ with app.app_context():
     emily = User(
         id="u4_emily",
         name="Emily Zhang",
-        email="emily.zhang@company.com",
-        role="viewer",
+        email="emily.zhang@tfs.com",
+        role="user",
         status="active",
         avatar="EZ",
         created_at=datetime.now(timezone.utc) - timedelta(days=10)
@@ -79,8 +84,8 @@ with app.app_context():
     david = User(
         id="u5_david",
         name="David Martinez",
-        email="david.martinez@company.com",
-        role="editor",
+        email="david.martinez@tfs.com",
+        role="user",
         status="active",
         avatar="DM",
         created_at=datetime.now(timezone.utc) - timedelta(days=1)
@@ -185,7 +190,6 @@ with app.app_context():
 
     db.session.add_all(logs)
 
-    from app.models.notification import Notification
 
     # 4. Notifications
     notifs = [
@@ -199,3 +203,6 @@ with app.app_context():
 
     db.session.commit()
     print("Database initialization and data seeding completed successfully!")
+
+if __name__ == "__main__":
+    print("Init complete. Run this script directly to reset and reseed the DB.")
