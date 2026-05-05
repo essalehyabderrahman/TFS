@@ -6,7 +6,7 @@ interface UseTransfersResult {
   transfers: Transfer[];
   loading: boolean;
   error: string | null;
-  refresh: () => void;
+  refetch: () => void;
 }
 
 export function useTransfers(): UseTransfersResult {
@@ -27,5 +27,5 @@ export function useTransfers(): UseTransfersResult {
     load();
   }, [load]);
 
-  return { transfers, loading, error, refresh: load };
+  return { transfers, loading, error, refetch: load };
 }

@@ -9,6 +9,8 @@ class TeamSettings(db.Model):
     allow_member_directory  = db.Column(db.Boolean, nullable=False, default=False)
     allow_member_invite     = db.Column(db.Boolean, nullable=False, default=False)
     allow_external_sharing  = db.Column(db.Boolean, nullable=False, default=False)
+    require_mfa             = db.Column(db.Boolean, nullable=False, default=False)
+    allow_signup            = db.Column(db.Boolean, nullable=False, default=True)
     updated_at              = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc),
                                         onupdate=lambda: datetime.now(timezone.utc))
     updated_by_id           = db.Column(db.String(36), db.ForeignKey("users.id"), nullable=True)
@@ -20,6 +22,8 @@ class TeamSettings(db.Model):
             "allowMemberDirectory": self.allow_member_directory,
             "allowMemberInvite":    self.allow_member_invite,
             "allowExternalSharing": self.allow_external_sharing,
+            "requireMfa":           self.require_mfa,
+            "allowSignup":          self.allow_signup,
             "updatedAt":            self.updated_at.isoformat() if self.updated_at else None,
             "updatedBy":            self.updated_by.email if self.updated_by else None,
         }

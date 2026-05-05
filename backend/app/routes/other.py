@@ -348,15 +348,30 @@ def get_account():
         db.func.sum(Transfer.size_bytes)
     ).filter_by(uploaded_by_id=user.id, is_deleted=False).scalar() or 0
 
+    settings = _get_settings()
     result = {
         **user.to_dict(),
         "transfersCount": transfers_count,
         "storageUsedBytes": total_bytes,
+        "requireMfa": settings.require_mfa,
     }
 
-    # [Security] Only expose org headcount to admins
-    if user.role == "admin":
+    # Group membership counts — scoped by role
+    from app.models.group import GroupMember
+    if user.is_root:
+        # Root admin sees the full platform headcount
         result["totalUsers"] = User.query.count()
+        result["groupCount"] = None  # not shown for root
+    elif user.role == "admin":
+        # Regular admin sees how many groups they administrate
+        result["groupCount"] = GroupMember.query.filter_by(
+            user_id=user.id, role="admin"
+        ).count()
+    else:
+        # Regular user sees how many groups they belong to
+        result["groupCount"] = GroupMember.query.filter_by(
+            user_id=user.id
+        ).count()
 
     return jsonify(result), 200
 
@@ -433,9 +448,23 @@ def change_password():
 def delete_account():
     user = current_user()
 
-    # [Security] Prevent deleting the last active admin
+    # [Security] Root admin account can never be self-deleted
+    if user.is_root:
+        return jsonify({"error": "ROOT_PROTECTED"}), 403
+
+    # [Security] Prevent deleting the last active platform admin
     if user.role == "admin" and _is_last_admin(exclude_id=user.id):
         return jsonify({"error": "LAST_ADMIN_PROTECTED"}), 403
+
+    # [Security] Prevent deleting account if user is the sole admin of any group
+    from app.models.group import GroupMember
+    memberships = GroupMember.query.filter_by(user_id=user.id, role="admin").all()
+    for m in memberships:
+        group_admin_count = GroupMember.query.filter_by(
+            group_id=m.group_id, role="admin"
+        ).count()
+        if group_admin_count <= 1:
+            return jsonify({"error": "LAST_GROUP_ADMIN_PROTECTED"}), 403
 
     from app.models.transfer import Transfer
     transfers = Transfer.query.filter_by(uploaded_by_id=user.id).all()
@@ -459,6 +488,81 @@ def delete_account():
     response = jsonify({"ok": True})
     unset_jwt_cookies(response)
     return response, 200
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# APP-WIDE PLATFORM SETTINGS  (root admin only)
+# ══════════════════════════════════════════════════════════════════════════════
+app_bp = Blueprint("app", __name__, url_prefix="/app")
+
+
+def _require_root(actor):
+    """Returns a 403 response tuple if the actor is not the root admin, else None."""
+    if not actor.is_root:
+        return jsonify({"error": "FORBIDDEN"}), 403
+    return None
+
+
+@app_bp.get("/settings")
+@jwt_required_custom
+def get_app_settings():
+    actor = current_user()
+    err = _require_root(actor)
+    if err:
+        return err
+    settings = _get_settings()
+    return jsonify({
+        "requireMfa":          settings.require_mfa,
+        "allowSignup":         settings.allow_signup,
+        "allowExternalSharing": settings.allow_external_sharing,
+    }), 200
+
+
+@app_bp.patch("/settings")
+@csrf_protect
+@jwt_required_custom
+def update_app_settings():
+    actor = current_user()
+    err = _require_root(actor)
+    if err:
+        return err
+
+    settings = _get_settings()
+    data     = request.get_json(silent=True) or {}
+
+    allowed = {
+        "requireMfa":           "require_mfa",
+        "allowSignup":          "allow_signup",
+        "allowExternalSharing": "allow_external_sharing",
+    }
+
+    changed = []
+    for json_key, db_field in allowed.items():
+        if json_key in data:
+            new_val = bool(data[json_key])
+            setattr(settings, db_field, new_val)
+            changed.append(f"{json_key}={new_val}")
+
+    if not changed:
+        return jsonify({"error": "NO_VALID_FIELDS"}), 400
+
+    settings.updated_by_id = actor.id
+    db.session.add(AuditLog(
+        id=str(uuid.uuid4()),
+        user_id=actor.id,
+        user_email=actor.email,
+        action="APP_SETTINGS_UPDATED",
+        resource="app_settings",
+        ip_address=request.remote_addr,
+        status="success",
+        details=f"Platform policy updated: {', '.join(changed)}",
+    ))
+    db.session.commit()
+    return jsonify({
+        "requireMfa":          settings.require_mfa,
+        "allowSignup":         settings.allow_signup,
+        "allowExternalSharing": settings.allow_external_sharing,
+    }), 200
 
 
 # ══════════════════════════════════════════════════════════════════════════════

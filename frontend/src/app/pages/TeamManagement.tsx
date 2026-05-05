@@ -44,6 +44,7 @@ export function TeamManagement() {
   const [inviteRole, setInviteRole] = useState<"admin" | "member">("member")
   const [isInviting, setIsInviting] = useState(false)
   const [showRoleDropdown, setShowRoleDropdown] = useState(false)
+  const [openMemberRoleDropdown, setOpenMemberRoleDropdown] = useState<string | null>(null)
   const [emailSuggestions, setEmailSuggestions] = useState<import("../api/groups").UserSuggestion[]>([])
   const [showSuggestions, setShowSuggestions] = useState(false)
   const [suggestionDebounce, setSuggestionDebounce] = useState<ReturnType<typeof setTimeout> | null>(null)
@@ -72,6 +73,7 @@ export function TeamManagement() {
   }
 
   async function handleExpandGroup(groupId: string) {
+    setOpenMemberRoleDropdown(null)
     if (expandedGroup === groupId) {
       setExpandedGroup(null)
       return
@@ -314,16 +316,57 @@ export function TeamManagement() {
                                   </div>
                                   <p style={{ color: "#6b7fa8", fontSize: "12px" }}>{member.userEmail}</p>
                                 </div>
-                                {/* Only root can change group-member roles */}
-                                {isRootAdmin ? (
-                                  <select
-                                    value={member.role}
-                                    onChange={e => handleRoleChange(group.id, member.userId, e.target.value as "admin" | "member")}
-                                    className="px-2 py-1 rounded text-xs text-white outline-none"
-                                    style={{ background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.1)" }}>
-                                    <option value="member">Member</option>
-                                    <option value="admin">Admin</option>
-                                  </select>
+                                {/* Any app admin can change group-member roles */}
+                                {isAppAdmin ? (
+                                  <div className="relative">
+                                    <button
+                                      type="button"
+                                      onClick={() => setOpenMemberRoleDropdown(
+                                        openMemberRoleDropdown === member.id ? null : member.id
+                                      )}
+                                      className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs transition-colors hover:bg-white/10"
+                                      style={{
+                                        background: "rgba(255,255,255,0.06)",
+                                        border: "1px solid rgba(255,255,255,0.1)",
+                                        color: member.role === "admin" ? "#0B7FFF" : "#6b7fa8",
+                                        minWidth: "80px",
+                                      }}
+                                    >
+                                      <span className="capitalize flex-1 text-left">{member.role}</span>
+                                      <ChevronDown size={11} style={{ color: "#6b7fa8", flexShrink: 0 }} />
+                                    </button>
+                                    {openMemberRoleDropdown === member.id && (
+                                      <div
+                                        className="absolute right-0 mt-1 rounded-lg overflow-hidden z-20"
+                                        style={{
+                                          background: "#0d1228",
+                                          border: "1px solid rgba(255,255,255,0.1)",
+                                          boxShadow: "0 10px 40px rgba(0,0,0,0.6)",
+                                          minWidth: "110px",
+                                        }}
+                                      >
+                                        {(["member", "admin"] as const).map(r => (
+                                          <button
+                                            key={r}
+                                            type="button"
+                                            onClick={() => {
+                                              setOpenMemberRoleDropdown(null)
+                                              if (r !== member.role) handleRoleChange(group.id, member.userId, r)
+                                            }}
+                                            className="w-full px-3 py-2 text-left text-xs transition-colors hover:bg-white/5"
+                                            style={{
+                                              color: r === member.role
+                                                ? "#0B7FFF"
+                                                : "#e2e8f0",
+                                              fontWeight: r === member.role ? 700 : 400,
+                                            }}
+                                          >
+                                            <span className="capitalize">{r}</span>
+                                          </button>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
                                 ) : (
                                   <span className="px-2 py-1 rounded text-xs capitalize"
                                     style={{ color: member.role === "admin" ? "#0B7FFF" : "#6b7fa8", background: "rgba(255,255,255,0.04)" }}>
@@ -472,7 +515,7 @@ export function TeamManagement() {
             </div>
             <div>
               <label style={{ color: "#4a5578", fontSize: "12px", fontWeight: 600, letterSpacing: "0.05em" }}>ROLE</label>
-              {isRootAdmin ? (
+              {isAppAdmin ? (
                 <div className="relative mt-1">
                   <button
                     type="button"

@@ -53,7 +53,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .then((result) => {
         if (result.ok && result.user) {
           setUser(result.user)
-          setIsMfaPending(false)
+          // Restore mfa_pending state after a hard reload — without this,
+          // a user with an mfa_pending cookie could navigate to any dashboard
+          // page on reload because isMfaPending would default to false.
+          setIsMfaPending(Boolean(result.mfaPending))
           setIsBackendReachable(true)
         } else if (result.error === "MFA_REQUIRED") {
           // Stale MFA-pending cookie on load — treat as unauthenticated.

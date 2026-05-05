@@ -175,8 +175,8 @@ def invite_member(group_id):
     if role not in ("admin", "member"):
         return jsonify({"error": "INVALID_ROLE"}), 400
 
-    # Only root can promote someone to group admin
-    if role == "admin" and not actor.is_root:
+    # Any app admin can assign group-level roles (group admin ≠ platform admin)
+    if role == "admin" and actor.role != "admin":
         return jsonify({"error": "FORBIDDEN"}), 403
 
     target = User.query.filter_by(email=user_email).first()
@@ -234,8 +234,8 @@ def update_member(group_id, user_id):
     if new_role not in ("admin", "member"):
         return jsonify({"error": "INVALID_ROLE"}), 400
 
-    # Only root can promote to group admin
-    if new_role == "admin" and not actor.is_root:
+    # Any app admin can promote to group admin
+    if new_role == "admin" and actor.role != "admin":
         return jsonify({"error": "FORBIDDEN"}), 403
 
     # Protect last group admin
@@ -298,6 +298,102 @@ def remove_member(group_id, user_id):
     db.session.delete(member)
     db.session.commit()
     return jsonify({"removed": True}), 200
+
+
+# ── GET /groups/<group_id>/transfers ─────────────────────────────────────────
+@groups_bp.get("/<group_id>/transfers")
+@jwt_required_custom
+def list_group_transfers(group_id):
+    """
+    List all non-deleted transfers scoped to this group.
+    Gated by allow_group_transfers for non-admins.
+    """
+    user  = current_user()
+    group = db.session.get(Group, group_id)
+    if not group:
+        return jsonify({"error": "NOT_FOUND"}), 404
+
+    if not _is_group_member(user, group):
+        return jsonify({"error": "FORBIDDEN"}), 403
+
+    if not _is_group_admin(user, group):
+        settings = group.settings
+        if not settings or not settings.allow_group_transfers:
+            return jsonify({"error": "GROUP_TRANSFERS_DISABLED"}), 403
+
+    from app.models.transfer import Transfer
+    transfers = (
+        Transfer.query
+        .filter_by(group_id=group_id, is_deleted=False)
+        .order_by(Transfer.created_at.desc())
+        .all()
+    )
+    return jsonify([t.to_dict() for t in transfers]), 200
+
+
+# ── POST /groups/<group_id>/transfers ─────────────────────────────────────────
+@groups_bp.post("/<group_id>/transfers")
+@csrf_protect
+@jwt_required_custom
+def upload_group_transfer(group_id):
+    """
+    Upload a file scoped to this group.
+    Gated by allow_group_transfers for non-admins.
+    """
+    from flask import current_app
+    from app.services import file_service
+
+    user  = current_user()
+    group = db.session.get(Group, group_id)
+    if not group:
+        return jsonify({"error": "NOT_FOUND"}), 404
+
+    if not _is_group_member(user, group):
+        return jsonify({"error": "FORBIDDEN"}), 403
+
+    if not _is_group_admin(user, group):
+        settings = group.settings
+        if not settings or not settings.allow_group_transfers:
+            return jsonify({"error": "GROUP_TRANSFERS_DISABLED"}), 403
+
+    if "file" not in request.files:
+        return jsonify({"error": "NO_FILE"}), 400
+
+    file = request.files["file"]
+    try:
+        expiry_days = int(request.form.get("expiryDays", 7))
+    except (ValueError, TypeError):
+        expiry_days = 7
+    if expiry_days != 0:
+        expiry_days = max(1, min(expiry_days, 365))
+
+    result = file_service.upload_file(
+        file=file,
+        uploader_id=user.id,
+        recipient_email="",
+        expiry_days=expiry_days,
+        upload_folder=current_app.config["UPLOAD_FOLDER"],
+        allowed_ext=current_app.config["ALLOWED_EXTENSIONS"],
+        ip=_ip(),
+        group_id=group_id,
+    )
+
+    if not result["ok"]:
+        return jsonify({"error": result["error"]}), 400
+
+    db.session.add(AuditLog(
+        id=str(uuid.uuid4()),
+        user_id=user.id,
+        user_email=user.email,
+        action="GROUP_FILE_UPLOADED",
+        resource=group.name,
+        ip_address=_ip(),
+        status="success",
+        details=f"{result['transfer']['fileName']} uploaded to group '{group.name}'.",
+        group_id=group_id,
+    ))
+    db.session.commit()
+    return jsonify(result["transfer"]), 201
 
 
 # ── GET /groups/<group_id>/settings ──────────────────────────────────────────

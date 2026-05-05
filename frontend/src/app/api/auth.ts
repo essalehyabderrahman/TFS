@@ -22,6 +22,7 @@ interface AuthResponse {
   ok: boolean
   user?: AuthUser
   mfaRequired?: boolean
+  mfaPending?: boolean
   error?: string
 }
 
@@ -166,7 +167,7 @@ export async function apiGetMe(): Promise<AuthResponse> {
     if (!res.ok) {
       return { ok: false, error: data.error }
     }
-    return { ok: true, user: data.user }
+    return { ok: true, user: data.user, mfaPending: Boolean(data.mfaPending) }
   } catch {
     return { ok: false, error: "NETWORK_ERROR" }
   }

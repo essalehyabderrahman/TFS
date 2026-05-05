@@ -113,7 +113,8 @@ def _log(action, user_email, user_id, status, ip, resource="", details=""):
 # ──────────────────────────────────────────────────────────────────────────────
 
 def upload_file(file: FileStorage, uploader_id: str, recipient_email: str,
-                expiry_days: int, upload_folder: str, allowed_ext: set, ip: str) -> dict:
+                expiry_days: int, upload_folder: str, allowed_ext: set, ip: str,
+                group_id: str = None) -> dict:
     uploader = db.session.get(User, uploader_id)
     if not uploader:
         return {"ok": False, "error": "USER_NOT_FOUND"}
@@ -147,6 +148,7 @@ def upload_file(file: FileStorage, uploader_id: str, recipient_email: str,
         recipient_email=recipient_email or None,
         expiry_date=expiry,
         uploaded_by_id=uploader_id,
+        group_id=group_id or None,
         status="Delivered" if recipient_email else "Pending",
         current_version=1,
     )
@@ -180,6 +182,16 @@ def upload_file(file: FileStorage, uploader_id: str, recipient_email: str,
 
     _log("FILE_UPLOAD", uploader.email, uploader_id, "success", ip,
          resource=safe_name, details=f"{size_bytes} bytes (encrypted with AES-256-GCM)")
+
+    # [Contacts] Auto-add recipient as a contact of the uploader
+    if recipient_email:
+        from app.routes.contacts import _auto_add_contact
+        _auto_add_contact(uploader_id, recipient_email, "sent_to")
+        # Auto-add uploader as a contact of the recipient (received_from)
+        recipient = User.query.filter_by(email=recipient_email).first()
+        if recipient:
+            _auto_add_contact(recipient.id, uploader.email, "received_from")
+
     db.session.commit()
     return {"ok": True, "transfer": transfer.to_dict()}
 

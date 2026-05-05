@@ -82,8 +82,12 @@ const statusConfig: Record<Status, { bg: string; color: string; dot: string }> =
 type SortField = "fileName" | "date" | "size" | "status";
 type SortDirection = "asc" | "desc" | null;
 
-export function TransfersTable() {
-  const { transfers: fetchedTransfers } = useTransfers();
+interface TransfersTableProps {
+  refreshKey?: number
+}
+
+export function TransfersTable({ refreshKey }: TransfersTableProps = {}) {
+  const { transfers: fetchedTransfers, refetch } = useTransfers();
   const [transfers, setTransfers] = useState<Transfer[]>([]);
   const [openMenu, setOpenMenu] = useState<string | null>(null);
   const [detailsTransfer, setDetailsTransfer] = useState<Transfer | null>(null);
@@ -92,8 +96,12 @@ export function TransfersTable() {
   const [resendTransfer, setResendTransfer] = useState<Transfer | null>(null);
 
   // Sync fetched transfers into local state (allows local mutations: delete/revoke/resend)
-  // We use a separate useState so UI actions (delete/revoke/resend) update instantly
   useEffect(() => { setTransfers(fetchedTransfers); }, [fetchedTransfers]);
+
+  // Re-fetch when parent signals a new upload completed
+  useEffect(() => {
+    if (refreshKey !== undefined && refreshKey > 0) refetch()
+  }, [refreshKey])
 
   // Sorting state
   const [sortField, setSortField] = useState<SortField | null>(null);

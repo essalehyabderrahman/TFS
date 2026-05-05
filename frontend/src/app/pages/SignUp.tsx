@@ -127,6 +127,7 @@ export function SignUp() {
           PASSWORD_NO_DIGIT:     "Password must contain a number.",
           PASSWORD_NO_SYMBOL:    "Password must contain a special character.",
           MISSING_FIELDS:        "Please provide all required credentials.",
+          SIGNUP_DISABLED:       "New account registration is currently disabled by the administrator.",
           NETWORK_ERROR:         "Cannot reach the server. Please try again.",
         };
         const message = messages[result.error ?? ""] ?? "Failed to create account. Please try again.";

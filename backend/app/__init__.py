@@ -54,15 +54,19 @@ def create_app() -> Flask:
     from .routes.other import team_bp, audit_bp, account_bp, security_bp
     from .routes.notifications import notifications_bp
     from .routes.groups import groups_bp
+    from .routes.other import app_bp
+    from .routes.contacts import contacts_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(transfers_bp)
     app.register_blueprint(team_bp)
+    app.register_blueprint(app_bp)
     app.register_blueprint(audit_bp)
     app.register_blueprint(account_bp)
     app.register_blueprint(security_bp)
     app.register_blueprint(notifications_bp)
     app.register_blueprint(groups_bp)
+    app.register_blueprint(contacts_bp)
 
     # [Security] Register CSRF Double Submit Cookie protection
     init_csrf(app)
@@ -80,7 +84,32 @@ def create_app() -> Flask:
         from .models.notification import Notification      # noqa: F401
         from .models.team_settings import TeamSettings     # noqa: F401
         from .models.group import Group, GroupMember, GroupSettings  # noqa: F401
+        from .models.contact import Contact                          # noqa: F401
+
+        # [DB] Idempotent column additions MUST run before create_all() queries
+        # so that existing DBs gain the new columns before SQLAlchemy touches them.
         db.create_all()
+        try:
+            db.session.execute(db.text(
+                "ALTER TABLE users ADD COLUMN pending_mfa_secret VARCHAR(64)"
+            ))
+            db.session.commit()
+        except Exception:
+            pass  # Column already exists
+        try:
+            db.session.execute(db.text(
+                "ALTER TABLE team_settings ADD COLUMN require_mfa BOOLEAN NOT NULL DEFAULT 0"
+            ))
+            db.session.commit()
+        except Exception:
+            pass  # Column already exists
+        try:
+            db.session.execute(db.text(
+                "ALTER TABLE team_settings ADD COLUMN allow_signup BOOLEAN NOT NULL DEFAULT 1"
+            ))
+            db.session.commit()
+        except Exception:
+            pass  # Column already exists
 
         # Seed singleton TeamSettings row with secure defaults
         if not TeamSettings.query.first():

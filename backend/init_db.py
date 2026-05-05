@@ -32,6 +32,16 @@ with app.app_context():
 
     print("Populating database with mock data...")
 
+    # 0. Team / Platform settings singleton
+    settings = TeamSettings(
+        allow_member_directory=True,
+        allow_member_invite=True,
+        allow_external_sharing=True,
+        require_mfa=False,
+        allow_signup=True,
+    )
+    db.session.add(settings)
+
     # 1. Users
     admin = User(
         id="u1_admin",
@@ -201,8 +211,124 @@ with app.app_context():
     ]
     db.session.add_all(notifs)
 
+    # 5. Groups
+    g1 = Group(
+        id="g1_engineering",
+        name="Engineering",
+        description="Backend and infrastructure team",
+        created_by_id=admin.id,
+        created_at=now - timedelta(days=30),
+    )
+    g2 = Group(
+        id="g2_design",
+        name="Design",
+        description="Product design and UX",
+        created_by_id=admin.id,
+        created_at=now - timedelta(days=20),
+    )
+    db.session.add_all([g1, g2])
+
+    # Group settings
+    gs1 = GroupSettings(
+        id="gs1",
+        group_id=g1.id,
+        allow_member_directory=True,
+        allow_member_invite=True,
+        allow_external_sharing=False,
+        allow_group_transfers=True,
+    )
+    gs2 = GroupSettings(
+        id="gs2",
+        group_id=g2.id,
+        allow_member_directory=True,
+        allow_member_invite=False,
+        allow_external_sharing=True,
+        allow_group_transfers=True,
+    )
+    db.session.add_all([gs1, gs2])
+
+    # Group members
+    gm1 = GroupMember(id="gm1", group_id=g1.id, user_id=admin.id,   role="admin",  invited_by_id=admin.id)
+    gm2 = GroupMember(id="gm2", group_id=g1.id, user_id=michael.id, role="member", invited_by_id=admin.id)
+    gm3 = GroupMember(id="gm3", group_id=g1.id, user_id=sarah.id,   role="member", invited_by_id=admin.id)
+    gm4 = GroupMember(id="gm4", group_id=g2.id, user_id=admin.id,   role="admin",  invited_by_id=admin.id)
+    gm5 = GroupMember(id="gm5", group_id=g2.id, user_id=emily.id,   role="admin",  invited_by_id=admin.id)
+    gm6 = GroupMember(id="gm6", group_id=g2.id, user_id=david.id,   role="member", invited_by_id=admin.id)
+    db.session.add_all([gm1, gm2, gm3, gm4, gm5, gm6])
+
+    # 6. Group-scoped transfers (stored_path is a placeholder — not real files)
+    gt1 = Transfer(
+        id=generate_uuid(),
+        file_name="Architecture_Diagram_v2.pdf",
+        file_type="pdf",
+        original_name="Architecture_Diagram_v2.pdf",
+        stored_path="/uploads/arch_diagram.pdf.enc",
+        size_bytes=890000,
+        status="Delivered",
+        encryption_type="AES-256-GCM",
+        uploaded_by_id=michael.id,
+        group_id=g1.id,
+        download_count=2,
+        created_at=now - timedelta(days=3),
+        expiry_date=now + timedelta(days=25),
+    )
+    gt2 = Transfer(
+        id=generate_uuid(),
+        file_name="API_Spec_v1.docx",
+        file_type="doc",
+        original_name="API_Spec_v1.docx",
+        stored_path="/uploads/api_spec.docx.enc",
+        size_bytes=340000,
+        status="Pending",
+        encryption_type="AES-256-GCM",
+        uploaded_by_id=sarah.id,
+        group_id=g1.id,
+        download_count=0,
+        created_at=now - timedelta(hours=8),
+        expiry_date=now + timedelta(days=30),
+    )
+    gt3 = Transfer(
+        id=generate_uuid(),
+        file_name="Brand_Guidelines_2026.pdf",
+        file_type="pdf",
+        original_name="Brand_Guidelines_2026.pdf",
+        stored_path="/uploads/brand_guidelines.pdf.enc",
+        size_bytes=5600000,
+        status="Delivered",
+        encryption_type="AES-256-GCM",
+        uploaded_by_id=emily.id,
+        group_id=g2.id,
+        download_count=4,
+        created_at=now - timedelta(days=5),
+        expiry_date=now + timedelta(days=20),
+    )
+    gt4 = Transfer(
+        id=generate_uuid(),
+        file_name="UI_Mockups_Sprint3.zip",
+        file_type="zip",
+        original_name="UI_Mockups_Sprint3.zip",
+        stored_path="/uploads/ui_mockups.zip.enc",
+        size_bytes=12400000,
+        status="Delivered",
+        encryption_type="AES-256-GCM",
+        uploaded_by_id=david.id,
+        group_id=g2.id,
+        download_count=1,
+        created_at=now - timedelta(days=1),
+        expiry_date=now + timedelta(days=29),
+    )
+    db.session.add_all([gt1, gt2, gt3, gt4])
+
     db.session.commit()
     print("Database initialization and data seeding completed successfully!")
+    print()
+    print("--- Accounts ----------------------------------------------")
+    print("  admin@tfs.com          Admin@Secure#2026   (root admin)")
+    print("  sarah.chen@tfs.com     Sarah@Secure#2026")
+    print("  michael.roberts@tfs.com  Michael@Secure#2026")
+    print("  emily.zhang@tfs.com    Emily@Secure#2026")
+    print("  david.martinez@tfs.com David@Secure#2026")
+    print("----------------------------------------------------------")
 
 if __name__ == "__main__":
     print("Init complete. Run this script directly to reset and reseed the DB.")

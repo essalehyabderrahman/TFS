@@ -1,4 +1,5 @@
 import { apiRequest } from "./client"
+import type { Transfer } from "@/types"
 
 export interface Group {
   id: string
@@ -138,5 +139,40 @@ export async function updateGroupSettings(groupId: string, updates: Partial<Grou
     return { data, error: null }
   } catch (err: any) {
     return { data: null, error: err?.message ?? String(err) }
+  }
+}
+
+export async function fetchGroupTransfers(groupId: string): Promise<{ data: Transfer[]; error: string | null }> {
+  try {
+    const data = await apiRequest<Transfer[]>(`/groups/${groupId}/transfers`)
+    return { data, error: null }
+  } catch (err: any) {
+    return { data: [], error: err?.message ?? String(err) }
+  }
+}
+
+export async function uploadGroupTransfer(
+  groupId: string,
+  file: File,
+  expiryDays = 7,
+): Promise<{ ok: boolean; transfer?: Transfer; error?: string }> {
+  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
+  if (!API_BASE_URL) return { ok: false, error: "API_BASE_URL not configured" }
+  try {
+    const formData = new FormData()
+    formData.append("file", file)
+    formData.append("expiryDays", String(expiryDays))
+    const csrfToken = document.cookie.split("; ").find(r => r.startsWith("csrf_token="))?.split("=")[1] ?? ""
+    const res = await fetch(`${API_BASE_URL}/groups/${groupId}/transfers`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "X-CSRF-Token": csrfToken },
+      body: formData,
+    })
+    const data = await res.json()
+    if (!res.ok) return { ok: false, error: data.error ?? "UPLOAD_FAILED" }
+    return { ok: true, transfer: data as Transfer }
+  } catch {
+    return { ok: false, error: "NETWORK_ERROR" }
   }
 }

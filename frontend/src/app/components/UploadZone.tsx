@@ -1,7 +1,9 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { CloudUpload, ShieldCheck, X, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { uploadTransfer } from "@/app/api/transfers";
+import { fetchContacts, type Contact } from "@/app/api/contacts";
+import { useLocation } from "react-router";
 
 interface UploadZoneProps {
   /** Called after a successful upload so the parent can refresh the list */
@@ -14,6 +16,30 @@ export function UploadZone({ onUploaded }: UploadZoneProps) {
   const [recipientEmail, setRecipientEmail] = useState("");
   const [expiryDays, setExpiryDays] = useState(7);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [contacts, setContacts] = useState<Contact[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const location = useLocation();
+
+  // Pre-fill recipient from ?recipient= query param (set by Contacts quick-transfer)
+  useEffect(() => {
+    const params = new URLSearchParams(location.search)
+    const pre = params.get("recipient")
+    if (pre) setRecipientEmail(decodeURIComponent(pre))
+  }, [location.search]);
+
+  // Load contacts once for suggestion dropdown
+  useEffect(() => {
+    fetchContacts().then(res => {
+      if (res.data) setContacts(res.data.all)
+    })
+  }, []);
+
+  const filteredContacts = recipientEmail.length >= 1
+    ? contacts.filter(c =>
+        c.email.toLowerCase().includes(recipientEmail.toLowerCase()) ||
+        c.displayName.toLowerCase().includes(recipientEmail.toLowerCase())
+      ).slice(0, 5)
+    : [];
 
   const handleFiles = useCallback(
     async (files: FileList | null) => {
@@ -96,7 +122,9 @@ export function UploadZone({ onUploaded }: UploadZoneProps) {
             type="email"
             placeholder="Recipient email (optional)"
             value={recipientEmail}
-            onChange={(e) => setRecipientEmail(e.target.value)}
+            onChange={(e) => { setRecipientEmail(e.target.value); setShowSuggestions(true); }}
+            onFocus={() => setShowSuggestions(true)}
+            onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
             className="w-full h-9 pl-3 pr-8 rounded-lg text-white placeholder:text-slate-600 outline-none text-sm"
             style={{
               background: "rgba(255,255,255,0.04)",
@@ -110,6 +138,37 @@ export function UploadZone({ onUploaded }: UploadZoneProps) {
             >
               <X size={14} style={{ color: "#94a3b8" }} />
             </button>
+          )}
+          {showSuggestions && filteredContacts.length > 0 && (
+            <div
+              className="absolute left-0 right-0 top-10 rounded-lg overflow-hidden z-30"
+              style={{
+                background: "#0d1228",
+                border: "1px solid rgba(255,255,255,0.1)",
+                boxShadow: "0 10px 40px rgba(0,0,0,0.6)",
+              }}
+            >
+              {filteredContacts.map(c => (
+                <button
+                  key={c.id}
+                  type="button"
+                  onMouseDown={() => { setRecipientEmail(c.email); setShowSuggestions(false); }}
+                  className="w-full flex items-center gap-3 px-3 py-2 text-left transition-colors hover:bg-white/5"
+                >
+                  <div
+                    className="w-7 h-7 rounded-full flex items-center justify-center shrink-0 text-xs font-bold text-white"
+                    style={{ background: "linear-gradient(135deg, #0B7FFF 0%, #0960D9 100%)" }}
+                  >
+                    {c.displayName.slice(0, 2).toUpperCase()}
+                  </div>
+                  <div className="min-w-0">
+                    <p style={{ color: "#e2e8f0", fontSize: "13px", fontWeight: 500 }} className="truncate">{c.displayName}</p>
+                    <p style={{ color: "#6b7fa8", fontSize: "11px" }} className="truncate">{c.email}</p>
+                  </div>
+                  {c.isFavorite && <span style={{ color: "#f59e0b", fontSize: "11px", marginLeft: "auto" }}>★</span>}
+                </button>
+              ))}
+            </div>
           )}
         </div>
 

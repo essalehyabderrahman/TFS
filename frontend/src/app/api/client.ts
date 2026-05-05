@@ -90,18 +90,18 @@ export async function apiRequest<T>(
         // Refresh failed (8-hr wall or truly invalid) — surface the modal
         const { getExpireSession } = await import("@/app/context/AuthContext")
         const expireSession = getExpireSession()
-        if (expireSession) expireSession("inactivity")
+        if (expireSession) await expireSession("inactivity")
         throw new Error("SESSION_EXPIRED")
       }
     } else if (errorCode === "SESSION_EXPIRED") {
       const { getExpireSession } = await import("@/app/context/AuthContext")
       const expireSession = getExpireSession()
-      if (expireSession) expireSession("absolute")
+      if (expireSession) await expireSession("absolute")
       throw new Error("SESSION_EXPIRED")
     } else if (errorCode === "SESSION_REVOKED") {
       const { getExpireSession } = await import("@/app/context/AuthContext")
       const expireSession = getExpireSession()
-      if (expireSession) expireSession("revoked")
+      if (expireSession) await expireSession("revoked")
       throw new Error("SESSION_REVOKED")
     }
   }

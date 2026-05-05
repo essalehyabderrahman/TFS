@@ -216,7 +216,10 @@ export function MfaSetup() {
 
       {/* ── Navigation ─────────────────────────────────────────────────── */}
       <nav className="relative z-20 flex items-center justify-between px-6 py-6 max-w-7xl mx-auto w-full">
-        <div className="flex items-center space-x-3 group cursor-pointer" onClick={() => navigate("/")}>
+        <div
+          className={`flex items-center space-x-3 group ${isMfaPending ? "cursor-default" : "cursor-pointer"}`}
+          onClick={() => { if (!isMfaPending) navigate("/") }}
+        >
           <div className="w-10 h-10 bg-[#00d2ff] text-black rounded-xl flex items-center justify-center font-black text-xl shadow-lg shadow-blue-400/20 group-hover:scale-105 transition-transform">
             T
           </div>

@@ -11,15 +11,18 @@ import {
   Plus,
   ChevronRight,
   X,
+  FolderOpen,
 } from "lucide-react";
 
 const allNavItems = [
   { icon: ArrowUpDown,   label: "Active Transfers",        id: "active",    path: "/dashboard/active",    adminOnly: false, hideForAdmin: false },
   { icon: Download,      label: "Received Files",          id: "received",  path: "/dashboard/received",  adminOnly: false, hideForAdmin: true  },
-  { icon: ClipboardList, label: "Audit & Compliance Logs", id: "audit",     path: "/dashboard/audit",     adminOnly: false, hideForAdmin: false },
+  { icon: ClipboardList, label: "Audit & Compliance Logs", id: "audit",     path: "/dashboard/audit",     adminOnly: false, hideForAdmin: false, adminOrGroupAdminOnly: true },
   { icon: UserCog,       label: "User Management",         id: "users",     path: "/dashboard/users",     adminOnly: true,  hideForAdmin: false },
   { icon: Users,         label: "Team Management",         id: "team",      path: "/dashboard/team",      adminOnly: true,  hideForAdmin: false },
+  { icon: FolderOpen,    label: "Group Workspace",         id: "groups",    path: "/dashboard/groups",    adminOnly: false, hideForAdmin: false },
   { icon: ShieldCheck,   label: "Security Settings",       id: "security",  path: "/dashboard/security",  adminOnly: false, hideForAdmin: false },
+  { icon: Users,         label: "Contacts",                id: "contacts",  path: "/dashboard/contacts",  adminOnly: false, hideForAdmin: false },
 ];
 
 interface SidebarProps {
@@ -31,11 +34,20 @@ interface SidebarProps {
 export function Sidebar({ isOpen, onClose, onNewTransfer }: SidebarProps) {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, isAppAdmin } = useAuth();
+  const { user, isAppAdmin, isGroupAdmin } = useAuth();
 
-  const navItems = allNavItems.filter(item =>
-    (!item.adminOnly || isAppAdmin) && (!item.hideForAdmin || !isAppAdmin)
-  );
+  const navItems = allNavItems.filter(item => {
+    // Platform-wide admin only
+    if (item.adminOnly && !isAppAdmin) return false;
+    
+    // Admins or Group Admins only (e.g. Audit Logs)
+    if ((item as any).adminOrGroupAdminOnly && !isAppAdmin && !isGroupAdmin) return false;
+    
+    // Hidden for admins (e.g. Received Files)
+    if (item.hideForAdmin && isAppAdmin) return false;
+    
+    return true;
+  });
 
   
   // Determine active state from current location

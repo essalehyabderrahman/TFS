@@ -207,9 +207,24 @@ def signin(email: str, password: str, ip: str) -> dict:
 
     user.touch()
 
-    # [Security] If MFA is not configured, issue a full session token directly.
-    # Users who have disabled MFA should not be forced through the MFA setup flow.
+    # [Security] If MFA is not configured, check the global require_mfa policy.
     if not user.mfa_enabled:
+        from app.models.team_settings import TeamSettings
+        settings = TeamSettings.query.first()
+        if settings and settings.require_mfa:
+            # [Platform Policy] MFA is mandatory app-wide — force the user through setup.
+            # Issue a restricted mfa_pending token; full session only after MFA is enrolled.
+            temp_token = create_access_token(
+                identity=user.id,
+                additional_claims={"mfa_pending": True},
+                expires_delta=timedelta(minutes=15),
+            )
+            _log("LOGIN_MFA_REQUIRED_BY_POLICY", email, user.id, "warning", ip,
+                 details="Full session withheld — require_mfa policy is active and user has no MFA.")
+            db.session.commit()
+            return {"ok": True, "mfaRequired": True, "tempToken": temp_token, "user": user.to_dict()}
+
+        # MFA not required globally and not configured — issue a full session directly.
         now_ts = int(datetime.now(timezone.utc).timestamp())
         token = create_access_token(
             identity=user.id,
@@ -250,22 +265,20 @@ def setup_mfa(user_id: str) -> dict:
     if not user:
         return {"ok": False, "error": "USER_NOT_FOUND"}
 
-    # [Security] Prevent silent overwrite of an active MFA secret
+    # [Security] Block overwrite of an active MFA secret.
     if user.mfa_enabled:
         return {"ok": False, "error": "MFA_ALREADY_ENABLED"}
 
     # [Security] pyotp.random_base32(32) → 32 base32 chars = 20 bytes = 160 bits
     secret = pyotp.random_base32(32)
     user.mfa_secret = secret
-    
+
     # [Security] Generate a single, single-use numeric backup code (8 digits)
     import secrets
     from app.extensions import bcrypt
     raw_backup_code = f"{secrets.randbelow(100000000):08d}"
-    hashed_code = bcrypt.generate_password_hash(raw_backup_code).decode("utf-8")
-    user.backup_codes = hashed_code
-    
-    # Reset MFA failure counter on fresh setup (only safe because mfa_enabled=False is enforced above)
+    user.backup_codes = bcrypt.generate_password_hash(raw_backup_code).decode("utf-8")
+
     user.mfa_failed_attempts = 0
     db.session.commit()
 
@@ -289,7 +302,7 @@ def setup_mfa(user_id: str) -> dict:
 # ──────────────────────────────────────────────────────────────────────────────
 # MFA — Verification (step 2 of login / MFA enable confirmation)
 # ──────────────────────────────────────────────────────────────────────────────
-def verify_mfa(user_id: str, otp_code: str, ip: str) -> dict:
+def verify_mfa(user_id: str, otp_code: str, ip: str, is_setup_confirm: bool = False) -> dict:
     """
     [MFA] Validates TOTP code.
     [Security] Replay protection: each TOTP code is accepted only once.
@@ -309,7 +322,11 @@ def verify_mfa(user_id: str, otp_code: str, ip: str) -> dict:
     if user.is_locked():
         return {"ok": False, "error": "MFA_LOCKED"}
 
-    totp = pyotp.TOTP(user.mfa_secret)
+    active_secret = user.mfa_secret
+    if not active_secret:
+        return {"ok": False, "error": "MFA_NOT_CONFIGURED"}
+
+    totp = pyotp.TOTP(active_secret)
 
     # [Brute-Force] Check MFA attempt counter BEFORE verifying
     if (user.mfa_failed_attempts or 0) >= MAX_MFA_ATTEMPTS:
@@ -363,10 +380,9 @@ def verify_mfa(user_id: str, otp_code: str, ip: str) -> dict:
             return {"ok": False, "error": "MFA_CODE_ALREADY_USED"}
 
 
-    # [MFA] Activate MFA if this is the first enrollment confirmation
+    # [MFA] Activate MFA on first enrollment.
     if not user.mfa_enabled:
         user.mfa_enabled = True
-        # [Audit] MFA enrollment event
         _log("MFA_ENROLLED", user.email, user.id, "success", ip,
              details="MFA enrollment confirmed.")
 

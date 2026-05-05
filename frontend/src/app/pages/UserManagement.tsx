@@ -1,9 +1,11 @@
 import { useState, useEffect, useCallback } from "react"
 import { useAuth } from "../hooks/useAuth"
 import { toast } from "sonner"
-import { Users, Trash2, Loader2, ShieldCheck, ShieldOff, UserCheck, UserX, Crown } from "lucide-react"
+import { Users, Trash2, Loader2, ShieldCheck, ShieldOff, UserCheck, UserX, Crown, UserPlus, ChevronDown } from "lucide-react"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "../components/ui/dialog"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "../components/ui/alert-dialog"
 import { apiRequest } from "../api/client"
+import { apiInviteMember } from "../api/team"
 
 interface Member {
   id: string
@@ -32,6 +34,14 @@ export function UserManagement() {
   const [isRoleChanging, setIsRoleChanging] = useState(false)
 
   const [updatingStatus, setUpdatingStatus] = useState<string | null>(null)
+
+  // Invite dialog
+  const [showInviteDialog, setShowInviteDialog] = useState(false)
+  const [inviteName, setInviteName] = useState("")
+  const [inviteEmail, setInviteEmail] = useState("")
+  const [inviteRole, setInviteRole] = useState<"admin" | "user">("user")
+  const [showInviteRoleDropdown, setShowInviteRoleDropdown] = useState(false)
+  const [isInviting, setIsInviting] = useState(false)
 
   const loadMembers = useCallback(async () => {
     setIsLoading(true)
@@ -96,6 +106,32 @@ export function UserManagement() {
     } finally {
       setIsRoleChanging(false)
     }
+  }
+
+  async function handleInvite() {
+    if (!inviteName.trim() || !inviteEmail.trim()) {
+      toast.error("Name and email are required.")
+      return
+    }
+    setIsInviting(true)
+    const result = await apiInviteMember(inviteName.trim(), inviteEmail.trim(), inviteRole)
+    if (!result.ok) {
+      const messages: Record<string, string> = {
+        EMAIL_TAKEN:   "An account with this email already exists.",
+        MISSING_FIELDS: "Name and email are required.",
+        FORBIDDEN:     "You do not have permission to invite users.",
+        INVALID_ROLE:  "Invalid role selected.",
+      }
+      toast.error(messages[result.error ?? ""] ?? "Failed to create user.")
+    } else {
+      toast.success(`${inviteEmail} invited successfully.`)
+      setMembers(prev => [...prev, result.data as Member])
+      setShowInviteDialog(false)
+      setInviteName("")
+      setInviteEmail("")
+      setInviteRole("user")
+    }
+    setIsInviting(false)
   }
 
   async function handleDelete() {
@@ -252,10 +288,18 @@ export function UserManagement() {
           <h1 className="text-white text-2xl font-bold mb-1">User Management</h1>
           <p style={{ color: "#6b7fa8", fontSize: "14px" }}>Manage platform accounts, roles and access</p>
         </div>
-        <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl"
-          style={{ background: "rgba(11,127,255,0.08)", border: "1px solid rgba(11,127,255,0.2)" }}>
-          <Users size={14} style={{ color: "#0B7FFF" }} />
-          <span style={{ color: "#0B7FFF", fontSize: "13px", fontWeight: 600 }}>{members.length} users</span>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl"
+            style={{ background: "rgba(11,127,255,0.08)", border: "1px solid rgba(11,127,255,0.2)" }}>
+            <Users size={14} style={{ color: "#0B7FFF" }} />
+            <span style={{ color: "#0B7FFF", fontSize: "13px", fontWeight: 600 }}>{members.length} users</span>
+          </div>
+          <button
+            onClick={() => setShowInviteDialog(true)}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl transition-all hover:opacity-90"
+            style={{ background: "linear-gradient(135deg, #0B7FFF 0%, #0960D9 100%)", color: "white", fontSize: "14px", fontWeight: 600 }}>
+            <UserPlus size={15} /> Invite User
+          </button>
         </div>
       </div>
 
@@ -289,6 +333,92 @@ export function UserManagement() {
           {renderSection("USERS", users, "#00E5A0")}
         </div>
       )}
+
+      {/* Invite User Dialog */}
+      <Dialog open={showInviteDialog} onOpenChange={v => { setShowInviteDialog(v); setShowInviteRoleDropdown(false) }}>
+        <DialogContent style={{ background: "linear-gradient(180deg, #0d1228 0%, #0b0f20 100%)", border: "1px solid rgba(255,255,255,0.1)" }}>
+          <DialogHeader><DialogTitle className="text-white text-xl">Invite New User</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <label style={{ color: "#4a5578", fontSize: "12px", fontWeight: 600, letterSpacing: "0.05em" }}>FULL NAME</label>
+              <input
+                type="text"
+                placeholder="Jane Smith"
+                value={inviteName}
+                onChange={e => setInviteName(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter" && !isInviting) handleInvite() }}
+                className="w-full mt-1 px-4 py-2.5 rounded-lg text-white placeholder:text-slate-500 outline-none"
+                style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", fontSize: "14px" }}
+              />
+            </div>
+            <div>
+              <label style={{ color: "#4a5578", fontSize: "12px", fontWeight: 600, letterSpacing: "0.05em" }}>EMAIL</label>
+              <input
+                type="email"
+                placeholder="jane@company.com"
+                value={inviteEmail}
+                onChange={e => setInviteEmail(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter" && !isInviting) handleInvite() }}
+                className="w-full mt-1 px-4 py-2.5 rounded-lg text-white placeholder:text-slate-500 outline-none"
+                style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", fontSize: "14px" }}
+              />
+            </div>
+            <div>
+              <label style={{ color: "#4a5578", fontSize: "12px", fontWeight: 600, letterSpacing: "0.05em" }}>ROLE</label>
+              {isRootAdmin ? (
+                <div className="relative mt-1">
+                  <button
+                    type="button"
+                    onClick={() => setShowInviteRoleDropdown(v => !v)}
+                    className="w-full flex items-center justify-between px-4 py-2.5 rounded-lg"
+                    style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "#e2e8f0", fontSize: "14px" }}
+                  >
+                    <span>{inviteRole === "user" ? "User — standard access" : "Admin — full platform access"}</span>
+                    <ChevronDown size={14} style={{ color: "#6b7fa8" }} />
+                  </button>
+                  {showInviteRoleDropdown && (
+                    <div className="absolute left-0 right-0 mt-1 rounded-lg overflow-hidden z-20"
+                      style={{ background: "#0d1228", border: "1px solid rgba(255,255,255,0.1)", boxShadow: "0 10px 40px rgba(0,0,0,0.5)" }}>
+                      {(["user", "admin"] as const).map(r => (
+                        <button
+                          key={r}
+                          type="button"
+                          onClick={() => { setInviteRole(r); setShowInviteRoleDropdown(false) }}
+                          className="w-full px-4 py-2.5 text-left transition-colors hover:bg-white/5"
+                          style={{ color: inviteRole === r ? "#0B7FFF" : "#e2e8f0", fontSize: "14px" }}
+                        >
+                          {r === "user" ? "User — standard access" : "Admin — full platform access"}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="w-full mt-1 px-4 py-2.5 rounded-lg"
+                  style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.3)", fontSize: "14px" }}>
+                  User — standard access
+                </div>
+              )}
+            </div>
+            <p style={{ color: "#4a5578", fontSize: "12px" }}>
+              The account will be created with a temporary password. The user will need an admin to set their credentials before they can sign in.
+            </p>
+          </div>
+          <DialogFooter className="mt-6">
+            <button onClick={() => setShowInviteDialog(false)}
+              className="px-4 py-2 rounded-lg"
+              style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "#e2e8f0" }}>
+              Cancel
+            </button>
+            <button onClick={handleInvite} disabled={isInviting}
+              className="px-4 py-2 rounded-lg flex items-center gap-2 disabled:opacity-50"
+              style={{ background: "linear-gradient(135deg, #0B7FFF 0%, #0960D9 100%)", color: "white" }}>
+              {isInviting && <Loader2 size={16} className="animate-spin" />}
+              Create User
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Confirm role change */}
       <AlertDialog open={!!pendingRoleChange} onOpenChange={() => setPendingRoleChange(null)}>

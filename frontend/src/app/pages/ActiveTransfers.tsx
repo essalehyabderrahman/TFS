@@ -1,8 +1,11 @@
+import { useState } from "react";
 import { UploadZone } from "../components/UploadZone";
 import { TransfersTable } from "../components/TransfersTable";
 import { StatsBar } from "../components/StatsBar";
 
 export function ActiveTransfers() {
+  const [refreshKey, setRefreshKey] = useState(0);
+
   return (
     <div className="flex flex-col gap-4 sm:gap-6">
       {/* Stats */}
@@ -16,7 +19,7 @@ export function ActiveTransfers() {
           </h2>
           <div className="flex-1" style={{ height: "1px", background: "rgba(255,255,255,0.05)" }} />
         </div>
-        <UploadZone />
+        <UploadZone onUploaded={() => setRefreshKey(k => k + 1)} />
       </section>
 
       {/* Transfers Table */}
@@ -27,7 +30,7 @@ export function ActiveTransfers() {
           </h2>
           <div className="flex-1" style={{ height: "1px", background: "rgba(255,255,255,0.05)" }} />
         </div>
-        <TransfersTable />
+        <TransfersTable refreshKey={refreshKey} />
       </section>
     </div>
   );

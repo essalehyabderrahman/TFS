@@ -1,5 +1,6 @@
 import React from "react";
-import { createBrowserRouter, Navigate } from "react-router";
+import { createBrowserRouter, Navigate, Outlet } from "react-router";
+import { SessionExpiredModal } from "./components/SessionExpiredModal";
 import { useAuth } from "./hooks/useAuth";
 import { MainLayout } from "./components/MainLayout";
 import { ProtectedRoute } from "./components/ProtectedRoute";
@@ -10,12 +11,26 @@ import { TeamManagement } from "./pages/TeamManagement";
 import { UserManagement } from "./pages/UserManagement";
 import { SecuritySettings } from "./pages/SecuritySettings";
 import { AccountManagement } from "./pages/AccountManagement";
+import { Contacts } from "./pages/Contacts";
+import { GroupWorkspace } from "./pages/GroupWorkspace";
 import { Welcome } from "./pages/Welcome";
 import { SignIn } from "./pages/SignIn";
 import { SignUp } from "./pages/SignUp";
 import { Mfa } from "./pages/Mfa";
 import { MfaSetup } from "./pages/MfaSetup";
 
+
+function RootLayout() {
+  const { sessionExpiredReason, dismissExpiredSession } = useAuth()
+  return (
+    <>
+      <Outlet />
+      {sessionExpiredReason && (
+        <SessionExpiredModal reason={sessionExpiredReason} onClose={dismissExpiredSession} />
+      )}
+    </>
+  )
+}
 
 function SmartRedirect() {
   const { isAuthenticated, isMfaPending, isInitializing, user } = useAuth();
@@ -30,61 +45,83 @@ function SmartRedirect() {
   return <Navigate to="/signin" replace />;
 }
 
+function AdminOrGroupAdminRoute({ children }: { children: React.ReactNode }) {
+  const { isAppAdmin, isGroupAdmin, isInitializing } = useAuth()
+  if (isInitializing) return null
+  if (!isAppAdmin && !isGroupAdmin) return <Navigate to="/dashboard" replace />
+  return <>{children}</>
+}
+
 function PublicOnlyRoute({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, isInitializing } = useAuth();
+  const { isAuthenticated, isMfaPending, isInitializing, user } = useAuth();
   if (isInitializing) return null;
   if (isAuthenticated) return <Navigate to="/dashboard" replace />;
+  // MFA onboarding in progress — block access to all public pages so the
+  // user cannot escape the setup flow by navigating to /signin or /
+  if (isMfaPending) {
+    const target = user?.mfaEnabled ? "/mfa-verify" : "/dashboard/mfa-setup"
+    return <Navigate to={target} replace />
+  }
   return <>{children}</>;
 }
 
 export const router = createBrowserRouter([
-  // Public landing page at the root
   {
     path: "/",
-    Component: Welcome,
-  },
-  // Authentication pages
-  {
-    path: "/signin",
-    element: <PublicOnlyRoute><SignIn /></PublicOnlyRoute>,
-  },
-  {
-    path: "/signup",
-    element: <PublicOnlyRoute><SignUp /></PublicOnlyRoute>,
-  },
-  {
-    path: "/mfa-verify",
-    Component: Mfa,
-  },
-  // Protected dashboard structure
-  {
-    path: "/dashboard",
-    Component: ProtectedRoute,
+    Component: RootLayout,
     children: [
+      // Public landing page
+      { index: true, Component: Welcome },
+      // Authentication pages
       {
-        path: "mfa-setup",
-        Component: MfaSetup,
+        path: "signin",
+        element: <PublicOnlyRoute><SignIn /></PublicOnlyRoute>,
       },
       {
-        path: "",
-        Component: MainLayout,
+        path: "signup",
+        element: <PublicOnlyRoute><SignUp /></PublicOnlyRoute>,
+      },
+      {
+        path: "mfa-verify",
+        Component: Mfa,
+      },
+      // Protected dashboard structure
+      {
+        path: "/dashboard",
+        Component: ProtectedRoute,
         children: [
-          { index: true, Component: ActiveTransfers },
-          { path: "active", Component: ActiveTransfers },
-          { path: "received", Component: ReceivedFiles },
-          { path: "audit", Component: AuditLogs },
-          { path: "users", Component: UserManagement },
-          { path: "team", Component: TeamManagement },
-          { path: "security", Component: SecuritySettings },
-          { path: "account", Component: AccountManagement },
+          {
+            path: "mfa-setup",
+            Component: MfaSetup,
+          },
+          {
+            path: "",
+            Component: MainLayout,
+            children: [
+              { index: true, Component: ActiveTransfers },
+              { path: "active", Component: ActiveTransfers },
+              { path: "received", Component: ReceivedFiles },
+              {
+                path: "audit",
+                element: (
+                  <AdminOrGroupAdminRoute>
+                    <AuditLogs />
+                  </AdminOrGroupAdminRoute>
+                ),
+              },
+              { path: "users", Component: UserManagement },
+              { path: "team", Component: TeamManagement },
+              { path: "groups", Component: GroupWorkspace },
+              { path: "security", Component: SecuritySettings },
+              { path: "account", Component: AccountManagement },
+              { path: "contacts", Component: Contacts },
+            ],
+          },
         ],
       },
+      // Catch-all
+      { path: "*", element: <SmartRedirect /> },
     ],
-  },
-  // Catch-all
-  {
-    path: "*",
-    element: <SmartRedirect />,
   },
 ]);
 

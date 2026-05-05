@@ -19,6 +19,12 @@ def _ip():
 @csrf_protect
 @limiter.limit("5 per minute; 20 per hour")
 def signup():
+    # [Platform Policy] Check allow_signup before touching any user data
+    from app.models.team_settings import TeamSettings
+    settings = TeamSettings.query.first()
+    if settings and not settings.allow_signup:
+        return jsonify({"error": "SIGNUP_DISABLED"}), 403
+
     data = request.get_json(silent=True) or {}
     name     = data.get("name", "").strip()
     email    = data.get("email", "").strip()
@@ -155,7 +161,7 @@ def mfa_enable():
     user = current_user()
     data = request.get_json(silent=True) or {}
     code = data.get("code", "")
-    result = auth_service.verify_mfa(user.id, code, _ip())
+    result = auth_service.verify_mfa(user.id, code, _ip(), is_setup_confirm=True)
     if not result["ok"]:
         return jsonify({"error": result["error"]}), 401
     
@@ -173,6 +179,12 @@ def mfa_enable():
 @csrf_protect
 @jwt_required_custom
 def mfa_disable():
+    # [Platform Policy] Block MFA disable when require_mfa is enforced app-wide
+    from app.models.team_settings import TeamSettings
+    settings = TeamSettings.query.first()
+    if settings and settings.require_mfa:
+        return jsonify({"error": "MFA_REQUIRED_BY_POLICY"}), 403
+
     user = current_user()
     data = request.get_json(silent=True) or {}
     code = data.get("code", "")
@@ -200,12 +212,22 @@ def regenerate_backup_code():
 
 # ── GET /auth/me ──────────────────────────────────────────────────────────────
 @auth_bp.get("/me")
-@jwt_required_custom
 def me():
+    # Accept BOTH full tokens and mfa_pending tokens so AuthContext can
+    # restore isMfaPending=True correctly after a hard page reload.
+    try:
+        verify_jwt_in_request()
+    except Exception:
+        return jsonify({"error": "UNAUTHORIZED"}), 401
+
+    claims      = get_jwt()
+    mfa_pending = bool(claims.get("mfa_pending"))
+
     user = current_user()
     if not user:
         return jsonify({"error": "USER_NOT_FOUND"}), 404
-    return jsonify({"user": user.to_dict()}), 200
+
+    return jsonify({"user": user.to_dict(), "mfaPending": mfa_pending}), 200
 
 
 # ── POST /auth/refresh ────────────────────────────────────────────────────────

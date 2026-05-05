@@ -24,7 +24,9 @@ interface AccountData {
   lastActive: string;
   transfersCount: number;
   storageUsedBytes: number;
-  totalUsers: number;
+  totalUsers: number | null;
+  groupCount: number | null;
+  requireMfa: boolean;
 }
 
 function formatBytes(bytes: number): string {
@@ -35,7 +37,7 @@ function formatBytes(bytes: number): string {
 }
 
 export function AccountManagement() {
-  const { signOut, signIn } = useAuth();
+  const { signOut, signIn, isRootAdmin } = useAuth();
   const navigate = useNavigate();
 
   const [account, setAccount] = useState<AccountData | null>(null);
@@ -65,14 +67,14 @@ export function AccountManagement() {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [isDeleteLoading, setIsDeleteLoading] = useState(false);
 
-  const [showMfaDisableDialog, setShowMfaDisableDialog] = useState(false);
-  const [mfaDisableCode, setMfaDisableCode] = useState("");
-  const [isMfaDisableLoading, setIsMfaDisableLoading] = useState(false);
-
   const [showBackupRegenDialog, setShowBackupRegenDialog] = useState(false);
   const [backupRegenCode, setBackupRegenCode] = useState("");
   const [newBackupCode, setNewBackupCode] = useState<string | null>(null);
   const [isBackupRegenLoading, setIsBackupRegenLoading] = useState(false);
+
+  const [showMfaDisableDialog, setShowMfaDisableDialog] = useState(false);
+  const [mfaDisableCode, setMfaDisableCode] = useState("");
+  const [isMfaDisableLoading, setIsMfaDisableLoading] = useState(false);
 
   const loadAccount = useCallback(async () => {
     setIsLoading(true);
@@ -153,11 +155,12 @@ export function AccountManagement() {
       signOut();
       navigate("/signin");
     } else {
-      if (result.error === "LAST_ADMIN_PROTECTED") {
-        toast.error("Cannot delete account: you are the last active admin.");
-      } else {
-        toast.error(result.error || "Account deletion failed.");
-      }
+      const messages: Record<string, string> = {
+        LAST_ADMIN_PROTECTED:      "Cannot delete account: you are the last active platform admin.",
+        ROOT_PROTECTED:            "The root admin account cannot be deleted.",
+        LAST_GROUP_ADMIN_PROTECTED: "Cannot delete account: you are the sole admin of one or more groups. Transfer group admin rights before deleting your account.",
+      };
+      toast.error(messages[result.error ?? ""] ?? "Account deletion failed.");
     }
     setIsDeleteLoading(false);
   };
@@ -179,13 +182,15 @@ export function AccountManagement() {
           INVALID_CODE: "Invalid TOTP code.",
           MFA_MAX_ATTEMPTS_EXCEEDED: "Too many failed attempts. Please sign in again.",
           MFA_CODE_ALREADY_USED: "Code already used. Wait for the next code.",
+          MFA_REQUIRED_BY_POLICY: "MFA cannot be disabled — it is enforced by platform policy.",
         };
         toast.error(messages[data.error] ?? "Failed to disable MFA.");
       } else {
-        toast.success("MFA disabled. All existing sessions have been invalidated.");
+        toast.success("MFA disabled. Signing you out of all sessions.");
         setShowMfaDisableDialog(false);
         setMfaDisableCode("");
-        setAccount(prev => prev ? { ...prev, mfaEnabled: false } : prev);
+        await signOut();
+        navigate("/signin");
       }
     } catch { toast.error("Network error."); }
     finally { setIsMfaDisableLoading(false); }
@@ -260,7 +265,18 @@ export function AccountManagement() {
         {[
           { label: "TRANSFERS", value: account.transfersCount, color: "#0B7FFF" },
           { label: "STORAGE USED", value: formatBytes(account.storageUsedBytes), color: "#00E5A0" },
-          { label: "TEAM SIZE", value: account.role === "admin" ? account.totalUsers ?? "—" : "—", color: "#f59e0b" },
+          (() => {
+            if (account.totalUsers !== null && account.totalUsers !== undefined) {
+              // Root admin — show full platform headcount
+              return { label: "TOTAL USERS", value: account.totalUsers, color: "#f59e0b" }
+            }
+            if (account.role === "admin") {
+              // Regular admin — show groups they administrate
+              return { label: "GROUPS MANAGED", value: account.groupCount ?? 0, color: "#f59e0b" }
+            }
+            // Regular user — show groups they belong to
+            return { label: "MY GROUPS", value: account.groupCount ?? 0, color: "#f59e0b" }
+          })(),
         ].map((stat) => (
           <div key={stat.label} className="p-4 rounded-xl"
             style={{ background: `${stat.color}10`, border: `1px solid ${stat.color}30` }}>
@@ -328,35 +344,38 @@ export function AccountManagement() {
             <Key size={14} /> Change
           </button>
         </div>
-        <div className="flex items-center justify-between py-3 border-t" style={{ borderColor: "rgba(255,255,255,0.06)" }}>
-          {account.mfaEnabled ? (
-            <>
-              <div>
-                <p className="text-white font-medium">Two-Factor Authentication</p>
-                <p style={{ color: "#6b7fa8", fontSize: "13px" }}>MFA is currently active on your account</p>
-              </div>
-              <button onClick={() => setShowMfaDisableDialog(true)}
-                className="flex items-center gap-2 px-4 py-2 rounded-lg transition-colors hover:opacity-90"
-                style={{ background: "rgba(239,68,68,0.12)", border: "1px solid rgba(239,68,68,0.2)", color: "#ef4444", fontSize: "14px", fontWeight: 600 }}>
-                <Shield size={14} /> Disable MFA
-              </button>
-            </>
-          ) : (
-            <>
-              <div>
-                <p className="text-white font-medium">Two-Factor Authentication</p>
-                <p style={{ color: "#ef4444", fontSize: "13px" }}>MFA is not active — your account is less secure</p>
-              </div>
-              <button onClick={() => navigate("/dashboard/mfa-setup")}
-                className="flex items-center gap-2 px-4 py-2 rounded-lg transition-colors hover:opacity-90"
-                style={{ background: "rgba(0,229,160,0.12)", border: "1px solid rgba(0,229,160,0.2)", color: "#00E5A0", fontSize: "14px", fontWeight: 600 }}>
-                <Shield size={14} /> Enable MFA
-              </button>
-            </>
-          )}
-        </div>
+        {!account.requireMfa && (
+          <div className="flex items-center justify-between py-3 border-t" style={{ borderColor: "rgba(255,255,255,0.06)" }}>
+            {account.mfaEnabled ? (
+              <>
+                <div>
+                  <p className="text-white font-medium">Two-Factor Authentication</p>
+                  <p style={{ color: "#6b7fa8", fontSize: "13px" }}>MFA is currently active on your account</p>
+                </div>
+                <button
+                  onClick={() => setShowMfaDisableDialog(true)}
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg transition-colors hover:opacity-90"
+                  style={{ background: "rgba(239,68,68,0.12)", border: "1px solid rgba(239,68,68,0.2)", color: "#ef4444", fontSize: "14px", fontWeight: 600 }}>
+                  <Shield size={14} /> Disable MFA
+                </button>
+              </>
+            ) : (
+              <>
+                <div>
+                  <p className="text-white font-medium">Two-Factor Authentication</p>
+                  <p style={{ color: "#ef4444", fontSize: "13px" }}>MFA is not active — your account is less secure</p>
+                </div>
+                <button onClick={() => navigate("/dashboard/mfa-setup")}
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg transition-colors hover:opacity-90"
+                  style={{ background: "rgba(0,229,160,0.12)", border: "1px solid rgba(0,229,160,0.2)", color: "#00E5A0", fontSize: "14px", fontWeight: 600 }}>
+                  <Shield size={14} /> Enable MFA
+                </button>
+              </>
+            )}
+          </div>
+        )}
         
-        {account.mfaEnabled && (
+        {account.mfaEnabled && !account.requireMfa && (
           <div className="flex items-center justify-between py-3 border-t" style={{ borderColor: "rgba(255,255,255,0.06)" }}>
             <div>
               <p className="text-white font-medium">Backup Code</p>
@@ -375,16 +394,18 @@ export function AccountManagement() {
         )}
       </section>
 
-      <section className="p-5 rounded-xl"
-        style={{ background: "rgba(239,68,68,0.05)", border: "1px solid rgba(239,68,68,0.2)" }}>
-        <h2 className="text-white font-semibold text-lg mb-1">Danger Zone</h2>
-        <p style={{ color: "#6b7fa8", fontSize: "13px", marginBottom: "16px" }}>Irreversible actions. Proceed with caution.</p>
-        <button onClick={() => setShowDeleteDialog(true)}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-lg transition-all hover:opacity-90"
-          style={{ background: "rgba(239,68,68,0.15)", border: "1px solid rgba(239,68,68,0.3)", color: "#ef4444", fontSize: "14px", fontWeight: 600 }}>
-          <Trash2 size={16} /> Delete Account
-        </button>
-      </section>
+      {!isRootAdmin && (
+        <section className="p-5 rounded-xl"
+          style={{ background: "rgba(239,68,68,0.05)", border: "1px solid rgba(239,68,68,0.2)" }}>
+          <h2 className="text-white font-semibold text-lg mb-1">Danger Zone</h2>
+          <p style={{ color: "#6b7fa8", fontSize: "13px", marginBottom: "16px" }}>Irreversible actions. Proceed with caution.</p>
+          <button onClick={() => setShowDeleteDialog(true)}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-lg transition-all hover:opacity-90"
+            style={{ background: "rgba(239,68,68,0.15)", border: "1px solid rgba(239,68,68,0.3)", color: "#ef4444", fontSize: "14px", fontWeight: 600 }}>
+            <Trash2 size={16} /> Delete Account
+          </button>
+        </section>
+      )}
 
       {/* Edit Profile Dialog */}
       <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
@@ -526,8 +547,12 @@ export function AccountManagement() {
       {/* Disable MFA Dialog */}
       <Dialog open={showMfaDisableDialog} onOpenChange={v => { setShowMfaDisableDialog(v); setMfaDisableCode(""); }}>
         <DialogContent style={{ background: "linear-gradient(180deg, #0d1228 0%, #0b0f20 100%)", border: "1px solid rgba(255,255,255,0.1)" }}>
-          <DialogHeader><DialogTitle className="text-white text-xl">Disable Two-Factor Authentication</DialogTitle></DialogHeader>
-          <p style={{ color: "#6b7fa8", fontSize: "13px" }}>Enter your current TOTP code from your authenticator app to confirm. All existing sessions will be invalidated.</p>
+          <DialogHeader>
+            <DialogTitle className="text-white text-xl">Disable Two-Factor Authentication</DialogTitle>
+          </DialogHeader>
+          <p style={{ color: "#6b7fa8", fontSize: "13px" }}>
+            Enter your current TOTP code from your authenticator app to confirm. All existing sessions will be invalidated.
+          </p>
           <div className="mt-4">
             <label style={{ color: "#4a5578", fontSize: "12px", fontWeight: 600, letterSpacing: "0.05em" }}>TOTP CODE</label>
             <input type="text" maxLength={6} value={mfaDisableCode}
@@ -541,10 +566,13 @@ export function AccountManagement() {
             <button onClick={() => { setShowMfaDisableDialog(false); setMfaDisableCode(""); }}
               className="px-4 py-2 rounded-lg"
               style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "#e2e8f0" }}>Cancel</button>
-            <button onClick={handleDisableMfa} disabled={isMfaDisableLoading}
+            <button
+              onClick={handleDisableMfa}
+              disabled={isMfaDisableLoading}
               className="px-4 py-2 rounded-lg flex items-center gap-2 disabled:opacity-50"
               style={{ background: "#ef4444", color: "white" }}>
-              {isMfaDisableLoading && <Loader2 size={16} className="animate-spin" />} Disable MFA
+              {isMfaDisableLoading && <Loader2 size={16} className="animate-spin" />}
+              Disable MFA
             </button>
           </DialogFooter>
         </DialogContent>
