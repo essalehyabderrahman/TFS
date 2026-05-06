@@ -148,7 +148,7 @@ def upload_file(file: FileStorage, uploader_id: str, recipient_email: str,
         recipient_email=recipient_email or None,
         expiry_date=expiry,
         uploaded_by_id=uploader_id,
-        group_id=group_id or None,
+        group_id=None,
         status="Delivered" if recipient_email else "Pending",
         current_version=1,
     )
@@ -227,12 +227,17 @@ def get_transfer_file(transfer_id: str, user: User, ip: str) -> dict:
         return {"ok": False, "error": "NOT_FOUND"}
 
     # Access control
-    # Step 1: determine if the user is a "core" authorized party
+    # [Security] recipient_email grants implicit read access UNLESS an explicit
+    # ACL entry exists for this user — in which case the ACL is authoritative.
+    user_acl = next((a for a in t.acl_entries if a.user_id == user.id), None)
+    recipient_has_implicit_access = (
+        t.recipient_email == user.email and user_acl is None
+    )
     is_core = (
         user.role == "admin"
         or t.uploaded_by_id == user.id
-        or t.recipient_email == user.email
-        or any(a.user_id == user.id and a.can_read for a in t.acl_entries)
+        or recipient_has_implicit_access
+        or (user_acl is not None and user_acl.can_read)
     )
 
     if not is_core:
@@ -245,10 +250,12 @@ def get_transfer_file(transfer_id: str, user: User, ip: str) -> dict:
             return {"ok": False, "error": "FORBIDDEN"}
         # External sharing is on — allow the request to proceed
 
-    if t.expiry_date and t.expiry_date < datetime.now(timezone.utc):
-        t.status = "Expired"
-        db.session.commit()
-        return {"ok": False, "error": "EXPIRED"}
+    if t.expiry_date:
+        expiry_utc = t.expiry_date if t.expiry_date.tzinfo else t.expiry_date.replace(tzinfo=timezone.utc)
+        if expiry_utc < datetime.now(timezone.utc):
+            t.status = "Expired"
+            db.session.commit()
+            return {"ok": False, "error": "EXPIRED"}
 
     # ── Decrypt in memory ────────────────────────────────────────────────────
     try:

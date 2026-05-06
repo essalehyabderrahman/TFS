@@ -244,21 +244,20 @@ export function TransfersTable({ refreshKey }: TransfersTableProps = {}) {
         headers: { "X-CSRF-Token": csrfToken, "Content-Type": "application/json" },
       });
       if (!res.ok) {
-        // Endpoint may not exist yet — apply optimistic update locally
-        toast.info("Access revoked locally (pending backend support).");
-        setTransfers((prev) =>
-          prev.map((t) =>
-            t.id === transfer.id ? { ...t, status: "Expired" as Status } : t
-          )
+        const data = await res.json().catch(() => ({}));
+        toast.error(
+          data.error === "FORBIDDEN" ? "You do not have permission to revoke access." :
+          data.error === "NO_RECIPIENT" ? "This transfer has no recipient to revoke." :
+          "Failed to revoke access. Please try again."
         );
-      } else {
-        setTransfers((prev) =>
-          prev.map((t) =>
-            t.id === transfer.id ? { ...t, status: "Expired" as Status } : t
-          )
-        );
-        toast.success(`Access to "${transfer.fileName}" revoked.`);
+        return;
       }
+      setTransfers((prev) =>
+        prev.map((t) =>
+          t.id === transfer.id ? { ...t, status: "Expired" as Status } : t
+        )
+      );
+      toast.success(`Access to "${transfer.fileName}" has been revoked.`);
     } catch {
       toast.error("Network error. Please try again.");
     } finally {
@@ -278,8 +277,9 @@ export function TransfersTable({ refreshKey }: TransfersTableProps = {}) {
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         toast.error(
-          data.error === "EXPIRED" ? "This file has expired and can no longer be downloaded."
-          : data.error === "FORBIDDEN" ? "You do not have permission to download this file."
+          data.error === "EXPIRED"       ? "This file has expired and can no longer be downloaded."
+          : data.error === "FORBIDDEN"   ? "You do not have permission to download this file."
+          : data.error === "DECRYPT_ERROR" ? "File decryption failed. Please contact your administrator."
           : "Download failed. Please try again."
         );
         return;
@@ -294,8 +294,9 @@ export function TransfersTable({ refreshKey }: TransfersTableProps = {}) {
       a.remove();
       URL.revokeObjectURL(url);
       toast.success(`"${transfer.fileName}" downloaded.`);
-    } catch {
-      toast.error("Network error. Please try again.");
+    } catch (err) {
+      console.error("[TFS] Download fetch error:", err);
+      toast.error("Network error. Please check that the server is running and try again.");
     }
     setOpenMenu(null);
   };
@@ -326,8 +327,8 @@ export function TransfersTable({ refreshKey }: TransfersTableProps = {}) {
 
   return (
     <div
-      className="rounded-2xl overflow-hidden"
-      style={{ border: "1px solid rgba(255,255,255,0.06)" }}
+      className="rounded-2xl"
+      style={{ border: "1px solid rgba(255,255,255,0.06)", overflow: "visible" }}
     >
       {/* Table Header */}
       <div

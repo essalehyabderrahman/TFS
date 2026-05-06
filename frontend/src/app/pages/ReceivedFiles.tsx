@@ -86,11 +86,13 @@ export function ReceivedFiles() {
       })
       if (!res.ok) {
         const data = await res.json().catch(() => ({}))
-        toast.error(data.error === "EXPIRED"
-          ? "This file has expired and can no longer be downloaded."
-          : data.error === "FORBIDDEN"
-          ? "You do not have permission to download this file."
-          : "Download failed. Please try again.")
+        const errCode = data.error ?? ""
+        toast.error(
+          errCode === "EXPIRED"        ? "This file has expired and can no longer be downloaded."
+          : errCode === "FORBIDDEN"    ? "You do not have permission to download this file."
+          : errCode === "DECRYPT_ERROR" ? "File decryption failed. Please contact your administrator."
+          : "Download failed. Please try again."
+        )
         return
       }
       const blob = await res.blob()
@@ -103,8 +105,9 @@ export function ReceivedFiles() {
       a.remove()
       URL.revokeObjectURL(url)
       toast.success(`${file.fileName} downloaded successfully.`)
-    } catch {
-      toast.error("Network error. Please try again.")
+    } catch (err) {
+      console.error("[TFS] Download fetch error:", err)
+      toast.error("Network error. Please check that the server is running and try again.")
     }
   };
 

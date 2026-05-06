@@ -38,7 +38,7 @@ interface MfaSetupResponse {
 
 export async function apiSignIn(payload: SignInPayload): Promise<AuthResponse> {
   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
-  if (!API_BASE_URL) throw new Error("API_BASE_URL not configured")
+  if (API_BASE_URL === undefined) throw new Error("API_BASE_URL not configured")
 
   try {
     const res = await csrfFetch(`${API_BASE_URL}/auth/signin`, {
@@ -64,7 +64,7 @@ export async function apiSignIn(payload: SignInPayload): Promise<AuthResponse> {
 
 export async function apiSignUp(payload: SignUpPayload): Promise<AuthResponse> {
   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
-  if (!API_BASE_URL) throw new Error("API_BASE_URL not configured")
+  if (API_BASE_URL === undefined) throw new Error("API_BASE_URL not configured")
 
   try {
     const res = await csrfFetch(`${API_BASE_URL}/auth/signup`, {
@@ -87,7 +87,7 @@ export async function apiSignUp(payload: SignUpPayload): Promise<AuthResponse> {
 
 export async function apiVerifyMfa(payload: MfaPayload): Promise<AuthResponse> {
   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
-  if (!API_BASE_URL) throw new Error("API_BASE_URL not configured")
+  if (API_BASE_URL === undefined) throw new Error("API_BASE_URL not configured")
 
   try {
     const res = await csrfFetch(`${API_BASE_URL}/auth/mfa/verify`, {
@@ -112,7 +112,7 @@ export async function apiVerifyMfa(payload: MfaPayload): Promise<AuthResponse> {
 
 export async function apiSetupMfa(): Promise<MfaSetupResponse> {
   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
-  if (!API_BASE_URL) throw new Error("API_BASE_URL not configured")
+  if (API_BASE_URL === undefined) throw new Error("API_BASE_URL not configured")
 
   try {
     const res = await csrfFetch(`${API_BASE_URL}/auth/mfa/setup`, {
@@ -133,7 +133,7 @@ export async function apiSetupMfa(): Promise<MfaSetupResponse> {
 
 export async function apiEnableMfa(code: string): Promise<AuthResponse> {
   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
-  if (!API_BASE_URL) throw new Error("API_BASE_URL not configured")
+  if (API_BASE_URL === undefined) throw new Error("API_BASE_URL not configured")
 
   try {
     const res = await csrfFetch(`${API_BASE_URL}/auth/mfa/enable`, {
@@ -157,7 +157,7 @@ export async function apiEnableMfa(code: string): Promise<AuthResponse> {
 export async function apiGetMe(): Promise<AuthResponse> {
   try {
     const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
-    if (!API_BASE_URL) return { ok: false, error: "NO_BACKEND" }
+    if (API_BASE_URL === undefined) return { ok: false, error: "NO_BACKEND" }
 
     const res = await fetch(`${API_BASE_URL}/auth/me`, {
       credentials: "include",
@@ -176,7 +176,7 @@ export async function apiGetMe(): Promise<AuthResponse> {
 export async function apiGetAccount(): Promise<any> {
     try {
       const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
-      if (!API_BASE_URL) return { ok: false, error: "NO_BACKEND" }
+      if (API_BASE_URL === undefined) return { ok: false, error: "NO_BACKEND" }
   
       const res = await fetch(`${API_BASE_URL}/account`, {
         credentials: "include",
@@ -206,7 +206,7 @@ export async function apiSignOut(): Promise<void> {
 export async function apiChangePassword(currentPassword: string, newPassword: string): Promise<any> {
     try {
       const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
-      if (!API_BASE_URL) return { ok: false, error: "NO_BACKEND" }
+      if (API_BASE_URL === undefined) return { ok: false, error: "NO_BACKEND" }
   
       const res = await csrfFetch(`${API_BASE_URL}/account/change-password`, {
         method: "POST",
@@ -229,7 +229,7 @@ export async function apiChangePassword(currentPassword: string, newPassword: st
 export async function apiDeleteAccount(): Promise<any> {
     try {
       const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
-      if (!API_BASE_URL) return { ok: false, error: "NO_BACKEND" }
+      if (API_BASE_URL === undefined) return { ok: false, error: "NO_BACKEND" }
   
       const res = await csrfFetch(`${API_BASE_URL}/account`, {
         method: "DELETE",
@@ -247,7 +247,7 @@ export async function apiDeleteAccount(): Promise<any> {
 
 export async function apiRegenerateBackupCode(totpCode: string): Promise<{ ok: boolean; backupCode?: string; error?: string }> {
   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
-  if (!API_BASE_URL) return { ok: false, error: "NO_BACKEND" }
+  if (API_BASE_URL === undefined) return { ok: false, error: "NO_BACKEND" }
   try {
     const res = await csrfFetch(`${API_BASE_URL}/auth/mfa/backup-code/regenerate`, {
       method: "POST",
