@@ -21,7 +21,12 @@ async function attemptRefresh(): Promise<boolean> {
           "X-CSRF-Token": getCsrfToken(),
         },
       })
-      return res.ok
+      if (res.ok) return true
+      // [Session] If the refresh endpoint returns SESSION_EXPIRED it means
+      // the idle grace window was exceeded or the 8-hr wall was hit.
+      // Propagate false so the caller surfaces the appropriate modal.
+      // Do NOT treat a 4xx from /auth/refresh as a retryable error.
+      return false
     } catch {
       return false
     } finally {
@@ -66,9 +71,11 @@ export async function apiRequest<T>(
   let response = await makeRequest()
 
   // [Session] Intercept expired/invalidated sessions.
-  // UNAUTHORIZED  → token expired (15-min idle)  → try silent refresh first; show modal if refresh fails
-  // SESSION_EXPIRED → 8-hour absolute wall hit    → no refresh attempt; show modal immediately
-  // SESSION_REVOKED → password changed elsewhere  → no refresh attempt; show modal immediately
+  // TOKEN_EXPIRED   → natural 15-min JWT expiry    → attempt silent refresh; if refresh
+  //                   returns SESSION_EXPIRED (idle grace exceeded) show inactivity modal
+  // UNAUTHORIZED    → invalid/missing token         → attempt silent refresh; show modal if fails
+  // SESSION_EXPIRED → 8-hour absolute wall OR idle  → show modal immediately (no refresh)
+  // SESSION_REVOKED → password changed elsewhere    → show modal immediately (no refresh)
   // All other 401s (INVALID_CREDENTIALS etc.) pass through untouched.
   if (response.status === 401) {
     let errorCode: string | null = null
@@ -78,8 +85,11 @@ export async function apiRequest<T>(
       errorCode = errorData.error ?? null
     } catch { /* ignore */ }
 
-    if (errorCode === "UNAUTHORIZED") {
-      // May be a naturally expired token — attempt a silent refresh first
+    if (errorCode === "TOKEN_EXPIRED" || errorCode === "UNAUTHORIZED") {
+      // TOKEN_EXPIRED = natural 15-min idle expiry — try a silent refresh.
+      // The refresh endpoint itself enforces the idle grace window (30s) and
+      // the 8-hr absolute wall, so if refresh returns SESSION_EXPIRED the
+      // user genuinely was idle too long.
       const refreshed = await attemptRefresh()
       if (refreshed) {
         if (csrfHeader["X-CSRF-Token"] !== undefined) {
@@ -87,13 +97,16 @@ export async function apiRequest<T>(
         }
         response = await makeRequest()
       } else {
-        // Refresh failed (8-hr wall or truly invalid) — surface the modal
+        // Refresh failed — surface inactivity modal (covers both idle timeout
+        // and the case where the refresh endpoint returned SESSION_EXPIRED)
         const { getExpireSession } = await import("@/app/context/AuthContext")
         const expireSession = getExpireSession()
         if (expireSession) await expireSession("inactivity")
         throw new Error("SESSION_EXPIRED")
       }
     } else if (errorCode === "SESSION_EXPIRED") {
+      // Returned directly by the refresh endpoint when the 8-hr absolute wall
+      // is hit, or by middleware when session_created_at is too old.
       const { getExpireSession } = await import("@/app/context/AuthContext")
       const expireSession = getExpireSession()
       if (expireSession) await expireSession("absolute")

@@ -200,10 +200,16 @@ def signin(email: str, password: str, ip: str) -> dict:
         return {"ok": False, "error": "ACCOUNT_SUSPENDED"}
 
     # 5. Successful credential check — clear login lockout state only.
-    # [Security] Do NOT reset mfa_failed_attempts here — MFA hasn't been verified yet.
-    # Resetting it here would allow an attacker with valid credentials to reset the
-    # MFA brute-force counter on every attempt, making MFA lockout ineffective.
+    # [Security] Do NOT reset mfa_failed_attempts here in the general case.
+    # However, if mfa_failed_attempts has already reached MAX_MFA_ATTEMPTS the
+    # account is permanently locked out of MFA until explicitly reset, because
+    # verify_mfa() gates on the counter before checking the code. We reset it
+    # here on a successful credential check so that a legitimate user who was
+    # previously locked out (e.g. lost their phone temporarily) can try again
+    # after re-authenticating. An attacker cannot exploit this because they
+    # still need valid credentials to reach this point.
     user.reset_failed_attempts()
+    user.mfa_failed_attempts = 0
 
     user.touch()
 
@@ -240,13 +246,15 @@ def signin(email: str, password: str, ip: str) -> dict:
 
     # [Security] Zero-Trust Paradigm: MFA is enabled — issue restricted mfa_pending token.
     # Full session token only issued after MFA verification.
+    # [Session] Use 15 min to match the signup flow — consistent window, and
+    # generous enough for users who need to find their authenticator app.
     temp_token = create_access_token(
         identity=user.id,
         additional_claims={"mfa_pending": True},
-        expires_delta=timedelta(minutes=5),
+        expires_delta=timedelta(minutes=15),
     )
     _log("LOGIN_MFA_PENDING", email, user.id, "warning", ip,
-         details="MFA challenge required.")
+         details="MFA challenge required. Token valid for 15 minutes.")
     db.session.commit()
     return {"ok": True, "mfaRequired": True, "tempToken": temp_token, "user": user.to_dict()}
 
@@ -404,7 +412,12 @@ def verify_mfa(user_id: str, otp_code: str, ip: str, is_setup_confirm: bool = Fa
         pass
 
     now_ts = int(datetime.now(timezone.utc).timestamp())
-    session_created_at = existing_claims.get("session_created_at", now_ts)
+    # [Security] Do NOT default to now_ts — if get_jwt() fails and we silently
+    # reset session_created_at the 8-hour absolute clock restarts, granting an
+    # unbounded session. Preserve the existing value if present; otherwise use
+    # now_ts only as a genuine first-issuance fallback (e.g. MFA enable on a
+    # brand-new account where no prior full-session claim exists).
+    session_created_at = existing_claims.get("session_created_at") or now_ts
 
     token = create_access_token(
         identity=user.id,

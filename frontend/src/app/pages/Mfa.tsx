@@ -85,6 +85,7 @@ export function Mfa() {
         const messages: Record<string, string> = {
           INVALID_CODE: "Invalid verification code.",
           EXPIRED_TOKEN: "Verification session expired. Please sign in again.",
+          TOKEN_EXPIRED: "Your verification window expired (15 minutes). Please sign in again.",
           TOTP_REPLAY: "Code already used. Please wait for a new code.",
           MFA_MAX_ATTEMPTS: "Too many attempts. Please sign in again.",
           MFA_MAX_ATTEMPTS_EXCEEDED: "Too many attempts. Please sign in again.",
@@ -95,7 +96,7 @@ export function Mfa() {
         };
         toast.error(messages[result.error ?? ""] ?? "Verification failed. Please try again.");
 
-        if (result.error === "EXPIRED_TOKEN" || result.error === "MFA_MAX_ATTEMPTS" || result.error === "MFA_MAX_ATTEMPTS_EXCEEDED" || result.error === "MFA_LOCKED" || result.error === "UNAUTHORIZED") {
+        if (["EXPIRED_TOKEN", "TOKEN_EXPIRED", "MFA_MAX_ATTEMPTS", "MFA_MAX_ATTEMPTS_EXCEEDED", "MFA_LOCKED", "UNAUTHORIZED"].includes(result.error ?? "")) {
           // Clear any partial session state
           clearSession();
           navigate("/signin", { replace: true });

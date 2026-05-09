@@ -107,7 +107,13 @@ export function MfaSetup() {
     try {
       const result = await apiEnableMfa(code);
       if (!result.ok) {
-        toast.error(result.error === "INVALID_CODE" ? "Invalid verification code." : "Activation failed. Please try again.");
+        const messages: Record<string, string> = {
+          INVALID_CODE:   "Invalid verification code. Please check your authenticator app.",
+          TOTP_REQUIRED:  "Please enter the 6-digit code from your authenticator app, not the backup code.",
+          MFA_MAX_ATTEMPTS_EXCEEDED: "Too many failed attempts. Please sign out and try again.",
+          MFA_CODE_ALREADY_USED: "Code already used. Wait for the next 30-second code.",
+        }
+        toast.error(messages[result.error ?? ""] ?? "Activation failed. Please try again.")
         return;
       }
       if (result.user) signIn(result.user, false);

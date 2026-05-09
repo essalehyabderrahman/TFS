@@ -161,6 +161,11 @@ def mfa_enable():
     user = current_user()
     data = request.get_json(silent=True) or {}
     code = data.get("code", "")
+    # [Security] Enrollment confirmation must use a 6-digit TOTP code only.
+    # Accepting the backup code here would confirm enrollment without proving
+    # the authenticator app is actually working.
+    if not code or len(code.strip()) != 6 or not code.strip().isdigit():
+        return jsonify({"error": "TOTP_REQUIRED"}), 400
     result = auth_service.verify_mfa(user.id, code, _ip(), is_setup_confirm=True)
     if not result["ok"]:
         return jsonify({"error": result["error"]}), 401
@@ -252,11 +257,24 @@ def refresh():
     if not raw_token:
         return jsonify({"error": "UNAUTHORIZED"}), 401
 
+    from datetime import timedelta as _td
     try:
         # [Session] allow_expired=True is the whole point — we are refreshing it
         claims = decode_token(raw_token, allow_expired=True)
     except Exception:
         return jsonify({"error": "INVALID_TOKEN"}), 401
+
+    # [Session] Enforce idle timeout: reject tokens that expired more than
+    # IDLE_GRACE_SECONDS ago. This is what gives the 15-min idle window real
+    # meaning — without this gate, any expired token could be refreshed
+    # indefinitely up to the 8-hr absolute wall.
+    IDLE_GRACE_SECONDS = 30  # small buffer for clock skew / slow requests
+    import time as _time
+    token_exp = claims.get("exp")
+    if token_exp is not None:
+        seconds_since_expiry = _time.time() - token_exp
+        if seconds_since_expiry > IDLE_GRACE_SECONDS:
+            return jsonify({"error": "SESSION_EXPIRED"}), 401
 
     # Block mfa_pending tokens from refreshing into a real session
     if claims.get("mfa_pending"):
