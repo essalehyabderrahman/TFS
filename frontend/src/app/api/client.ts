@@ -2,39 +2,10 @@ import type { HttpMethod, RequestOptions } from "@/types";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
-// Tracks whether a refresh is already in flight to avoid parallel refresh storms
-let _refreshPromise: Promise<boolean> | null = null
-
 function getCsrfToken(): string {
   return document.cookie.split("; ").find(r => r.startsWith("csrf_token="))?.split("=")[1] ?? ""
 }
 
-async function attemptRefresh(): Promise<boolean> {
-  if (_refreshPromise) return _refreshPromise
-  _refreshPromise = (async () => {
-    try {
-      const res = await fetch(`${API_BASE_URL}/auth/refresh`, {
-        method: "POST",
-        credentials: "include",
-        headers: {
-          "Content-Type": "application/json",
-          "X-CSRF-Token": getCsrfToken(),
-        },
-      })
-      if (res.ok) return true
-      // [Session] If the refresh endpoint returns SESSION_EXPIRED it means
-      // the idle grace window was exceeded or the 8-hr wall was hit.
-      // Propagate false so the caller surfaces the appropriate modal.
-      // Do NOT treat a 4xx from /auth/refresh as a retryable error.
-      return false
-    } catch {
-      return false
-    } finally {
-      _refreshPromise = null
-    }
-  })()
-  return _refreshPromise
-}
 
 /**
  * Enhanced API request helper.
@@ -85,25 +56,16 @@ export async function apiRequest<T>(
       errorCode = errorData.error ?? null
     } catch { /* ignore */ }
 
-    if (errorCode === "TOKEN_EXPIRED" || errorCode === "UNAUTHORIZED") {
-      // TOKEN_EXPIRED = natural 15-min idle expiry — try a silent refresh.
-      // The refresh endpoint itself enforces the idle grace window (30s) and
-      // the 8-hr absolute wall, so if refresh returns SESSION_EXPIRED the
-      // user genuinely was idle too long.
-      const refreshed = await attemptRefresh()
-      if (refreshed) {
-        if (csrfHeader["X-CSRF-Token"] !== undefined) {
-          csrfHeader["X-CSRF-Token"] = getCsrfToken()
-        }
-        response = await makeRequest()
-      } else {
-        // Refresh failed — surface inactivity modal (covers both idle timeout
-        // and the case where the refresh endpoint returned SESSION_EXPIRED)
-        const { getExpireSession } = await import("@/app/context/AuthContext")
-        const expireSession = getExpireSession()
-        if (expireSession) await expireSession("inactivity")
-        throw new Error("SESSION_EXPIRED")
-      }
+    if (errorCode === "UNAUTHORIZED") {
+      // Token has expired — show the inactivity modal immediately.
+      // Do NOT attempt a silent refresh here: the 15-min idle timeout
+      // is intentional and the user must re-authenticate.
+      // Silent refresh is only valid from the /auth/refresh polling path,
+      // not from mid-flight API call failures.
+      const { getExpireSession } = await import("@/app/context/AuthContext")
+      const expireSession = getExpireSession()
+      if (expireSession) await expireSession("inactivity")
+      throw new Error("SESSION_EXPIRED")
     } else if (errorCode === "SESSION_EXPIRED") {
       // Returned directly by the refresh endpoint when the 8-hr absolute wall
       // is hit, or by middleware when session_created_at is too old.
