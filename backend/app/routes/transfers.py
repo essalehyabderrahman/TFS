@@ -5,7 +5,7 @@ from app.middleware.csrf_middleware import csrf_protect
 from app.models.audit_log import AuditLog, ACLEntry
 from app.models.user import User
 from app.models.transfer import Transfer
-from app.extensions import db
+from app.extensions import db, limiter
 import uuid
 
 transfers_bp = Blueprint("transfers", __name__, url_prefix="/transfers")
@@ -18,6 +18,7 @@ def _ip():
 # ── GET /transfers ─────────────────────────────────────────────────────────────
 @transfers_bp.get("")
 @jwt_required_custom
+@limiter.limit("30 per minute")
 def list_transfers():
     user = current_user()
     data = file_service.list_transfers(user)
@@ -37,6 +38,7 @@ def received():
 @transfers_bp.post("")
 @csrf_protect
 @jwt_required_custom
+@limiter.limit("10 per minute; 50 per hour")
 def upload():
     user = current_user()
 
@@ -72,9 +74,11 @@ def upload():
 # ── GET /transfers/<id>/download ───────────────────────────────────────────────
 @transfers_bp.get("/<transfer_id>/download")
 @jwt_required_custom
+@limiter.limit("20 per minute")
 def download(transfer_id):
-    user   = current_user()
-    result = file_service.get_transfer_file(transfer_id, user, _ip())
+    user    = current_user()
+    context = request.args.get("context")
+    result  = file_service.get_transfer_file(transfer_id, user, _ip(), context=context)
 
     if not result["ok"]:
         status = 403 if result["error"] == "FORBIDDEN" else 404
@@ -93,6 +97,7 @@ def download(transfer_id):
 @transfers_bp.delete("/<transfer_id>")
 @csrf_protect
 @jwt_required_custom
+@limiter.limit("20 per minute")
 def delete(transfer_id):
     user   = current_user()
     result = file_service.delete_transfer(transfer_id, user, _ip())
@@ -263,3 +268,56 @@ def revoke_acl(transfer_id, user_id):
     db.session.commit()
     
     return jsonify({"revoked": True}), 200
+
+# -- POST /transfers/<id>/resend -----------------------------------------------
+@transfers_bp.post("/<transfer_id>/resend")
+@csrf_protect
+@jwt_required_custom
+@limiter.limit("5 per minute")
+def resend_transfer(transfer_id):
+    """
+    Updates the sent_at timestamp and returns the updated transfer.
+    [Security] Only the uploader or an admin can resend.
+    """
+    from datetime import datetime, timezone
+    user = current_user()
+    
+    t = db.session.get(Transfer, transfer_id)
+    if not t or t.is_deleted:
+        return jsonify({"error": "NOT_FOUND"}), 404
+        
+    if user.role != "admin" and t.uploaded_by_id != user.id:
+        return jsonify({"error": "FORBIDDEN"}), 403
+        
+    t.sent_at = datetime.now(timezone.utc)
+    t.status = "Delivered" if t.recipient_email else "Pending"
+    db.session.commit()
+    
+    return jsonify(t.to_dict()), 200
+
+
+# -- POST /transfers/<id>/revoke -----------------------------------------------
+@transfers_bp.post("/<transfer_id>/revoke")
+@csrf_protect
+@jwt_required_custom
+@limiter.limit("10 per minute")
+def revoke_transfer(transfer_id):
+    """
+    Sets revoked_at and changes status to Expired.
+    [Security] Only the uploader or an admin can revoke.
+    """
+    from datetime import datetime, timezone
+    user = current_user()
+    
+    t = db.session.get(Transfer, transfer_id)
+    if not t or t.is_deleted:
+        return jsonify({"error": "NOT_FOUND"}), 404
+        
+    if user.role != "admin" and t.uploaded_by_id != user.id:
+        return jsonify({"error": "FORBIDDEN"}), 403
+        
+    t.revoked_at = datetime.now(timezone.utc)
+    t.status = "Expired"
+    db.session.commit()
+    
+    return jsonify(t.to_dict()), 200

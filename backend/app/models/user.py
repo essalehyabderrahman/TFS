@@ -30,6 +30,8 @@ class User(db.Model):
     token_version        = db.Column(db.Integer, default=1)         # Incremented on password change to invalidate sessions
     # [Security] Root account flag — set only on the seeded superadmin. Immutable after creation.
     is_root = db.Column(db.Boolean, nullable=False, default=False)
+    password_reset_token = db.Column(db.String(64), nullable=True)
+    password_reset_expires = db.Column(db.DateTime, nullable=True)
 
     # Security settings snapshot (stored per-user)
     session_timeout     = db.Column(db.Integer, default=60)    # minutes

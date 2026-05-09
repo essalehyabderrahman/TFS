@@ -77,3 +77,15 @@ export async function updateTeamSettings(updates: Partial<TeamSettings>): Promis
     return { data: null, error: err?.message ?? String(err) }
   }
 }
+
+export async function apiAdminSetPassword(userId: string, password: string) {
+  try {
+    await apiRequest(`/team/${userId}/password`, {
+      method: "PATCH",
+      body: { password }
+    })
+    return { ok: true }
+  } catch (err: any) {
+    return { ok: false, error: err?.message ?? "UNKNOWN_ERROR" }
+  }
+}

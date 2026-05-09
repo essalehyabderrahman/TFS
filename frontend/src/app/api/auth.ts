@@ -266,3 +266,40 @@ export async function apiRegenerateBackupCode(totpCode: string): Promise<{ ok: b
     return { ok: false, error: "NETWORK_ERROR" }
   }
 }
+
+
+export async function apiForgotPassword(email: string): Promise<{ ok: boolean; message?: string; error?: string }> {
+  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
+  if (API_BASE_URL === undefined) return { ok: false, error: "NO_BACKEND" }
+  try {
+    const res = await csrfFetch(`${API_BASE_URL}/auth/forgot-password`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email }),
+    })
+    const data = await res.json()
+    if (!res.ok) return { ok: false, error: data.error }
+    return { ok: true, message: data.message }
+  } catch {
+    return { ok: false, error: "NETWORK_ERROR" }
+  }
+}
+
+export async function apiResetPassword(payload: { token: string; password: string }): Promise<{ ok: boolean; message?: string; error?: string }> {
+  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
+  if (API_BASE_URL === undefined) return { ok: false, error: "NO_BACKEND" }
+  try {
+    const res = await csrfFetch(`${API_BASE_URL}/auth/reset-password`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    })
+    const data = await res.json()
+    if (!res.ok) return { ok: false, error: data.error }
+    return { ok: true, message: data.message }
+  } catch {
+    return { ok: false, error: "NETWORK_ERROR" }
+  }
+}

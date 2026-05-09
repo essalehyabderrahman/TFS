@@ -1,11 +1,11 @@
 import { useState, useEffect, useCallback } from "react"
 import { useAuth } from "../hooks/useAuth"
 import { toast } from "sonner"
-import { Users, Trash2, Loader2, ShieldCheck, ShieldOff, UserCheck, UserX, Crown, UserPlus, ChevronDown } from "lucide-react"
+import { Users, Trash2, Loader2, ShieldCheck, ShieldOff, UserCheck, UserX, Crown, UserPlus, ChevronDown, Key } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "../components/ui/dialog"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "../components/ui/alert-dialog"
 import { apiRequest } from "../api/client"
-import { apiInviteMember } from "../api/team"
+import { apiInviteMember, apiAdminSetPassword } from "../api/team"
 
 interface Member {
   id: string
@@ -42,6 +42,11 @@ export function UserManagement() {
   const [inviteRole, setInviteRole] = useState<"admin" | "user">("user")
   const [showInviteRoleDropdown, setShowInviteRoleDropdown] = useState(false)
   const [isInviting, setIsInviting] = useState(false)
+  
+  // Set password dialog
+  const [passwordTarget, setPasswordTarget] = useState<Member | null>(null)
+  const [newPassword, setNewPassword] = useState("")
+  const [isSettingPassword, setIsSettingPassword] = useState(false)
 
   const loadMembers = useCallback(async () => {
     setIsLoading(true)
@@ -155,6 +160,24 @@ export function UserManagement() {
     }
   }
 
+  async function handleSetPassword() {
+    if (!passwordTarget || !newPassword.trim()) return
+    if (newPassword.length < 8) {
+      toast.error("Password must be at least 8 characters.")
+      return
+    }
+    setIsSettingPassword(true)
+    const result = await apiAdminSetPassword(passwordTarget.id, newPassword.trim())
+    if (result.ok) {
+      toast.success(`Password for ${passwordTarget.name} has been updated.`)
+      setPasswordTarget(null)
+      setNewPassword("")
+    } else {
+      toast.error("Failed to update password.")
+    }
+    setIsSettingPassword(false)
+  }
+
   const admins = members.filter(m => m.role === "admin")
   const users  = members.filter(m => m.role === "user")
 
@@ -260,6 +283,15 @@ export function UserManagement() {
                       {statusBusy
                         ? <Loader2 size={15} className="animate-spin" />
                         : isSuspended ? <UserCheck size={15} /> : <UserX size={15} />}
+                    </button>
+
+                    {/* Set Password */}
+                    <button
+                      onClick={() => { setPasswordTarget(member); setNewPassword("") }}
+                      title="Set user password"
+                      className="p-1.5 rounded-lg hover:bg-amber-500/10 transition-colors"
+                      style={{ color: "#f59e0b" }}>
+                      <Key size={15} />
                     </button>
 
                     {/* Delete */}
@@ -446,6 +478,43 @@ export function UserManagement() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Set Password Dialog */}
+      <Dialog open={!!passwordTarget} onOpenChange={v => { if (!v) setPasswordTarget(null) }}>
+        <DialogContent style={{ background: "linear-gradient(180deg, #0d1228 0%, #0b0f20 100%)", border: "1px solid rgba(255,255,255,0.1)" }}>
+          <DialogHeader><DialogTitle className="text-white text-xl">Set User Password</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            <p style={{ color: "#6b7fa8", fontSize: "13px" }}>
+              Update the password for <span className="text-white font-medium">{passwordTarget?.name}</span>.
+            </p>
+            <div>
+              <label style={{ color: "#4a5578", fontSize: "12px", fontWeight: 600, letterSpacing: "0.05em" }}>NEW PASSWORD</label>
+              <input
+                type="password"
+                placeholder="••••••••"
+                value={newPassword}
+                onChange={e => setNewPassword(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter" && !isSettingPassword) handleSetPassword() }}
+                className="w-full mt-1 px-4 py-2.5 rounded-lg text-white placeholder:text-slate-500 outline-none"
+                style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", fontSize: "14px" }}
+              />
+            </div>
+          </div>
+          <DialogFooter className="mt-6">
+            <button onClick={() => setPasswordTarget(null)}
+              className="px-4 py-2 rounded-lg"
+              style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "#e2e8f0" }}>
+              Cancel
+            </button>
+            <button onClick={handleSetPassword} disabled={isSettingPassword}
+              className="px-4 py-2 rounded-lg flex items-center gap-2 disabled:opacity-50"
+              style={{ background: "linear-gradient(135deg, #f59e0b 0%, #d97706 100%)", color: "white" }}>
+              {isSettingPassword && <Loader2 size={16} className="animate-spin" />}
+              Update Password
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Confirm delete */}
       <AlertDialog open={!!memberToDelete} onOpenChange={() => setMemberToDelete(null)}>

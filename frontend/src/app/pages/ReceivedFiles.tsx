@@ -80,7 +80,7 @@ export function ReceivedFiles() {
     const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
     if (!API_BASE_URL) return
     try {
-      const res = await fetch(`${API_BASE_URL}/transfers/${file.id}/download`, {
+      const res = await fetch(`${API_BASE_URL}/transfers/${file.id}/download?context=received`, {
         method: "GET",
         credentials: "include",
       })

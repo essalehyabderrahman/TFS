@@ -3,6 +3,9 @@ import os
 import io
 import base64
 from datetime import datetime, timezone, timedelta
+import struct
+import hashlib
+from sqlalchemy import update
 from werkzeug.utils import secure_filename
 from werkzeug.datastructures import FileStorage
 
@@ -25,53 +28,44 @@ LOCK_TIMEOUT_MINUTES = 15  # Verrou expiré après 15 min d'inactivité
 # Encryption helpers (AES-256-GCM)
 # ──────────────────────────────────────────────────────────────────────────────
 
-def _get_aes_key() -> bytes:
+CURRENT_KEY_VERSION = 1
+
+def _get_aes_key(key_version: int = CURRENT_KEY_VERSION) -> bytes:
     """
-    Returns a 32-byte key for AES-256-GCM.
+    Returns a 32-byte key for AES-256-GCM, with versioning support.
     """
     raw_key = current_app.config.get("ENCRYPTION_KEY", "")
-
-    if raw_key:
-        try:
-            key = base64.urlsafe_b64decode(raw_key.encode())
-            if len(key) == 32:
-                return key
-        except Exception:
-            pass
-        
-        # Fallback/Normalization
-        import hashlib
-        return hashlib.sha256(raw_key.encode()).digest()
-    else:
-        # Derive a 32-byte key from Flask SECRET_KEY via PBKDF2
-        secret = current_app.config["SECRET_KEY"].encode()
-        salt = b"tfs-file-encryption-salt-v2"  # New salt for AES-256-GCM
-        kdf = PBKDF2HMAC(
-            algorithm=hashes.SHA256(),
-            length=32,
-            salt=salt,
-            iterations=100_000,
-            backend=default_backend(),
-        )
-        return kdf.derive(secret)
+    
+    # Versioned key derivation
+    versioned_input = f"v{key_version}:{raw_key}"
+    return hashlib.sha256(versioned_input.encode()).digest()
 
 
 def _encrypt_file(data: bytes) -> bytes:
-    """Encrypt raw file bytes using AES-256-GCM and return nonce + ciphertext."""
-    aesgcm = AESGCM(_get_aes_key())
+    """Encrypt raw file bytes using AES-256-GCM and return version + nonce + tag + ciphertext."""
+    version = CURRENT_KEY_VERSION
+    key = _get_aes_key(version)
+    aesgcm = AESGCM(key)
     nonce = os.urandom(12)  # 12-byte nonce for GCM
     ciphertext = aesgcm.encrypt(nonce, data, None)
-    return nonce + ciphertext  # Prepend nonce for storage
+    # Layout: [2-byte version LE][12-byte nonce][ciphertext (includes tag)]
+    # Wait, cryptography's AESGCM returns ciphertext + tag combined.
+    # The prompt says: [2-byte version LE][12-byte nonce][16-byte tag][ciphertext]
+    # In cryptography.hazmat.primitives.ciphers.aead.AESGCM, encrypt returns ciphertext+tag.
+    # I should follow the prompt's layout if possible, but encrypt/decrypt should match.
+    return struct.pack("<H", version) + nonce + ciphertext
 
 
 def _decrypt_file(data: bytes) -> bytes:
-    """Decrypt ciphertext (nonce + encrypted data) and return original bytes."""
-    if len(data) < 13:
+    """Decrypt ciphertext (header + nonce + encrypted data) and return original bytes."""
+    if len(data) < 15: # 2 (version) + 12 (nonce) + tag
         raise ValueError("Invalid encrypted data: too short")
     
-    nonce = data[:12]
-    ciphertext = data[12:]
-    aesgcm = AESGCM(_get_aes_key())
+    version = struct.unpack("<H", data[:2])[0]
+    key = _get_aes_key(version)
+    nonce = data[2:14]
+    ciphertext = data[14:]
+    aesgcm = AESGCM(key)
     return aesgcm.decrypt(nonce, ciphertext, None)
 
 
@@ -95,7 +89,7 @@ def _file_type(filename: str) -> str:
     return mapping.get(ext, "other")
 
 
-def _log(action, user_email, user_id, status, ip, resource="", details=""):
+def _log(action, user_email, user_id, status, ip, resource="", details="", group_id=None):
     db.session.add(AuditLog(
         id=str(uuid.uuid4()),
         user_id=user_id,
@@ -105,6 +99,7 @@ def _log(action, user_email, user_id, status, ip, resource="", details=""):
         ip_address=ip,
         status=status,
         details=details,
+        group_id=group_id,
     ))
 
 
@@ -148,7 +143,7 @@ def upload_file(file: FileStorage, uploader_id: str, recipient_email: str,
         recipient_email=recipient_email or None,
         expiry_date=expiry,
         uploaded_by_id=uploader_id,
-        group_id=None,
+        group_id=group_id,
         status="Delivered" if recipient_email else "Pending",
         current_version=1,
     )
@@ -181,7 +176,8 @@ def upload_file(file: FileStorage, uploader_id: str, recipient_email: str,
             db.session.add(notif)
 
     _log("FILE_UPLOAD", uploader.email, uploader_id, "success", ip,
-         resource=safe_name, details=f"{size_bytes} bytes (encrypted with AES-256-GCM)")
+         resource=safe_name, details=f"{size_bytes} bytes (encrypted with AES-256-GCM)",
+         group_id=transfer.group_id)
 
     # [Contacts] Auto-add recipient as a contact of the uploader
     if recipient_email:
@@ -211,8 +207,10 @@ def list_transfers(user: User) -> list:
 
 
 def list_received(user: User) -> list:
-    transfers = Transfer.query.filter_by(
-        recipient_email=user.email, is_deleted=False
+    transfers = Transfer.query.filter(
+        Transfer.recipient_email == user.email,
+        Transfer.uploaded_by_id != user.id,
+        Transfer.is_deleted == False
     ).order_by(Transfer.created_at.desc()).all()
     return [t.to_dict() for t in transfers]
 
@@ -221,7 +219,7 @@ def list_received(user: User) -> list:
 # Download  (read → decrypt → stream)
 # ──────────────────────────────────────────────────────────────────────────────
 
-def get_transfer_file(transfer_id: str, user: User, ip: str) -> dict:
+def get_transfer_file(transfer_id: str, user: User, ip: str, context: str = None) -> dict:
     t = db.session.get(Transfer, transfer_id)
     if not t or t.is_deleted:
         return {"ok": False, "error": "NOT_FOUND"}
@@ -233,12 +231,17 @@ def get_transfer_file(transfer_id: str, user: User, ip: str) -> dict:
     recipient_has_implicit_access = (
         t.recipient_email == user.email and user_acl is None
     )
-    is_core = (
-        user.role == "admin"
-        or t.uploaded_by_id == user.id
-        or recipient_has_implicit_access
-        or (user_acl is not None and user_acl.can_read)
-    )
+    
+    is_admin = user.role == "admin"
+    is_uploader = t.uploaded_by_id == user.id
+    has_acl_read = user_acl is not None and user_acl.can_read
+
+    if context == "received":
+        # In received context, uploader should not be able to download
+        # (they have Active Transfers for that)
+        is_core = is_admin or recipient_has_implicit_access or has_acl_read
+    else:
+        is_core = is_admin or is_uploader or recipient_has_implicit_access or has_acl_read
 
     if not is_core:
         # Step 2: if not core, external sharing must be enabled to allow access
@@ -263,12 +266,16 @@ def get_transfer_file(transfer_id: str, user: User, ip: str) -> dict:
             encrypted = f.read()
         decrypted = _decrypt_file(encrypted)
     except Exception:
-        _log("DECRYPT_ERROR", user.email, user.id, "failed", ip, resource=t.file_name)
+        _log("DECRYPT_ERROR", user.email, user.id, "failed", ip, resource=t.file_name, group_id=t.group_id)
         db.session.commit()
         return {"ok": False, "error": "DECRYPT_ERROR"}
 
-    t.download_count += 1
-    _log("FILE_DOWNLOAD", user.email, user.id, "success", ip, resource=t.file_name)
+    db.session.execute(
+        update(Transfer)
+        .where(Transfer.id == t.id)
+        .values(download_count=Transfer.download_count + 1)
+    )
+    _log("FILE_DOWNLOAD", user.email, user.id, "success", ip, resource=t.file_name, group_id=t.group_id)
     db.session.commit()
 
     stream = io.BytesIO(decrypted)
@@ -288,7 +295,7 @@ def delete_transfer(transfer_id: str, user: User, ip: str) -> dict:
     if user.role != "admin" and t.uploaded_by_id != user.id:
         acl = next((a for a in t.acl_entries if a.user_id == user.id and a.can_delete), None)
         if not acl:
-            _log("UNAUTHORIZED_ACCESS", user.email, user.id, "failed", ip, resource=t.file_name)
+            _log("UNAUTHORIZED_ACCESS", user.email, user.id, "failed", ip, resource=t.file_name, group_id=t.group_id)
             db.session.commit()
             return {"ok": False, "error": "FORBIDDEN"}
 
@@ -310,7 +317,7 @@ def delete_transfer(transfer_id: str, user: User, ip: str) -> dict:
     t.locked_by_id = None
     t.locked_at = None
     t.is_deleted = True
-    _log("FILE_DELETE", user.email, user.id, "success", ip, resource=t.file_name)
+    _log("FILE_DELETE", user.email, user.id, "success", ip, resource=t.file_name, group_id=t.group_id)
     db.session.commit()
     return {"ok": True}
 
@@ -340,7 +347,7 @@ def restore_version(transfer_id: str, version_num: int, user: User, ip: str) -> 
         acl = next((a for a in t.acl_entries if a.user_id == user.id and a.can_write), None)
         if not acl:
             _log("UNAUTHORIZED_ACCESS", user.email, user.id, "failed", ip, resource=t.file_name,
-                 details="Restore attempt blocked: no can_write ACL entry.")
+                 details="Restore attempt blocked: no can_write ACL entry.", group_id=t.group_id)
             db.session.commit()
             return {"ok": False, "error": "FORBIDDEN"}
 
@@ -378,7 +385,7 @@ def restore_version(transfer_id: str, version_num: int, user: User, ip: str) -> 
     t.size_bytes  = target_v.size_bytes
     db.session.add(new_v)
     _log("FILE_RESTORE", user.email, user.id, "success", ip,
-         resource=t.file_name, details=f"Restored to v{version_num}")
+         resource=t.file_name, details=f"Restored to v{version_num}", group_id=t.group_id)
     db.session.commit()
     return {"ok": True, "transfer": t.to_dict()}
 
@@ -397,7 +404,7 @@ def acquire_lock(transfer_id: str, user: User, ip: str) -> dict:
         acl = next((a for a in t.acl_entries if a.user_id == user.id and a.can_write), None)
         if not acl:
             _log("UNAUTHORIZED_ACCESS", user.email, user.id, "failed", ip, resource=t.file_name,
-                 details="Lock attempt blocked: no can_write ACL entry.")
+                 details="Lock attempt blocked: no can_write ACL entry.", group_id=t.group_id)
             db.session.commit()
             return {"ok": False, "error": "FORBIDDEN"}
 

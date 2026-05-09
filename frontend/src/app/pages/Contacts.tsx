@@ -12,6 +12,7 @@ import {
   type Contact, type ContactsResponse,
 } from "../api/contacts"
 import { useNavigate } from "react-router"
+import { useAuth } from "../hooks/useAuth"
 
 const SECTION_META: {
   key: keyof Omit<ContactsResponse, "all">
@@ -126,6 +127,7 @@ function ContactCard({
 
 export function Contacts() {
   const navigate = useNavigate()
+  const { isAppAdmin, isGroupAdmin } = useAuth()
   const [data, setData]         = useState<ContactsResponse | null>(null)
   const [isLoading, setLoading] = useState(true)
   const [search, setSearch]     = useState("")
@@ -287,6 +289,15 @@ export function Contacts() {
               {totalContacts} contact{totalContacts !== 1 ? "s" : ""}
             </span>
           </div>
+          {(isAppAdmin || isGroupAdmin) && (
+            <button
+              onClick={() => navigate("/dashboard/users")}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl transition-all hover:bg-white/10"
+              style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: "#e2e8f0", fontSize: "14px", fontWeight: 600 }}
+            >
+              <Users size={16} /> Team Directory
+            </button>
+          )}
           <button
             onClick={() => setShowAdd(true)}
             className="flex items-center gap-2 px-4 py-2.5 rounded-xl transition-all hover:opacity-90"

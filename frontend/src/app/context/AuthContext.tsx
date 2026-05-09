@@ -3,7 +3,7 @@ import type { ReactNode } from "react"
 import type { AuthUser } from "@/types"
 import { apiGetMe, apiSignOut } from "@/app/api/auth"
 
-export type SessionExpiredReason = "inactivity" | "absolute" | "revoked"
+export type SessionExpiredReason = "inactivity" | "absolute" | "revoked" | "unauthorized"
 
 interface AuthContextValue {
   user: AuthUser | null
@@ -58,6 +58,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           // page on reload because isMfaPending would default to false.
           setIsMfaPending(Boolean(result.mfaPending))
           setIsBackendReachable(true)
+          
+          // [FIX 18] Restore isGroupAdmin status on reload
+          if (result.user?.role === "admin") {
+            setIsGroupAdmin(true)
+          } else {
+            import("@/app/api/groups").then(({ apiListGroups }) => {
+              apiListGroups().then(groups => {
+                const isAdmin = groups.some(g => g.myRole === "admin")
+                setIsGroupAdmin(isAdmin)
+              }).catch(() => {})
+            })
+          }
         } else if (result.error === "MFA_REQUIRED") {
           // Stale MFA-pending cookie on load — treat as unauthenticated.
           // The cookie will expire naturally (5 min). Don't set isMfaPending

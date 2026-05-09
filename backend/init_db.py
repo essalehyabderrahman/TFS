@@ -169,8 +169,6 @@ with app.app_context():
         download_count=0,
         created_at=now - timedelta(minutes=15),
         expiry_date=now + timedelta(days=7),
-        locked_by_id=admin.id,
-        locked_at=now - timedelta(minutes=10)
     )
 
     db.session.add_all([t1, t2, t3, t4])
@@ -322,12 +320,15 @@ with app.app_context():
     db.session.commit()
     print("Database initialization and data seeding completed successfully!")
     print()
-    print("--- Accounts ----------------------------------------------")
-    print("  admin@tfs.com          Admin@Secure#2026   (root admin)")
-    print("  sarah.chen@tfs.com     Sarah@Secure#2026")
-    print("  michael.roberts@tfs.com  Michael@Secure#2026")
-    print("  emily.zhang@tfs.com    Emily@Secure#2026")
-    print("  david.martinez@tfs.com David@Secure#2026")
+    print("----------------------------------------------------------")
+    if os.environ.get("PRINT_SEED_PASSWORDS") == "true":
+        print("  admin@tfs.com          Admin@Secure#2026   (root admin)")
+        print("  sarah.chen@tfs.com     Sarah@Secure#2026")
+        print("  michael.roberts@tfs.com  Michael@Secure#2026")
+        print("  emily.zhang@tfs.com    Emily@Secure#2026")
+        print("  david.martinez@tfs.com David@Secure#2026")
+    else:
+        print("  Passwords redacted. Set PRINT_SEED_PASSWORDS=true to see them.")
     print("----------------------------------------------------------")
 
 if __name__ == "__main__":

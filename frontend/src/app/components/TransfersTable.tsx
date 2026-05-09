@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import { toast } from "sonner";
+import { apiRequest } from "../api/client";
 import {
   FileText,
   FileImage,
@@ -201,32 +202,16 @@ export function TransfersTable({ refreshKey }: TransfersTableProps = {}) {
   };
 
   const handleResend = async (transfer: Transfer) => {
-    const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
-    if (!API_BASE_URL) return;
     try {
-      const csrfToken = document.cookie.split("; ").find(r => r.startsWith("csrf_token="))?.split("=")[1] ?? "";
-      const res = await fetch(`${API_BASE_URL}/transfers/${transfer.id}/resend`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "X-CSRF-Token": csrfToken, "Content-Type": "application/json" },
+      const data = await apiRequest<Transfer>(`/transfers/${transfer.id}/resend`, {
+        method: "POST"
       });
-      if (!res.ok) {
-        // Endpoint may not exist yet — fall back to optimistic UI update so UX isn't broken
-        toast.info("Resend queued (pending backend support).");
-        setTransfers((prev) =>
-          prev.map((t) =>
-            t.id === transfer.id ? { ...t, status: "Sending..." as Status } : t
-          )
-        );
-      } else {
-        const data = await res.json();
-        setTransfers((prev) =>
-          prev.map((t) => (t.id === transfer.id ? { ...t, ...data } : t))
-        );
-        toast.success(`"${transfer.fileName}" resent successfully.`);
-      }
-    } catch {
-      toast.error("Network error. Please try again.");
+      setTransfers((prev) =>
+        prev.map((t) => (t.id === transfer.id ? { ...t, ...data } : t))
+      );
+      toast.success(`"${transfer.fileName}" resent successfully.`);
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to resend. Please try again.");
     } finally {
       setResendTransfer(null);
       setOpenMenu(null);
@@ -234,32 +219,23 @@ export function TransfersTable({ refreshKey }: TransfersTableProps = {}) {
   };
 
   const handleRevokeAccess = async (transfer: Transfer) => {
-    const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
-    if (!API_BASE_URL) return;
     try {
-      const csrfToken = document.cookie.split("; ").find(r => r.startsWith("csrf_token="))?.split("=")[1] ?? "";
-      const res = await fetch(`${API_BASE_URL}/transfers/${transfer.id}/revoke`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "X-CSRF-Token": csrfToken, "Content-Type": "application/json" },
+      await apiRequest(`/transfers/${transfer.id}/revoke`, {
+        method: "POST"
       });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        toast.error(
-          data.error === "FORBIDDEN" ? "You do not have permission to revoke access." :
-          data.error === "NO_RECIPIENT" ? "This transfer has no recipient to revoke." :
-          "Failed to revoke access. Please try again."
-        );
-        return;
-      }
       setTransfers((prev) =>
         prev.map((t) =>
           t.id === transfer.id ? { ...t, status: "Expired" as Status } : t
         )
       );
       toast.success(`Access to "${transfer.fileName}" has been revoked.`);
-    } catch {
-      toast.error("Network error. Please try again.");
+    } catch (err: any) {
+      const msg = err?.message || "";
+      toast.error(
+        msg === "FORBIDDEN" ? "You do not have permission to revoke access." :
+        msg === "NO_RECIPIENT" ? "This transfer has no recipient to revoke." :
+        "Failed to revoke access. Please try again."
+      );
     } finally {
       setRevokeTransfer(null);
       setOpenMenu(null);

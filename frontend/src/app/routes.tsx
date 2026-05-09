@@ -18,6 +18,8 @@ import { SignIn } from "./pages/SignIn";
 import { SignUp } from "./pages/SignUp";
 import { Mfa } from "./pages/Mfa";
 import { MfaSetup } from "./pages/MfaSetup";
+import ForgotPassword from "./pages/ForgotPassword";
+import ResetPassword from "./pages/ResetPassword";
 
 
 function RootLayout() {
@@ -80,6 +82,14 @@ export const router = createBrowserRouter([
       {
         path: "signup",
         element: <PublicOnlyRoute><SignUp /></PublicOnlyRoute>,
+      },
+      {
+        path: "forgot-password",
+        element: <PublicOnlyRoute><ForgotPassword /></PublicOnlyRoute>,
+      },
+      {
+        path: "reset-password",
+        element: <PublicOnlyRoute><ResetPassword /></PublicOnlyRoute>,
       },
       {
         path: "mfa-verify",

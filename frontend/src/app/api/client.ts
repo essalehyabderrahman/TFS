@@ -56,28 +56,22 @@ export async function apiRequest<T>(
       errorCode = errorData.error ?? null
     } catch { /* ignore */ }
 
-    if (errorCode === "UNAUTHORIZED") {
-      // Token has expired — show the inactivity modal immediately.
-      // Do NOT attempt a silent refresh here: the 15-min idle timeout
-      // is intentional and the user must re-authenticate.
-      // Silent refresh is only valid from the /auth/refresh polling path,
-      // not from mid-flight API call failures.
+    if (errorCode === "TOKEN_EXPIRED" || errorCode === "SESSION_EXPIRED") {
       const { getExpireSession } = await import("@/app/context/AuthContext")
       const expireSession = getExpireSession()
       if (expireSession) await expireSession("inactivity")
-      throw new Error("SESSION_EXPIRED")
-    } else if (errorCode === "SESSION_EXPIRED") {
-      // Returned directly by the refresh endpoint when the 8-hr absolute wall
-      // is hit, or by middleware when session_created_at is too old.
-      const { getExpireSession } = await import("@/app/context/AuthContext")
-      const expireSession = getExpireSession()
-      if (expireSession) await expireSession("absolute")
       throw new Error("SESSION_EXPIRED")
     } else if (errorCode === "SESSION_REVOKED") {
       const { getExpireSession } = await import("@/app/context/AuthContext")
       const expireSession = getExpireSession()
       if (expireSession) await expireSession("revoked")
       throw new Error("SESSION_REVOKED")
+    } else {
+      // General 401 (invalid credentials, missing token, deleted user, etc.)
+      const { getExpireSession } = await import("@/app/context/AuthContext")
+      const expireSession = getExpireSession()
+      if (expireSession) await expireSession("unauthorized")
+      throw new Error("UNAUTHORIZED")
     }
   }
 

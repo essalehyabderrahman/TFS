@@ -49,12 +49,15 @@ export function Header({ onMenuClick }: HeaderProps) {
 
   const getPageTitle = () => {
     const path = location.pathname;
-    if (path === "/dashboard" || path === "/dashboard/active") return "Welcome back, Admin.";
+    if (path === "/dashboard" || path === "/dashboard/active") return "Welcome back.";
     if (path === "/dashboard/received") return "Received Files";
     if (path === "/dashboard/audit") return "Audit & Compliance";
     if (path === "/dashboard/team") return "Team Management";
     if (path === "/dashboard/security") return "Security Settings";
     if (path === "/dashboard/account") return "Account Management";
+    if (path === "/dashboard/users") return "User Directory";
+    if (path === "/dashboard/groups") return "Group Workspace";
+    if (path === "/dashboard/contacts") return "Contacts";
     return "TFS Dashboard";
   };
 

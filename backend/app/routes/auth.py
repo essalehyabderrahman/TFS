@@ -310,3 +310,84 @@ def handle_rate_limit(e):
     db.session.commit()
     # Generic message â€” do not reveal limit thresholds to callers
     return jsonify({"error": "TOO_MANY_REQUESTS"}), 429
+
+# -- POST /auth/forgot-password ----------------------------------------------
+@auth_bp.post("/forgot-password")
+@csrf_protect
+@limiter.limit("5 per hour")
+def forgot_password():
+    """
+    Generates a password reset token and 'logs' it for dev.
+    [Security] Use a secure random token (secrets.token_urlsafe).
+    [Audit] Log the request.
+    """
+    import secrets
+    from datetime import datetime, timezone, timedelta
+    from app.models.user import User
+    from app.extensions import db
+    from app.services.auth_service import _log
+
+    data  = request.get_json(silent=True) or {}
+    email = data.get("email", "").strip().lower()
+    if not email:
+        return jsonify({"error": "EMAIL_REQUIRED"}), 400
+
+    user = User.query.filter_by(email=email).first()
+    # [Security] Do not reveal if user exists — always return 200 "If account exists..."
+    if user:
+        token = secrets.token_urlsafe(32)
+        user.password_reset_token = token
+        user.password_reset_expires = datetime.now(timezone.utc) + timedelta(hours=1)
+        db.session.commit()
+        
+        # [Security] In a real app, send email. For now, log to terminal.
+        print(f"\n[SECURITY] PASSWORD RESET TOKEN FOR {email}: {token}\n")
+        _log("PASSWORD_RESET_REQUESTED", email, user.id, "info", request.remote_addr)
+    else:
+        _log("PASSWORD_RESET_REQUESTED_NONEXISTENT", email, None, "warning", request.remote_addr)
+        db.session.commit()
+
+    return jsonify({"message": "If an account exists with that email, a reset link has been generated."}), 200
+
+
+# -- POST /auth/reset-password -----------------------------------------------
+@auth_bp.post("/reset-password")
+@csrf_protect
+@limiter.limit("5 per hour")
+def reset_password():
+    """
+    Validates the token and sets a new password.
+    """
+    from datetime import datetime, timezone
+    from app.models.user import User
+    from app.extensions import db
+    from app.services.auth_service import _log
+
+    data     = request.get_json(silent=True) or {}
+    token    = data.get("token")
+    password = data.get("password")
+
+    if not token or not password:
+        return jsonify({"error": "MISSING_FIELDS"}), 400
+
+    if len(password) < 8:
+        return jsonify({"error": "INVALID_PASSWORD"}), 400
+
+    user = User.query.filter(
+        User.password_reset_token == token,
+        User.password_reset_expires > datetime.now(timezone.utc)
+    ).first()
+
+    if not user:
+        return jsonify({"error": "INVALID_OR_EXPIRED_TOKEN"}), 400
+
+    user.set_password(password)
+    user.password_reset_token = None
+    user.password_reset_expires = None
+    # Invalidate existing sessions
+    user.token_version = (user.token_version or 1) + 1
+    
+    _log("PASSWORD_RESET_COMPLETED", user.email, user.id, "success", request.remote_addr)
+    db.session.commit()
+
+    return jsonify({"ok": True, "message": "Password has been reset. Please sign in with your new password."}), 200

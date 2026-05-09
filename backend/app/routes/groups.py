@@ -6,6 +6,7 @@ from app.models.group import Group, GroupMember, GroupSettings
 from app.models.audit_log import AuditLog
 from app.middleware.auth_middleware import jwt_required_custom, require_role, current_user
 from app.middleware.csrf_middleware import csrf_protect
+from app.extensions import limiter
 
 groups_bp = Blueprint("groups", __name__, url_prefix="/groups")
 
@@ -38,6 +39,7 @@ def _get_user_groups(user: User) -> list:
 # ── GET /groups ───────────────────────────────────────────────────────────────
 @groups_bp.get("")
 @jwt_required_custom
+@limiter.limit("30 per minute")
 def list_groups():
     """
     App admins see all groups.
@@ -64,6 +66,7 @@ def list_groups():
 @groups_bp.post("")
 @csrf_protect
 @require_role("admin")
+@limiter.limit("10 per minute")
 def create_group():
     """Only app admins can create groups."""
     actor = current_user()
@@ -111,6 +114,7 @@ def create_group():
 @groups_bp.delete("/<group_id>")
 @csrf_protect
 @require_role("admin")
+@limiter.limit("10 per minute")
 def delete_group(group_id):
     """Only app admins can delete groups."""
     actor = current_user()
@@ -136,6 +140,7 @@ def delete_group(group_id):
 # ── GET /groups/<group_id>/members ────────────────────────────────────────────
 @groups_bp.get("/<group_id>/members")
 @jwt_required_custom
+@limiter.limit("30 per minute")
 def list_members(group_id):
     user  = current_user()
     group = db.session.get(Group, group_id)
@@ -158,6 +163,7 @@ def list_members(group_id):
 @groups_bp.post("/<group_id>/members")
 @csrf_protect
 @jwt_required_custom
+@limiter.limit("20 per minute")
 def invite_member(group_id):
     """App admin or group admin can invite. Group admin only if allow_member_invite=True."""
     actor = current_user()
@@ -214,6 +220,7 @@ def invite_member(group_id):
 @groups_bp.patch("/<group_id>/members/<user_id>")
 @csrf_protect
 @jwt_required_custom
+@limiter.limit("20 per minute")
 def update_member(group_id, user_id):
     """Update a member's role within the group."""
     actor = current_user()
@@ -264,6 +271,7 @@ def update_member(group_id, user_id):
 @groups_bp.delete("/<group_id>/members/<user_id>")
 @csrf_protect
 @jwt_required_custom
+@limiter.limit("20 per minute")
 def remove_member(group_id, user_id):
     """App admin or group admin can remove members."""
     actor = current_user()
@@ -303,6 +311,7 @@ def remove_member(group_id, user_id):
 # ── GET /groups/<group_id>/transfers ─────────────────────────────────────────
 @groups_bp.get("/<group_id>/transfers")
 @jwt_required_custom
+@limiter.limit("30 per minute")
 def list_group_transfers(group_id):
     """
     List all non-deleted transfers scoped to this group.
@@ -335,6 +344,7 @@ def list_group_transfers(group_id):
 @groups_bp.post("/<group_id>/transfers")
 @csrf_protect
 @jwt_required_custom
+@limiter.limit("10 per minute; 50 per hour")
 def upload_group_transfer(group_id):
     """
     Upload a file scoped to this group.
@@ -399,6 +409,7 @@ def upload_group_transfer(group_id):
 # ── GET /groups/<group_id>/settings ──────────────────────────────────────────
 @groups_bp.get("/<group_id>/settings")
 @jwt_required_custom
+@limiter.limit("30 per minute")
 def get_settings(group_id):
     user  = current_user()
     group = db.session.get(Group, group_id)
@@ -415,6 +426,7 @@ def get_settings(group_id):
 @groups_bp.patch("/<group_id>/settings")
 @csrf_protect
 @jwt_required_custom
+@limiter.limit("10 per minute")
 def update_settings(group_id):
     actor = current_user()
     group = db.session.get(Group, group_id)

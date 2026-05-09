@@ -19,6 +19,8 @@ class Transfer(db.Model):
     download_count   = db.Column(db.Integer,      nullable=False, default=0)
     expiry_date      = db.Column(db.DateTime,     nullable=True, default=lambda: datetime.now(timezone.utc) + timedelta(days=180))
     is_deleted       = db.Column(db.Boolean,      default=False)
+    revoked_at       = db.Column(db.DateTime,     nullable=True)
+    sent_at          = db.Column(db.DateTime,     nullable=True)
 
     # Concurrent access lock
     locked_by_id     = db.Column(db.String(36),   db.ForeignKey("users.id"), nullable=True)
@@ -80,6 +82,8 @@ class Transfer(db.Model):
             "uploadedBy":     self.uploader.email if self.uploader else "",
             "isLocked":       self.is_locked,
             "currentVersion": self.current_version,
+            "revokedAt":      self.revoked_at.isoformat() if self.revoked_at else None,
+            "sentAt":         self.sent_at.isoformat() if self.sent_at else None,
         }
 
     def __repr__(self):

@@ -1,6 +1,6 @@
 import uuid
 from flask import Blueprint, request, jsonify
-from app.extensions import db
+from app.extensions import db, limiter
 from app.models.user import User
 from app.models.audit_log import AuditLog
 from app.middleware.auth_middleware import jwt_required_custom, require_role, current_user
@@ -91,6 +91,7 @@ def list_team():
 @team_bp.post("")
 @csrf_protect
 @jwt_required_custom
+@limiter.limit("10 per minute")
 def invite_member():
     actor    = current_user()
     settings = _get_settings()
@@ -147,6 +148,7 @@ def invite_member():
 @team_bp.patch("/<member_id>")
 @csrf_protect
 @require_role("admin")
+@limiter.limit("20 per minute")
 def update_member(member_id):
     actor  = current_user()
     member = db.session.get(User, member_id)
@@ -202,6 +204,7 @@ def update_member(member_id):
 @team_bp.delete("/<member_id>")
 @csrf_protect
 @require_role("admin")
+@limiter.limit("20 per minute")
 def delete_member(member_id):
     actor  = current_user()
     member = db.session.get(User, member_id)
@@ -232,9 +235,52 @@ def delete_member(member_id):
     return jsonify({"deleted": True}), 200
 
 
+# ── PATCH /team/<user_id>/password ────────────────────────────────────────────
+@team_bp.patch("/<user_id>/password")
+@csrf_protect
+@require_role("admin")
+@limiter.limit("5 per minute")
+def admin_set_password(user_id):
+    """
+    Allows an admin to set a user's password directly.
+    [Security] root can set anyone's password. admin can set 'user' role passwords.
+    """
+    actor = current_user()
+    target = db.session.get(User, user_id)
+    if not target:
+        return jsonify({"error": "USER_NOT_FOUND"}), 404
+
+    # [Security] Admin cannot change other admins' passwords unless they are root
+    if target.role == "admin" and not actor.is_root:
+        return jsonify({"error": "FORBIDDEN"}), 403
+
+    data = request.get_json(silent=True) or {}
+    new_password = data.get("password")
+    if not new_password or len(new_password) < 8:
+        return jsonify({"error": "INVALID_PASSWORD"}), 400
+
+    target.set_password(new_password)
+    # Invalidate existing sessions
+    target.token_version = (target.token_version or 1) + 1
+    
+    db.session.add(AuditLog(
+        id=str(uuid.uuid4()),
+        user_id=actor.id,
+        user_email=actor.email,
+        action="MEMBER_PASSWORD_RESET_ADMIN",
+        resource=target.email,
+        ip_address=request.remote_addr,
+        status="warning",
+        details=f"Password for {target.email} manually set by admin."
+    ))
+    db.session.commit()
+    return jsonify({"ok": True}), 200
+
+
 # ── GET /team/settings ────────────────────────────────────────────────────────
 @team_bp.get("/settings")
 @require_role("admin")
+@limiter.limit("30 per minute")
 def get_team_settings():
     return jsonify(_get_settings().to_dict()), 200
 
@@ -243,6 +289,7 @@ def get_team_settings():
 @team_bp.patch("/settings")
 @csrf_protect
 @require_role("admin")
+@limiter.limit("10 per minute")
 def update_team_settings():
     actor    = current_user()
     settings = _get_settings()
@@ -289,6 +336,7 @@ audit_bp = Blueprint("audit", __name__, url_prefix="/audit")
 
 @audit_bp.get("")
 @jwt_required_custom
+@limiter.limit("30 per minute")
 def list_logs():
     """
     App admins see all logs.

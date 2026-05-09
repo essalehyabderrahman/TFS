@@ -209,7 +209,6 @@ def signin(email: str, password: str, ip: str) -> dict:
     # after re-authenticating. An attacker cannot exploit this because they
     # still need valid credentials to reach this point.
     user.reset_failed_attempts()
-    user.mfa_failed_attempts = 0
 
     user.touch()
 
@@ -237,7 +236,8 @@ def signin(email: str, password: str, ip: str) -> dict:
             additional_claims={
                 "session_created_at": now_ts,
                 "token_version": user.token_version,
-            }
+            },
+            expires_delta=timedelta(minutes=user.session_timeout)
         )
         _log("SESSION_CREATED", email, user.id, "success", ip,
              details="Full session issued — MFA not enabled on this account.")
@@ -424,7 +424,8 @@ def verify_mfa(user_id: str, otp_code: str, ip: str, is_setup_confirm: bool = Fa
         additional_claims={
             "session_created_at": session_created_at,
             "token_version": user.token_version
-        }
+        },
+        expires_delta=timedelta(minutes=user.session_timeout)
     )
 
     # [Audit] Log successful MFA verification with token rotation note
@@ -522,7 +523,8 @@ def refresh_token(user_id: str, session_created_at: int, token_version: int, ip:
         additional_claims={
             "session_created_at": session_created_at,
             "token_version": user.token_version,
-        }
+        },
+        expires_delta=timedelta(minutes=user.session_timeout)
     )
     _log("TOKEN_REFRESHED", user.email, user.id, "success", ip,
          details="Sliding session token refreshed.")

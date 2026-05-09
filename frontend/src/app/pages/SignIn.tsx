@@ -195,6 +195,9 @@ export function SignIn() {
               <div className="space-y-2">
                 <div className="flex justify-between items-center px-1">
                   <Label htmlFor="password" className="text-white/40 text-[10px] uppercase font-black tracking-widest">Access Key</Label>
+                  <Link to="/forgot-password" size="sm" className="text-[#00d2ff] hover:text-white transition-colors text-[10px] uppercase font-bold tracking-wider cursor-pointer">
+                    Forgot Key?
+                  </Link>
                 </div>
                 <Input
                   id="password"
