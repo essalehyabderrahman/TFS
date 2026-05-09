@@ -7,6 +7,7 @@ dist
 # Ignore scratch and log files in the root
 /*.txt
 /*.sh
+!/errors.txt
 
 # Ensure requirements.txt is ALWAYS tracked
 !backend/requirements.txt
