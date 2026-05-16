@@ -49,10 +49,6 @@ def _encrypt_file(data: bytes) -> bytes:
     nonce = os.urandom(12)  # 12-byte nonce for GCM
     ciphertext = aesgcm.encrypt(nonce, data, None)
     # Layout: [2-byte version LE][12-byte nonce][ciphertext (includes tag)]
-    # Wait, cryptography's AESGCM returns ciphertext + tag combined.
-    # The prompt says: [2-byte version LE][12-byte nonce][16-byte tag][ciphertext]
-    # In cryptography.hazmat.primitives.ciphers.aead.AESGCM, encrypt returns ciphertext+tag.
-    # I should follow the prompt's layout if possible, but encrypt/decrypt should match.
     return struct.pack("<H", version) + nonce + ciphertext
 
 
@@ -109,7 +105,7 @@ def _log(action, user_email, user_id, status, ip, resource="", details="", group
 
 def upload_file(file: FileStorage, uploader_id: str, recipient_email: str,
                 expiry_days: int, upload_folder: str, allowed_ext: set, ip: str,
-                group_id: str = None) -> dict:
+                group_id: str = None, encrypt: bool = True) -> dict:
     uploader = db.session.get(User, uploader_id)
     if not uploader:
         return {"ok": False, "error": "USER_NOT_FOUND"}
@@ -125,11 +121,21 @@ def upload_file(file: FileStorage, uploader_id: str, recipient_email: str,
 
     # ── Read → encrypt → write ───────────────────────────────────────────────
     raw_data      = file.read()
-    encrypted     = _encrypt_file(raw_data)
     size_bytes    = len(raw_data)          # store original size for display
 
+    if encrypt:
+        data_to_save = _encrypt_file(raw_data)
+        enc_type = "AES-256-GCM"
+        ext_suffix = ".enc"
+    else:
+        data_to_save = raw_data
+        enc_type = "None"
+        ext_suffix = ""
+
+    stored_path = os.path.join(upload_folder, f"{stored_id}_{safe_name}{ext_suffix}")
+
     with open(stored_path, "wb") as f:
-        f.write(encrypted)
+        f.write(data_to_save)
 
     expiry = datetime.now(timezone.utc) + timedelta(days=expiry_days) if expiry_days else None
 
@@ -140,6 +146,8 @@ def upload_file(file: FileStorage, uploader_id: str, recipient_email: str,
         file_type=_file_type(safe_name),
         stored_path=stored_path,
         size_bytes=size_bytes,
+        is_encrypted=encrypt,
+        encryption_type=enc_type,
         recipient_email=recipient_email or None,
         expiry_date=expiry,
         uploaded_by_id=uploader_id,
@@ -176,7 +184,7 @@ def upload_file(file: FileStorage, uploader_id: str, recipient_email: str,
             db.session.add(notif)
 
     _log("FILE_UPLOAD", uploader.email, uploader_id, "success", ip,
-         resource=safe_name, details=f"{size_bytes} bytes (encrypted with AES-256-GCM)",
+         resource=safe_name, details=f"{size_bytes} bytes ({'encrypted' if encrypt else 'plain'})",
          group_id=transfer.group_id)
 
     # [Contacts] Auto-add recipient as a contact of the uploader
@@ -260,11 +268,15 @@ def get_transfer_file(transfer_id: str, user: User, ip: str, context: str = None
             db.session.commit()
             return {"ok": False, "error": "EXPIRED"}
 
-    # ── Decrypt in memory ────────────────────────────────────────────────────
+    # ── Decrypt in memory if needed ──────────────────────────────────────────
     try:
         with open(t.stored_path, "rb") as f:
-            encrypted = f.read()
-        decrypted = _decrypt_file(encrypted)
+            file_data = f.read()
+        
+        if t.is_encrypted:
+            decrypted = _decrypt_file(file_data)
+        else:
+            decrypted = file_data
     except Exception:
         _log("DECRYPT_ERROR", user.email, user.id, "failed", ip, resource=t.file_name, group_id=t.group_id)
         db.session.commit()

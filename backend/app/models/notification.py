@@ -14,6 +14,9 @@ class Notification(db.Model):
 
     user = db.relationship("User", backref=db.backref("notifications", lazy="dynamic", cascade="all, delete-orphan"))
 
+    def __init__(self, **kwargs):
+        super(Notification, self).__init__(**kwargs)
+
     def to_dict(self):
         return {
             "id": self.id,

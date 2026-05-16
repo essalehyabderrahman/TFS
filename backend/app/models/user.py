@@ -22,6 +22,7 @@ class User(db.Model):
     # MFA
     mfa_enabled          = db.Column(db.Boolean, default=False)
     mfa_secret           = db.Column(db.String(64), nullable=True)
+    pending_mfa_secret   = db.Column(db.String(64), nullable=True)
     mfa_failed_attempts  = db.Column(db.Integer, default=0)         # MFA verify failure counter (independent)
     # last_used_totp removed — TOTP replay protection is handled by Redis (totp_replay.py)
     backup_codes         = db.Column(db.String(1000), nullable=True)# Comma-separated bcrypt hashes of backup codes
@@ -32,6 +33,7 @@ class User(db.Model):
     is_root = db.Column(db.Boolean, nullable=False, default=False)
     password_reset_token = db.Column(db.String(64), nullable=True)
     password_reset_expires = db.Column(db.DateTime, nullable=True)
+    password_reset_required = db.Column(db.Boolean, nullable=False, default=False)
 
     # Security settings snapshot (stored per-user)
     session_timeout     = db.Column(db.Integer, default=60)    # minutes
@@ -47,6 +49,9 @@ class User(db.Model):
     audit_logs   = db.relationship("AuditLog", back_populates="actor", lazy="select", cascade="all, delete-orphan")
 
     # ------------------------------------------------------------------ helpers
+    def __init__(self, **kwargs):
+        super(User, self).__init__(**kwargs)
+
     def set_password(self, plain: str) -> None:
         self.password_hash = bcrypt.generate_password_hash(plain).decode("utf-8")
 
@@ -95,6 +100,7 @@ class User(db.Model):
             "isRoot":           self.is_root,
             "joinedAt":   self.created_at.isoformat(),
             "lastActive": self.last_active.isoformat(),
+            "passwordResetRequired": self.password_reset_required,
         }
 
     def to_public_dict(self) -> dict:

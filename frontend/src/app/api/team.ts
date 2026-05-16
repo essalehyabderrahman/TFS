@@ -11,11 +11,11 @@ export async function fetchTeamMembers(): Promise<{ data: TeamMember[]; error: s
   }
 }
 
-export async function apiInviteMember(name: string, email: string, role: string) {
+export async function apiInviteMember(name: string, email: string, role: string, password?: string) {
   try {
     const data = await apiRequest<TeamMember>("/team", {
       method: "POST",
-      body: { name, email, role }
+      body: { name, email, role, password }
     })
     return { data, ok: true }
   } catch (err: any) {

@@ -88,17 +88,16 @@ def _log(action: str, user_email: str, user_id: str | None,
     """[Audit] Logs every auth event. Never logs passwords, tokens, or TOTP codes."""
     from flask import request
     user_agent_str = request.user_agent.string if request else "unknown"
-    log = AuditLog(
-        id=str(uuid.uuid4()),
-        user_id=user_id,
-        user_email=user_email,
-        action=action,
-        resource=resource,
-        ip_address=ip,
-        user_agent=user_agent_str,
-        status=status,
-        details=details,
-    )
+    log = AuditLog()
+    log.id = str(uuid.uuid4())
+    log.user_id = user_id
+    log.user_email = user_email
+    log.action = action
+    log.resource = resource
+    log.ip_address = ip
+    log.user_agent = user_agent_str
+    log.status = status
+    log.details = details
     db.session.add(log)
     # Committed by caller
 
@@ -129,13 +128,13 @@ def signup(name: str, email: str, password: str, ip: str) -> dict:
     if pw_error:
         return {"ok": False, "error": pw_error}
 
-    user = User(
-        id=str(uuid.uuid4()),
-        name=name.strip(),
-        email=email,
-        role="user",
-        status="active",
-    )
+    user = User()
+    user.id = str(uuid.uuid4())
+    user.name = name.strip()
+    user.email = email
+    user.role = "user"
+    user.status = "active"
+
     # [Security] set_password uses bcrypt internally (Flask-Bcrypt default = 12 rounds)
     user.set_password(password)
 
@@ -236,8 +235,9 @@ def signin(email: str, password: str, ip: str) -> dict:
             additional_claims={
                 "session_created_at": now_ts,
                 "token_version": user.token_version,
+                "password_reset_required": user.password_reset_required,
             },
-            expires_delta=timedelta(minutes=user.session_timeout)
+            expires_delta=timedelta(minutes=15)
         )
         _log("SESSION_CREATED", email, user.id, "success", ip,
              details="Full session issued — MFA not enabled on this account.")
@@ -296,7 +296,7 @@ def setup_mfa(user_id: str) -> dict:
 
     img = qrcode.make(totp_uri)
     buf = io.BytesIO()
-    img.save(buf, format="PNG")
+    img.save(buf, "PNG")
     qr_b64 = base64.b64encode(buf.getvalue()).decode()
 
     return {
@@ -423,9 +423,10 @@ def verify_mfa(user_id: str, otp_code: str, ip: str, is_setup_confirm: bool = Fa
         identity=user.id,
         additional_claims={
             "session_created_at": session_created_at,
-            "token_version": user.token_version
+            "token_version": user.token_version,
+            "password_reset_required": user.password_reset_required,
         },
-        expires_delta=timedelta(minutes=user.session_timeout)
+        expires_delta=timedelta(minutes=15)
     )
 
     # [Audit] Log successful MFA verification with token rotation note
@@ -523,8 +524,9 @@ def refresh_token(user_id: str, session_created_at: int, token_version: int, ip:
         additional_claims={
             "session_created_at": session_created_at,
             "token_version": user.token_version,
+            "password_reset_required": user.password_reset_required,
         },
-        expires_delta=timedelta(minutes=user.session_timeout)
+        expires_delta=timedelta(minutes=15)
     )
     _log("TOKEN_REFRESHED", user.email, user.id, "success", ip,
          details="Sliding session token refreshed.")

@@ -7,7 +7,7 @@ import { useAuth } from "@/app/hooks/useAuth"
  * l'utilisateur doit être redirigé vers /signin.
  */
 export function ProtectedRoute() {
-  const { user, isAuthenticated, isMfaPending, isInitializing } = useAuth()
+  const { user, isAuthenticated, isMfaPending, isInitializing, sessionExpiredReason, isPasswordResetRequired } = useAuth()
   const location = useLocation()
 
   // While we're checking localStorage token → don't redirect yet
@@ -38,8 +38,18 @@ export function ProtectedRoute() {
   }
 
   // Mandatory Login check
-  if (!isAuthenticated && !isMfaPending) {
+  // [Session] Do NOT redirect if we are currently showing a session expiration modal.
+  // This allows the user to see the explanation before being jumped to the sign-in page.
+  if (!isAuthenticated && !isMfaPending && !sessionExpiredReason) {
     return <Navigate to="/signin" replace />
+  }
+
+  // [Security] Force password change if required by admin
+  // This takes precedence over MFA setup if the admin just reset the account.
+  if (isPasswordResetRequired) {
+    if (location.pathname !== "/dashboard/account") {
+      return <Navigate to="/dashboard/account" replace />
+    }
   }
 
   // MFA Flow Enforcement: If session is partial, only allow /mfa-verify or /dashboard/mfa-setup
@@ -51,7 +61,7 @@ export function ProtectedRoute() {
     }
   }
 
-  if (!isAuthenticated) {
+  if (!isAuthenticated && !sessionExpiredReason) {
     return <Navigate to="/signin" replace />
   }
 

@@ -63,6 +63,7 @@ def upload():
         upload_folder=current_app.config["UPLOAD_FOLDER"],
         allowed_ext=current_app.config["ALLOWED_EXTENSIONS"],
         ip=_ip(),
+        encrypt=bool(request.form.get("encrypt", "true").lower() == "true")
     )
 
     if not result["ok"]:

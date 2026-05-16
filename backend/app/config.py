@@ -45,6 +45,7 @@ class Config:
     # Default admin seeding (first boot only)
     ADMIN_EMAIL    = os.getenv("ADMIN_EMAIL", "")
     ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "")
+    ADMIN_RECOVERY_EMAIL = os.getenv("ADMIN_RECOVERY_EMAIL", ADMIN_EMAIL)
 
     # Global AES-256-GCM Encryption
     # If not set, a 32-byte key is derived from SECRET_KEY using PBKDF2-HMAC-SHA256

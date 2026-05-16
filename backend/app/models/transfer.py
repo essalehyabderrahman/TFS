@@ -12,6 +12,7 @@ class Transfer(db.Model):
     stored_path      = db.Column(db.String(500),  nullable=False)   # chemin sur le disque
     size_bytes       = db.Column(db.Integer,       nullable=False, default=0)
     encryption_type  = db.Column(db.String(30),   nullable=False, default="AES-256-GCM")
+    is_encrypted     = db.Column(db.Boolean,      nullable=False, default=True)
     status           = db.Column(db.String(20),   nullable=False, default="Pending")   # Pending | Sending... | Delivered | Expired
 
     # Security & Access
@@ -77,6 +78,7 @@ class Transfer(db.Model):
             "date":           self._fmt_date(self.created_at),
             "dateTimestamp":  int(self.created_at.timestamp() * 1000),
             "encryptionType": self.encryption_type,
+            "isEncrypted":    self.is_encrypted,
             "downloadCount":  self.download_count,
             "expiryDate":     self.expiry_date.isoformat() if self.expiry_date else "",
             "uploadedBy":     self.uploader.email if self.uploader else "",
@@ -85,6 +87,9 @@ class Transfer(db.Model):
             "revokedAt":      self.revoked_at.isoformat() if self.revoked_at else None,
             "sentAt":         self.sent_at.isoformat() if self.sent_at else None,
         }
+
+    def __init__(self, **kwargs):
+        super(Transfer, self).__init__(**kwargs)
 
     def __repr__(self):
         return f"<Transfer {self.file_name} [{self.status}]>"
@@ -105,6 +110,9 @@ class FileVersion(db.Model):
     # Relationships
     transfer     = db.relationship("Transfer", back_populates="versions")
     author       = db.relationship("User")
+
+    def __init__(self, **kwargs):
+        super(FileVersion, self).__init__(**kwargs)
 
     def to_dict(self) -> dict:
         return {

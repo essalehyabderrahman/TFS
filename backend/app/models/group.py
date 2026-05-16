@@ -30,6 +30,8 @@ class Group(db.Model):
             "memberCount": len(self.members),
         }
 
+    def __init__(self, **kwargs):
+        super(Group, self).__init__(**kwargs)
 
 class GroupMember(db.Model):
     __tablename__ = "group_members"
@@ -63,6 +65,8 @@ class GroupMember(db.Model):
             "invitedBy":   self.invited_by.email if self.invited_by else "",
         }
 
+    def __init__(self, **kwargs):
+        super(GroupMember, self).__init__(**kwargs)
 
 class GroupSettings(db.Model):
     __tablename__ = "group_settings"
@@ -93,3 +97,6 @@ class GroupSettings(db.Model):
             "updatedAt":            self.updated_at.isoformat() if self.updated_at else None,
             "updatedBy":            self.updated_by.email if self.updated_by else None,
         }
+
+    def __init__(self, **kwargs):
+        super(GroupSettings, self).__init__(**kwargs)

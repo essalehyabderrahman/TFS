@@ -101,10 +101,11 @@ def invite_member():
     if actor.role != "admin" and not settings.allow_member_invite:
         return jsonify({"error": "FORBIDDEN"}), 403
 
-    data  = request.get_json(silent=True) or {}
-    name  = data.get("name", "").strip()
-    email = data.get("email", "").strip().lower()
-    role  = data.get("role", "user")
+    data     = request.get_json(silent=True) or {}
+    name     = data.get("name", "").strip()
+    email    = data.get("email", "").strip().lower()
+    role     = data.get("role", "user")
+    password = data.get("password", "").strip()
 
     if not name or not email:
         return jsonify({"error": "MISSING_FIELDS"}), 400
@@ -125,9 +126,13 @@ def invite_member():
         name=name,
         email=email,
         role=role,
-        status="pending",
+        status="active" if password else "pending",
+        password_reset_required=True,
     )
-    member.set_password(str(uuid.uuid4()))
+    if password:
+        member.set_password(password)
+    else:
+        member.set_password(str(uuid.uuid4()))
     db.session.add(member)
     db.session.commit()
 
@@ -260,6 +265,7 @@ def admin_set_password(user_id):
         return jsonify({"error": "INVALID_PASSWORD"}), 400
 
     target.set_password(new_password)
+    target.password_reset_required = True
     # Invalidate existing sessions
     target.token_version = (target.token_version or 1) + 1
     
@@ -463,6 +469,7 @@ def change_password():
         return jsonify({"error": pw_error}), 400
 
     user.set_password(new_pw)
+    user.password_reset_required = False
     
     # [Security] Token Rotation: invalidate ALL existing sessions by bumping token version
     user.token_version += 1
@@ -482,7 +489,8 @@ def change_password():
         identity=user.id,
         additional_claims={
             "session_created_at": now_ts,
-            "token_version": user.token_version
+            "token_version": user.token_version,
+            "password_reset_required": False
         }
     )
     response = jsonify({"ok": True})

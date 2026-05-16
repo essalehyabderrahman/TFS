@@ -12,7 +12,7 @@ def create_app() -> Flask:
     app.config.from_object(get_config())
     validate_production_config()
 
-    # Ensure instance + upload folders exist
+    # Ensure instance + upload folders exist, create them if they don't exist.
     os.makedirs(app.instance_path, exist_ok=True)
     os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
 
@@ -56,6 +56,7 @@ def create_app() -> Flask:
     from .routes.groups import groups_bp
     from .routes.other import app_bp
     from .routes.contacts import contacts_bp
+    from .routes.explorer import explorer_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(transfers_bp)
@@ -67,6 +68,7 @@ def create_app() -> Flask:
     app.register_blueprint(notifications_bp)
     app.register_blueprint(groups_bp)
     app.register_blueprint(contacts_bp)
+    app.register_blueprint(explorer_bp)
 
     # [Security] Register CSRF Double Submit Cookie protection
     init_csrf(app)
@@ -85,32 +87,12 @@ def create_app() -> Flask:
         from .models.team_settings import TeamSettings     # noqa: F401
         from .models.group import Group, GroupMember, GroupSettings  # noqa: F401
         from .models.contact import Contact                          # noqa: F401
+        from .models.user_file import UserFile                       # noqa: F401
 
         # [DB] Idempotent column additions MUST run before create_all() queries
         # so that existing DBs gain the new columns before SQLAlchemy touches them.
         db.create_all()
-        try:
-            db.session.execute(db.text(
-                "ALTER TABLE users ADD COLUMN pending_mfa_secret VARCHAR(64)"
-            ))
-            db.session.commit()
-        except Exception:
-            pass  # Column already exists
-        try:
-            db.session.execute(db.text(
-                "ALTER TABLE team_settings ADD COLUMN require_mfa BOOLEAN NOT NULL DEFAULT 0"
-            ))
-            db.session.commit()
-        except Exception:
-            pass  # Column already exists
-        try:
-            db.session.execute(db.text(
-                "ALTER TABLE team_settings ADD COLUMN allow_signup BOOLEAN NOT NULL DEFAULT 1"
-            ))
-            db.session.commit()
-        except Exception:
-            pass  # Column already exists
-
+        
         # Seed singleton TeamSettings row with secure defaults
         if not TeamSettings.query.first():
             db.session.add(TeamSettings())
@@ -138,8 +120,13 @@ def _seed_default_admin(app) -> None:
     from .models.user import User
     from .extensions import db
 
-    if User.query.filter_by(role="admin").first():
-        return  # At least one admin exists — nothing to seed
+    try:
+        if User.query.filter_by(role="admin").first():
+            return  # At least one admin exists — nothing to seed
+    except Exception:
+        # DB schema might be outdated (missing columns) or tables don't exist yet.
+        # We skip seeding and let the application (or init_db script) handle it.
+        return
 
     email    = os.environ.get("ADMIN_EMAIL", "").strip().lower()
     password = os.environ.get("ADMIN_PASSWORD", "").strip()

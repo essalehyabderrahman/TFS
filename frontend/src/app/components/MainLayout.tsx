@@ -1,15 +1,17 @@
 import { Sidebar } from "./Sidebar";
 import { Header } from "./Header";
 import { UploadZone } from "./UploadZone";
-import { X } from "lucide-react";
+import { X, Lock } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { Outlet, useLocation } from "react-router";
+import { useAuth } from "../hooks/useAuth";
 
 export function MainLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [newTransferOpen, setNewTransferOpen] = useState(false);
   const mainRef = useRef<HTMLElement>(null);
   const { pathname } = useLocation();
+  const { isPasswordResetRequired } = useAuth();
 
   useEffect(() => {
     mainRef.current?.scrollTo(0, 0);
@@ -21,11 +23,13 @@ export function MainLayout() {
       style={{ background: "#080c1a" }}
     >
       {/* Sidebar */}
-      <Sidebar
-        isOpen={sidebarOpen}
-        onClose={() => setSidebarOpen(false)}
-        onNewTransfer={() => setNewTransferOpen(true)}
-      />
+      {!isPasswordResetRequired && (
+        <Sidebar
+          isOpen={sidebarOpen}
+          onClose={() => setSidebarOpen(false)}
+          onNewTransfer={() => setNewTransferOpen(true)}
+        />
+      )}
 
       {/* Overlay for mobile */}
       {sidebarOpen && (
@@ -38,7 +42,19 @@ export function MainLayout() {
       {/* Main */}
       <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
         {/* Header */}
-        <Header onMenuClick={() => setSidebarOpen(true)} />
+        {!isPasswordResetRequired && <Header onMenuClick={() => setSidebarOpen(true)} />}
+
+        {isPasswordResetRequired && (
+          <div className="flex items-center gap-3 px-6 py-4 border-b border-white/5 bg-black/20">
+            <div className="w-8 h-8 rounded-lg bg-amber-500/10 flex items-center justify-center">
+              <Lock size={16} className="text-amber-500" />
+            </div>
+            <div>
+              <h1 className="text-white text-sm font-bold">Security Action Required</h1>
+              <p className="text-[#6b7fa8] text-[11px] font-medium uppercase tracking-widest">Mandatory Password Update</p>
+            </div>
+          </div>
+        )}
 
         {/* Scrollable Content */}
         <main

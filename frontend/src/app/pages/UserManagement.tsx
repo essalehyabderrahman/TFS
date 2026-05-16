@@ -40,6 +40,7 @@ export function UserManagement() {
   const [inviteName, setInviteName] = useState("")
   const [inviteEmail, setInviteEmail] = useState("")
   const [inviteRole, setInviteRole] = useState<"admin" | "user">("user")
+  const [invitePassword, setInvitePassword] = useState("")
   const [showInviteRoleDropdown, setShowInviteRoleDropdown] = useState(false)
   const [isInviting, setIsInviting] = useState(false)
   
@@ -119,7 +120,7 @@ export function UserManagement() {
       return
     }
     setIsInviting(true)
-    const result = await apiInviteMember(inviteName.trim(), inviteEmail.trim(), inviteRole)
+    const result = await apiInviteMember(inviteName.trim(), inviteEmail.trim(), inviteRole, invitePassword.trim())
     if (!result.ok) {
       const messages: Record<string, string> = {
         EMAIL_TAKEN:   "An account with this email already exists.",
@@ -134,6 +135,7 @@ export function UserManagement() {
       setShowInviteDialog(false)
       setInviteName("")
       setInviteEmail("")
+      setInvitePassword("")
       setInviteRole("user")
     }
     setIsInviting(false)
@@ -396,6 +398,18 @@ export function UserManagement() {
               />
             </div>
             <div>
+              <label style={{ color: "#4a5578", fontSize: "12px", fontWeight: 600, letterSpacing: "0.05em" }}>INITIAL PASSWORD (OPTIONAL)</label>
+              <input
+                type="password"
+                placeholder="••••••••"
+                value={invitePassword}
+                onChange={e => setInvitePassword(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter" && !isInviting) handleInvite() }}
+                className="w-full mt-1 px-4 py-2.5 rounded-lg text-white placeholder:text-slate-500 outline-none"
+                style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", fontSize: "14px" }}
+              />
+            </div>
+            <div>
               <label style={{ color: "#4a5578", fontSize: "12px", fontWeight: 600, letterSpacing: "0.05em" }}>ROLE</label>
               {isRootAdmin ? (
                 <div className="relative mt-1">
@@ -433,7 +447,9 @@ export function UserManagement() {
               )}
             </div>
             <p style={{ color: "#4a5578", fontSize: "12px" }}>
-              The account will be created with a temporary password. The user will need an admin to set their credentials before they can sign in.
+              {invitePassword 
+                ? "The account will be created with the password provided and activated immediately."
+                : "The account will be created with a temporary random password. The user will need an admin to set their credentials before they can sign in."}
             </p>
           </div>
           <DialogFooter className="mt-6">

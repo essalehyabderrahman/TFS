@@ -17,12 +17,13 @@ import {
 const allNavItems = [
   { icon: ArrowUpDown,   label: "Active Transfers",        id: "active",    path: "/dashboard/active",    adminOnly: false, hideForAdmin: false },
   { icon: Download,      label: "Received Files",          id: "received",  path: "/dashboard/received",  adminOnly: false, hideForAdmin: true  },
+  { icon: Users,         label: "Contacts",                id: "contacts",  path: "/dashboard/contacts",  adminOnly: false, hideForAdmin: false },
+  { icon: FolderOpen,    label: "File Manager",            id: "explorer",  path: "/dashboard/explorer",  adminOnly: false, hideForAdmin: false },
   { icon: ClipboardList, label: "Audit & Compliance Logs", id: "audit",     path: "/dashboard/audit",     adminOnly: false, hideForAdmin: false, adminOrGroupAdminOnly: true },
   { icon: UserCog,       label: "User Management",         id: "users",     path: "/dashboard/users",     adminOnly: true,  hideForAdmin: false },
   { icon: Users,         label: "Team Management",         id: "team",      path: "/dashboard/team",      adminOnly: true,  hideForAdmin: false },
   { icon: FolderOpen,    label: "Group Workspace",         id: "groups",    path: "/dashboard/groups",    adminOnly: false, hideForAdmin: false },
   { icon: ShieldCheck,   label: "Security Settings",       id: "security",  path: "/dashboard/security",  adminOnly: false, hideForAdmin: false },
-  { icon: Users,         label: "Contacts",                id: "contacts",  path: "/dashboard/contacts",  adminOnly: false, hideForAdmin: false },
 ];
 
 interface SidebarProps {

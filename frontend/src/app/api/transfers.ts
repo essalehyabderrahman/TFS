@@ -30,6 +30,7 @@ export async function uploadTransfer(
   file: File,
   recipientEmail = "",
   expiryDays = 7,
+  encrypt = true,
 ): Promise<UploadResult> {
   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
@@ -42,6 +43,7 @@ export async function uploadTransfer(
     formData.append("file", file);
     formData.append("recipientEmail", recipientEmail);
     formData.append("expiryDays", String(expiryDays));
+    formData.append("encrypt", String(encrypt));
 
     const res = await fetch(`${API_BASE_URL}/transfers`, {
       method: "POST",

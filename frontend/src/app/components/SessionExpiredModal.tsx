@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react"
 import { useNavigate } from "react-router"
 import { ShieldOff, Clock, RefreshCw } from "lucide-react"
 
-export type SessionExpiredReason = "inactivity" | "absolute" | "revoked"
+export type SessionExpiredReason = "inactivity" | "absolute" | "revoked" | "unauthorized"
 
 interface Props {
   reason: SessionExpiredReason
@@ -18,20 +18,26 @@ const CONTENT: Record<SessionExpiredReason, {
   inactivity: {
     icon: <Clock size={36} />,
     title: "Session Timed Out",
-    body: "Your session expired after 15 minutes of inactivity. Sign in again to continue.",
-    accent: "#f59e0b",
+    body: "You've been idle for more than 15 minutes. For your security, your session has been closed.",
+    accent: "#00d2ff",
   },
   absolute: {
-    icon: <RefreshCw size={36} />,
-    title: "Session Limit Reached",
-    body: "Your session reached the 8-hour security limit. Sign in again to continue.",
+    icon: <Clock size={36} />,
+    title: "Session Expired",
+    body: "You've reached the maximum session duration (8 hours). Please sign in again to continue.",
     accent: "#0B7FFF",
   },
   revoked: {
     icon: <ShieldOff size={36} />,
-    title: "Session Invalidated",
-    body: "Your session was invalidated due to a security change on your account (e.g. a password change). Sign in again to continue.",
-    accent: "#ef4444",
+    title: "Security Alert",
+    body: "Your session has been terminated by an administrator or because your credentials were changed elsewhere.",
+    accent: "#F87171",
+  },
+  unauthorized: {
+    icon: <ShieldOff size={36} />,
+    title: "Access Terminated",
+    body: "Your account is no longer authorized to access this resource, or your session target no longer exists.",
+    accent: "#F87171",
   },
 }
 

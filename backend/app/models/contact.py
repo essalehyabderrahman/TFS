@@ -40,3 +40,6 @@ class Contact(db.Model):
             "isExternal":    self.contact_user_id is None,
             "createdAt":     self.created_at.isoformat(),
         }
+
+    def __init__(self, **kwargs):
+        super(Contact, self).__init__(**kwargs)

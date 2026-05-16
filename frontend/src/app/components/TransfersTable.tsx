@@ -607,18 +607,33 @@ export function TransfersTable({ refreshKey }: TransfersTableProps = {}) {
 
                   {/* Security */}
                   <div>
-                    <span
-                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full"
-                      style={{
-                        fontSize: "11.5px",
-                        fontWeight: 600,
-                        color: "#00E5A0",
-                        background: "rgba(0,229,160,0.1)",
-                      }}
-                    >
-                      <ShieldCheck size={11} strokeWidth={2.5} />
-                      Encrypted
-                    </span>
+                    {!transfer.isEncrypted ? (
+                      <span
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full"
+                        style={{
+                          fontSize: "11.5px",
+                          fontWeight: 600,
+                          color: "#FBBF24",
+                          background: "rgba(251,191,36,0.1)",
+                        }}
+                      >
+                        <ShieldOff size={11} strokeWidth={2.5} />
+                        Not Encrypted
+                      </span>
+                    ) : (
+                      <span
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full"
+                        style={{
+                          fontSize: "11.5px",
+                          fontWeight: 600,
+                          color: "#00E5A0",
+                          background: "rgba(0,229,160,0.1)",
+                        }}
+                      >
+                        <ShieldCheck size={11} strokeWidth={2.5} />
+                        Encrypted
+                      </span>
+                    )}
                   </div>
 
                   {/* More Options */}
@@ -791,12 +806,16 @@ export function TransfersTable({ refreshKey }: TransfersTableProps = {}) {
                     className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px]"
                     style={{
                       fontWeight: 600,
-                      color: "#00E5A0",
-                      background: "rgba(0,229,160,0.1)",
+                      color: transfer.isEncrypted ? "#00E5A0" : "#FBBF24",
+                      background: transfer.isEncrypted ? "rgba(0,229,160,0.1)" : "rgba(251,191,36,0.1)",
                     }}
                   >
-                    <ShieldCheck size={10} strokeWidth={2.5} />
-                    Encrypted
+                    {transfer.isEncrypted ? (
+                      <ShieldCheck size={10} strokeWidth={2.5} />
+                    ) : (
+                      <ShieldOff size={10} strokeWidth={2.5} />
+                    )}
+                    {transfer.isEncrypted ? "Encrypted" : "Not Encrypted"}
                   </span>
                   <span
                     className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px]"

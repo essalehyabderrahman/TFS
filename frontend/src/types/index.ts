@@ -16,6 +16,7 @@ export interface Transfer {
   date: string
   dateTimestamp: number
   encryptionType: string
+  isEncrypted: boolean
   downloadCount: number
   expiryDate: string
   uploadedBy: string
@@ -35,10 +36,11 @@ export interface TeamMember {
   email: string
   role: TeamRole
   status: MemberStatus
-  joinedAt: Date
-  lastActive: Date
+  joinedAt: string
+  lastActive: string
   transfersCount: number
   avatar: string
+  isRoot: boolean
 }
 
 // ─── Auth ─────────────────────────────────────────────────────────────────────
@@ -53,6 +55,7 @@ export interface AuthUser {
   plan?: string
   mfaEnabled?: boolean
   isRoot?: boolean
+  passwordResetRequired?: boolean
 }
 
 // ─── API ──────────────────────────────────────────────────────────────────────

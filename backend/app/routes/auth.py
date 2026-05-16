@@ -311,83 +311,38 @@ def handle_rate_limit(e):
     # Generic message â€” do not reveal limit thresholds to callers
     return jsonify({"error": "TOO_MANY_REQUESTS"}), 429
 
-# -- POST /auth/forgot-password ----------------------------------------------
-@auth_bp.post("/forgot-password")
+# -- POST /auth/recovery-request ---------------------------------------------
+@auth_bp.post("/recovery-request")
 @csrf_protect
 @limiter.limit("5 per hour")
-def forgot_password():
-    """
-    Generates a password reset token and 'logs' it for dev.
-    [Security] Use a secure random token (secrets.token_urlsafe).
-    [Audit] Log the request.
-    """
-    import secrets
-    from datetime import datetime, timezone, timedelta
-    from app.models.user import User
-    from app.extensions import db
+def recovery_request():
+    from flask import current_app, request, jsonify
     from app.services.auth_service import _log
 
-    data  = request.get_json(silent=True) or {}
+    data = request.get_json(silent=True) or {}
+    full_name = data.get("fullName", "").strip()
     email = data.get("email", "").strip().lower()
-    if not email:
-        return jsonify({"error": "EMAIL_REQUIRED"}), 400
+    registration_date = data.get("registrationDate", "").strip()
+    last_file = data.get("lastFile", "").strip()
+    message = data.get("message", "").strip()
 
-    user = User.query.filter_by(email=email).first()
-    # [Security] Do not reveal if user exists — always return 200 "If account exists..."
-    if user:
-        token = secrets.token_urlsafe(32)
-        user.password_reset_token = token
-        user.password_reset_expires = datetime.now(timezone.utc) + timedelta(hours=1)
-        db.session.commit()
-        
-        # [Security] In a real app, send email. For now, log to terminal.
-        print(f"\n[SECURITY] PASSWORD RESET TOKEN FOR {email}: {token}\n")
-        _log("PASSWORD_RESET_REQUESTED", email, user.id, "info", request.remote_addr)
-    else:
-        _log("PASSWORD_RESET_REQUESTED_NONEXISTENT", email, None, "warning", request.remote_addr)
-        db.session.commit()
-
-    return jsonify({"message": "If an account exists with that email, a reset link has been generated."}), 200
-
-
-# -- POST /auth/reset-password -----------------------------------------------
-@auth_bp.post("/reset-password")
-@csrf_protect
-@limiter.limit("5 per hour")
-def reset_password():
-    """
-    Validates the token and sets a new password.
-    """
-    from datetime import datetime, timezone
-    from app.models.user import User
-    from app.extensions import db
-    from app.services.auth_service import _log
-
-    data     = request.get_json(silent=True) or {}
-    token    = data.get("token")
-    password = data.get("password")
-
-    if not token or not password:
+    if not full_name or not email or not message:
         return jsonify({"error": "MISSING_FIELDS"}), 400
 
-    if len(password) < 8:
-        return jsonify({"error": "INVALID_PASSWORD"}), 400
+    if "@" not in email:
+        return jsonify({"error": "INVALID_EMAIL"}), 400
 
-    user = User.query.filter(
-        User.password_reset_token == token,
-        User.password_reset_expires > datetime.now(timezone.utc)
-    ).first()
+    admin_email = current_app.config.get("ADMIN_RECOVERY_EMAIL") or current_app.config.get("ADMIN_EMAIL") or "admin@tfs.local"
 
-    if not user:
-        return jsonify({"error": "INVALID_OR_EXPIRED_TOKEN"}), 400
+    print("\n" + "="*60)
+    print(f"[SECURITY] RECOVERY REQUEST RECEIVED")
+    print(f"To: {admin_email}")
+    print(f"From: {full_name} <{email}>")
+    print(f"Registration Date: {registration_date or 'N/A'}")
+    print(f"Last File: {last_file or 'N/A'}")
+    print(f"Message:\n{message}")
+    print("="*60 + "\n")
 
-    user.set_password(password)
-    user.password_reset_token = None
-    user.password_reset_expires = None
-    # Invalidate existing sessions
-    user.token_version = (user.token_version or 1) + 1
-    
-    _log("PASSWORD_RESET_COMPLETED", user.email, user.id, "success", request.remote_addr)
-    db.session.commit()
+    _log("RECOVERY_REQUEST_SUBMITTED", email, None, "info", request.remote_addr)
 
-    return jsonify({"ok": True, "message": "Password has been reset. Please sign in with your new password."}), 200
+    return jsonify({"ok": True, "message": "Recovery request transmitted to administration."}), 200

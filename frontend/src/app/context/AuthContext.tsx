@@ -9,6 +9,7 @@ interface AuthContextValue {
   user: AuthUser | null
   isAuthenticated: boolean
   isMfaPending: boolean
+  isPasswordResetRequired: boolean
   isInitializing: boolean
   isBackendReachable: boolean
   isAppAdmin: boolean
@@ -41,6 +42,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null)
   const [isMfaPending, setIsMfaPending] = useState(false)
   const [isInitializing, setIsInitializing] = useState(true)
+  const [isPasswordResetRequired, setIsPasswordResetRequired] = useState(false)
   const [isBackendReachable, setIsBackendReachable] = useState(true)
   const [isGroupAdmin, setIsGroupAdmin] = useState(false)
   const [sessionExpiredReason, setSessionExpiredReason] = useState<SessionExpiredReason | null>(null)
@@ -53,19 +55,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .then((result) => {
         if (result.ok && result.user) {
           setUser(result.user)
-          // Restore mfa_pending state after a hard reload — without this,
-          // a user with an mfa_pending cookie could navigate to any dashboard
-          // page on reload because isMfaPending would default to false.
           setIsMfaPending(Boolean(result.mfaPending))
+          setIsPasswordResetRequired(Boolean(result.user.passwordResetRequired))
           setIsBackendReachable(true)
           
           // [FIX 18] Restore isGroupAdmin status on reload
           if (result.user?.role === "admin") {
             setIsGroupAdmin(true)
           } else {
-            import("@/app/api/groups").then(({ apiListGroups }) => {
-              apiListGroups().then(groups => {
-                const isAdmin = groups.some(g => g.myRole === "admin")
+            import("@/app/api/groups").then(({ fetchGroups }) => {
+              fetchGroups().then(({ data }) => {
+                const isAdmin = data.some(g => g.myRole === "admin")
                 setIsGroupAdmin(isAdmin)
               }).catch(() => {})
             })
@@ -94,6 +94,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signIn = useCallback((u: AuthUser, mfaPending = false) => {
     setUser(u)
     setIsMfaPending(mfaPending)
+    setIsPasswordResetRequired(Boolean(u.passwordResetRequired))
     setIsBackendReachable(true)
   }, [])
 
@@ -142,6 +143,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         user,
         isAuthenticated: user !== null,
         isMfaPending,
+        isPasswordResetRequired,
         isInitializing,
         isBackendReachable,
         isAppAdmin: user?.role === "admin",

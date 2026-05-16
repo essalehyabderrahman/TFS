@@ -43,6 +43,9 @@ class AuditLog(db.Model):
             "groupId":    self.group_id or "",
         }
 
+    def __init__(self, **kwargs):
+        super(AuditLog, self).__init__(**kwargs)
+
     def __repr__(self):
         return f"<AuditLog {self.action} by {self.user_email}>"
 
@@ -77,6 +80,9 @@ class ACLEntry(db.Model):
     __table_args__ = (
         db.UniqueConstraint("transfer_id", "user_id", name="uq_acl_transfer_user"),
     )
+
+    def __init__(self, **kwargs):
+        super(ACLEntry, self).__init__(**kwargs)
 
     def to_dict(self) -> dict:
         return {

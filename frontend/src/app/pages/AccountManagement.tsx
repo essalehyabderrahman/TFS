@@ -37,7 +37,7 @@ function formatBytes(bytes: number): string {
 }
 
 export function AccountManagement() {
-  const { signOut, signIn, isRootAdmin } = useAuth();
+  const { signOut, signIn, isRootAdmin, isPasswordResetRequired } = useAuth();
   const navigate = useNavigate();
 
   const [account, setAccount] = useState<AccountData | null>(null);
@@ -90,6 +90,18 @@ export function AccountManagement() {
   useEffect(() => {
     loadAccount();
   }, [loadAccount]);
+
+  // [Security] If a password reset is required, force the dialog open immediately
+  useEffect(() => {
+    if (isPasswordResetRequired && !isLoading) {
+      setShowPasswordDialog(true);
+      toast.info("Security Action Required: You must update your password before you can continue.", {
+        id: "mandatory-reset",
+        duration: Infinity,
+      });
+    }
+    return () => { toast.dismiss("mandatory-reset"); };
+  }, [isPasswordResetRequired, isLoading]);
 
   const openEditDialog = () => {
     if (!account) return;
@@ -436,8 +448,19 @@ export function AccountManagement() {
       </Dialog>
 
       {/* Change Password Dialog */}
-      <Dialog open={showPasswordDialog} onOpenChange={setShowPasswordDialog}>
-        <DialogContent style={{ background: "linear-gradient(180deg, #0d1228 0%, #0b0f20 100%)", border: "1px solid rgba(255,255,255,0.1)" }}>
+      <Dialog 
+        open={showPasswordDialog} 
+        onOpenChange={v => {
+          // If reset is required, the user cannot close the dialog by clicking outside or pressing ESC
+          if (isPasswordResetRequired) return;
+          setShowPasswordDialog(v);
+        }}
+      >
+        <DialogContent 
+          onPointerDownOutside={e => { if (isPasswordResetRequired) e.preventDefault(); }}
+          onEscapeKeyDown={e => { if (isPasswordResetRequired) e.preventDefault(); }}
+          style={{ background: "linear-gradient(180deg, #0d1228 0%, #0b0f20 100%)", border: "1px solid rgba(255,255,255,0.1)" }}
+        >
           <DialogHeader><DialogTitle className="text-white text-xl">Change Password</DialogTitle></DialogHeader>
           <div className="space-y-4">
 
@@ -513,9 +536,13 @@ export function AccountManagement() {
           </div>
 
           <DialogFooter className="mt-6">
-            <button onClick={() => { setShowPasswordDialog(false); setCurrentPassword(""); setNewPassword(""); setConfirmPassword(""); }}
-              className="px-4 py-2 rounded-lg"
-              style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "#e2e8f0" }}>Cancel</button>
+            <button 
+              onClick={() => { setShowPasswordDialog(false); setCurrentPassword(""); setNewPassword(""); setConfirmPassword(""); }}
+              disabled={isPasswordResetRequired}
+              className="px-4 py-2 rounded-lg disabled:opacity-20"
+              style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "#e2e8f0" }}>
+              Cancel
+            </button>
             <button onClick={handleChangePassword} disabled={isPasswordLoading || !isNewPasswordStrong || !doesPasswordMatch || isSameAsCurrent}
               className="px-4 py-2 rounded-lg flex items-center gap-2 disabled:opacity-50"
               style={{ background: "linear-gradient(135deg, #0B7FFF 0%, #0960D9 100%)", color: "white" }}>

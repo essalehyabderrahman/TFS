@@ -17,6 +17,9 @@ class TeamSettings(db.Model):
 
     updated_by = db.relationship("User", foreign_keys=[updated_by_id])
 
+    def __init__(self, **kwargs):
+        super(TeamSettings, self).__init__(**kwargs)
+
     def to_dict(self) -> dict:
         return {
             "allowMemberDirectory": self.allow_member_directory,
