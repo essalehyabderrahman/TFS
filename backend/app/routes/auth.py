@@ -316,33 +316,92 @@ def handle_rate_limit(e):
 @csrf_protect
 @limiter.limit("5 per hour")
 def recovery_request():
+    import os
+    import smtplib
+    from email.mime.text import MIMEText
+    from email.mime.multipart import MIMEMultipart
     from flask import current_app, request, jsonify
     from app.services.auth_service import _log
+    from app.extensions import db
 
     data = request.get_json(silent=True) or {}
-    full_name = data.get("fullName", "").strip()
-    email = data.get("email", "").strip().lower()
-    registration_date = data.get("registrationDate", "").strip()
-    last_file = data.get("lastFile", "").strip()
-    message = data.get("message", "").strip()
+    full_name          = data.get("fullName", "").strip()
+    email              = data.get("email", "").strip().lower()
+    registration_date  = data.get("registrationDate", "").strip()
+    last_file          = data.get("lastFile", "").strip()
+    message            = data.get("message", "").strip()
 
     if not full_name or not email or not message:
         return jsonify({"error": "MISSING_FIELDS"}), 400
-
     if "@" not in email:
         return jsonify({"error": "INVALID_EMAIL"}), 400
 
-    admin_email = current_app.config.get("ADMIN_RECOVERY_EMAIL") or current_app.config.get("ADMIN_EMAIL") or "admin@tfs.local"
+    # --- Récupération des identifiants SMTP depuis le .env ---
+    smtp_sender   = os.environ.get("SMTP_SENDER_EMAIL")
+    smtp_password = os.environ.get("SMTP_APP_PASSWORD")
+    smtp_host     = os.environ.get("SMTP_HOST", "smtp.gmail.com")
+    smtp_port     = int(os.environ.get("SMTP_PORT", 587))
 
-    print("\n" + "="*60)
-    print(f"[SECURITY] RECOVERY REQUEST RECEIVED")
-    print(f"To: {admin_email}")
-    print(f"From: {full_name} <{email}>")
-    print(f"Registration Date: {registration_date or 'N/A'}")
-    print(f"Last File: {last_file or 'N/A'}")
-    print(f"Message:\n{message}")
-    print("="*60 + "\n")
+    if not smtp_sender or not smtp_password:
+        _log("RECOVERY_REQUEST_FAILED", email, None, "warning", request.remote_addr, details="SMTP credentials not configured — recovery email not sent.")
+        db.session.commit()
+        # On retourne quand même 200 pour ne pas exposer la config côté client
+        return jsonify({"ok": True, "message": "Recovery request transmitted to administration."}), 200
 
-    _log("RECOVERY_REQUEST_SUBMITTED", email, None, "info", request.remote_addr)
+    # --- Construction du message ---
+    msg = MIMEMultipart()
+    msg["From"]    = f"TFS Security <{smtp_sender}>"
+    msg["To"]      = smtp_sender
+    msg["Subject"] = f"[TFS Security] Demande de Récupération de Clé - {full_name}"
+
+    body = f"""\
+Bonjour Administrateur,
+
+Une nouvelle demande de récupération de clé a été soumise :
+
+  • Nom complet              : {full_name}
+  • Email du compte          : {email}
+  • Date d'inscription aprox.: {registration_date or 'Non renseignée'}
+  • Dernier fichier transféré: {last_file or 'Non renseigné'}
+
+Message de l'utilisateur :
+─────────────────────────────────────────
+{message}
+─────────────────────────────────────────
+
+Merci de traiter cette demande dans les plus brefs délais.
+
+— TFS Security (message automatique)
+"""
+    msg.attach(MIMEText(body, "plain", "utf-8"))
+
+    # --- Envoi via SMTP (TLS sur port 587) ---
+    try:
+        if smtp_port == 465:
+            with smtplib.SMTP_SSL(smtp_host, smtp_port, timeout=10) as server:
+                server.ehlo()
+                server.login(smtp_sender, smtp_password)
+                server.sendmail(smtp_sender, smtp_sender, msg.as_string())
+        else:
+            with smtplib.SMTP(smtp_host, smtp_port, timeout=10) as server:
+                server.ehlo()
+                server.starttls()
+                server.ehlo()
+                server.login(smtp_sender, smtp_password)
+                server.sendmail(smtp_sender, smtp_sender, msg.as_string())
+        _log("RECOVERY_REQUEST_SUCCESS", email, None, "success", request.remote_addr, details=f"Recovery email sent to {smtp_sender}")
+        db.session.commit()
+    except smtplib.SMTPAuthenticationError:
+        _log("RECOVERY_REQUEST_FAILED", email, None, "error", request.remote_addr, details="SMTP authentication failed — check SMTP_SENDER_EMAIL / SMTP_APP_PASSWORD in .env")
+        db.session.commit()
+        return jsonify({"error": "EMAIL_SEND_FAILED"}), 500
+    except smtplib.SMTPException as e:
+        _log("RECOVERY_REQUEST_FAILED", email, None, "error", request.remote_addr, details=f"SMTP error while sending recovery email: {e}")
+        db.session.commit()
+        return jsonify({"error": "EMAIL_SEND_FAILED"}), 500
+    except Exception as e:
+        _log("RECOVERY_REQUEST_FAILED", email, None, "error", request.remote_addr, details=f"Unexpected error sending recovery email: {e}")
+        db.session.commit()
+        return jsonify({"error": "EMAIL_SEND_FAILED"}), 500
 
     return jsonify({"ok": True, "message": "Recovery request transmitted to administration."}), 200

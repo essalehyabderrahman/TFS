@@ -1,5 +1,4 @@
 import { apiRequest } from "./client";
-// no token imported
 import type { Transfer } from "@/types";
 
 export type { Transfer };
@@ -23,9 +22,6 @@ interface UploadResult {
   error?: string;
 }
 
-/**
- * Uploads a file to the backend using multipart/form-data.
- */
 export async function uploadTransfer(
   file: File,
   recipientEmail = "",
@@ -48,20 +44,71 @@ export async function uploadTransfer(
     const res = await fetch(`${API_BASE_URL}/transfers`, {
       method: "POST",
       credentials: "include",
-      headers: { "X-CSRF-Token": document.cookie.split("; ").find(r => r.startsWith("csrf_token="))?.split("=")[1] ?? "" },
+      headers: {
+        "X-CSRF-Token":
+          document.cookie
+            .split("; ")
+            .find((r) => r.startsWith("csrf_token="))
+            ?.split("=")[1] ?? "",
+      },
       // Do NOT set Content-Type — browser must compute multipart boundary automatically
       body: formData,
     });
 
     const data = await res.json();
-
-    if (!res.ok) {
-      return { ok: false, error: data.error ?? "UPLOAD_FAILED" };
-    }
-
+    if (!res.ok) return { ok: false, error: data.error ?? "UPLOAD_FAILED" };
     return { ok: true, transfer: data as Transfer };
   } catch {
     return { ok: false, error: "NETWORK_ERROR" };
+  }
+}
+
+// ── Inline content edit ────────────────────────────────────────────────────────
+
+/**
+ * Overwrite a transfer's text content in place.
+ * The caller must already hold the pessimistic lock before calling this.
+ */
+export async function updateTransferContent(
+  transferId: string,
+  content: string,
+): Promise<{ data: Transfer | null; error: string | null; lockedBy?: string }> {
+  try {
+    const data = await apiRequest<Transfer>(`/transfers/${transferId}/content`, {
+      method: "PUT",
+      body: { content },
+    });
+    return { data, error: null };
+  } catch (err: any) {
+    return { data: null, error: err?.message ?? "UNKNOWN_ERROR", lockedBy: err?.lockedBy };
+  }
+}
+
+// ── Pessimistic lock (for edit mode) ──────────────────────────────────────────
+
+export async function lockTransfer(
+  transferId: string,
+): Promise<{ ok: boolean; error: string | null; lockedBy?: string }> {
+  try {
+    await apiRequest(`/transfers/${transferId}/lock`, { method: "POST" });
+    return { ok: true, error: null };
+  } catch (err: any) {
+    return {
+      ok: false,
+      error: err?.message ?? "UNKNOWN_ERROR",
+      lockedBy: err?.lockedBy,
+    };
+  }
+}
+
+export async function unlockTransfer(
+  transferId: string,
+): Promise<{ ok: boolean; error: string | null }> {
+  try {
+    await apiRequest(`/transfers/${transferId}/lock`, { method: "DELETE" });
+    return { ok: true, error: null };
+  } catch (err: any) {
+    return { ok: false, error: err?.message ?? "UNKNOWN_ERROR" };
   }
 }
 
@@ -87,7 +134,9 @@ export interface AclPayload {
   canShare: boolean;
 }
 
-export async function fetchAcl(transferId: string): Promise<{ data: AclEntry[]; error: string | null }> {
+export async function fetchAcl(
+  transferId: string,
+): Promise<{ data: AclEntry[]; error: string | null }> {
   try {
     const data = await apiRequest<AclEntry[]>(`/transfers/${transferId}/acl`);
     return { data, error: null };
@@ -96,11 +145,14 @@ export async function fetchAcl(transferId: string): Promise<{ data: AclEntry[]; 
   }
 }
 
-export async function grantAcl(transferId: string, payload: AclPayload): Promise<{ data: AclEntry | null; error: string | null }> {
+export async function grantAcl(
+  transferId: string,
+  payload: AclPayload,
+): Promise<{ data: AclEntry | null; error: string | null }> {
   try {
     const data = await apiRequest<AclEntry>(`/transfers/${transferId}/acl`, {
       method: "POST",
-      body: payload
+      body: payload,
     });
     return { data, error: null };
   } catch (err) {
@@ -108,11 +160,12 @@ export async function grantAcl(transferId: string, payload: AclPayload): Promise
   }
 }
 
-export async function revokeAcl(transferId: string, userId: string): Promise<{ ok: boolean; error: string | null }> {
+export async function revokeAcl(
+  transferId: string,
+  userId: string,
+): Promise<{ ok: boolean; error: string | null }> {
   try {
-    await apiRequest(`/transfers/${transferId}/acl/${userId}`, {
-      method: "DELETE"
-    });
+    await apiRequest(`/transfers/${transferId}/acl/${userId}`, { method: "DELETE" });
     return { ok: true, error: null };
   } catch (err) {
     return { ok: false, error: String(err) };

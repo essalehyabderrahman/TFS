@@ -20,6 +20,9 @@ def jwt_required_custom(fn):
         try:
             verify_jwt_in_request()
         except Exception as e:
+            msg = str(e).lower()
+            if "expired" in msg:
+                return jsonify({"error": "TOKEN_EXPIRED", "message": str(e)}), 401
             return jsonify({"error": "UNAUTHORIZED", "message": str(e)}), 401
 
         claims = get_jwt()

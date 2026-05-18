@@ -9,6 +9,7 @@ a single source of truth for crypto.
 import uuid
 import os
 import io
+import zipfile
 
 from werkzeug.datastructures import FileStorage
 from werkzeug.utils import secure_filename
@@ -78,7 +79,6 @@ def create_folder(user: User, name: str, parent_id: str | None) -> dict:
     if not name:
         return {"ok": False, "error": "MISSING_NAME"}
 
-    # Validate parent belongs to user
     if parent_id is not None:
         parent = db.session.get(UserFile, parent_id)
         if not parent or parent.owner_id != user.id or parent.is_deleted:
@@ -86,7 +86,6 @@ def create_folder(user: User, name: str, parent_id: str | None) -> dict:
         if parent.item_type != "folder":
             return {"ok": False, "error": "PARENT_NOT_A_FOLDER"}
 
-    # Duplicate check
     exists = UserFile.query.filter_by(
         owner_id=user.id,
         parent_id=parent_id,
@@ -120,7 +119,6 @@ def upload_file(user: User, file: FileStorage, parent_id: str | None,
     if not _allowed(file.filename, allowed_ext):
         return {"ok": False, "error": "FILE_TYPE_NOT_ALLOWED"}
 
-    # Validate parent
     if parent_id is not None:
         parent = db.session.get(UserFile, parent_id)
         if not parent or parent.owner_id != user.id or parent.is_deleted:
@@ -171,7 +169,6 @@ def rename_item(user: User, item_id: str, new_name: str) -> dict:
     if item.owner_id != user.id:
         return {"ok": False, "error": "FORBIDDEN"}
 
-    # Duplicate check in same parent
     conflict = UserFile.query.filter_by(
         owner_id=user.id,
         parent_id=item.parent_id,
@@ -200,16 +197,13 @@ def move_item(user: User, item_id: str, target_parent_id: str | None) -> dict:
     if item.owner_id != user.id:
         return {"ok": False, "error": "FORBIDDEN"}
 
-    # No-op: already in target
     if item.parent_id == target_parent_id:
         return {"ok": True, "item": item.to_dict()}
 
-    # Anti-cycle guard: cannot move a folder into itself or its descendants
     if item.item_type == "folder" and target_parent_id is not None:
         if _is_descendant(target_parent_id, item_id):
             return {"ok": False, "error": "CIRCULAR_MOVE"}
 
-    # Validate target folder
     if target_parent_id is not None:
         target = db.session.get(UserFile, target_parent_id)
         if not target or target.owner_id != user.id or target.is_deleted:
@@ -217,7 +211,6 @@ def move_item(user: User, item_id: str, target_parent_id: str | None) -> dict:
         if target.item_type != "folder":
             return {"ok": False, "error": "TARGET_NOT_A_FOLDER"}
 
-    # Duplicate name check in destination
     conflict = UserFile.query.filter_by(
         owner_id=user.id,
         parent_id=target_parent_id,
@@ -266,8 +259,35 @@ def download_file(user: User, item_id: str) -> dict:
         return {"ok": False, "error": "NOT_FOUND"}
     if item.owner_id != user.id:
         return {"ok": False, "error": "FORBIDDEN"}
-    if item.item_type != "file":
-        return {"ok": False, "error": "NOT_A_FILE"}
+
+    if item.item_type == "folder":
+        zip_buffer = io.BytesIO()
+        with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+            def add_folder_to_zip(folder: UserFile, current_path: str):
+                children = UserFile.query.filter_by(parent_id=folder.id, is_deleted=False).all()
+                for child in children:
+                    child_path = os.path.join(current_path, child.name) if current_path else child.name
+                    if child.item_type == "folder":
+                        add_folder_to_zip(child, child_path)
+                    else:
+                        if child.stored_path and os.path.exists(child.stored_path):
+                            try:
+                                with open(child.stored_path, "rb") as fp:
+                                    file_data = fp.read()
+                                if getattr(child, "is_encrypted", True):
+                                    file_data = _decrypt_file(file_data)
+                                zip_file.writestr(child_path, file_data)
+                            except Exception:
+                                pass
+            add_folder_to_zip(item, "")
+        
+        zip_buffer.seek(0)
+        return {
+            "ok": True,
+            "stream": zip_buffer,
+            "filename": f"{item.name}.zip",
+        }
+
     if not item.stored_path or not os.path.exists(item.stored_path):
         return {"ok": False, "error": "FILE_MISSING_ON_DISK"}
 
@@ -287,3 +307,37 @@ def download_file(user: User, item_id: str) -> dict:
         "stream": io.BytesIO(raw),
         "filename": item.name,
     }
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Inline Text Edit  (Personal Storage — no lock, single-owner)
+# ──────────────────────────────────────────────────────────────────────────────
+
+def update_file_content(user: User, item_id: str, new_text: str) -> dict:
+    """
+    Overwrite a personal-storage text file's content directly.
+
+    Personal Storage files are single-owner so no pessimistic lock is needed.
+    Encryption is preserved: if is_encrypted=True the new bytes are re-encrypted
+    with _encrypt_file() before being written to disk.
+    size_bytes is updated to reflect the new UTF-8 byte length.
+    """
+    item = db.session.get(UserFile, item_id)
+    if not item or item.is_deleted:
+        return {"ok": False, "error": "NOT_FOUND"}
+    if item.owner_id != user.id:
+        return {"ok": False, "error": "FORBIDDEN"}
+    if item.item_type != "file":
+        return {"ok": False, "error": "NOT_A_FILE"}
+    if not item.stored_path or not os.path.exists(item.stored_path):
+        return {"ok": False, "error": "FILE_MISSING_ON_DISK"}
+
+    raw_bytes     = new_text.encode("utf-8")
+    data_to_write = _encrypt_file(raw_bytes) if getattr(item, "is_encrypted", False) else raw_bytes
+
+    with open(item.stored_path, "wb") as fp:
+        fp.write(data_to_write)
+
+    item.size_bytes = len(raw_bytes)
+    db.session.commit()
+    return {"ok": True, "item": item.to_dict()}

@@ -64,15 +64,22 @@ export async function apiUploadFile(
   formData.append("encrypt", String(encrypt))
 
   try {
+    // IMPORTANT: Do NOT set Content-Type — the browser must set it automatically
+    // so it can include the correct multipart boundary.
     const res = await csrfFetch(`${API_BASE_URL}/explorer/upload`, {
       method: "POST",
       credentials: "include",
       body: formData,
     })
+
     const json = await res.json()
-    if (!res.ok) return { data: null, error: json.error ?? "UPLOAD_FAILED" }
+    if (!res.ok) {
+      console.error("[apiUploadFile] Upload failed:", res.status, json)
+      return { data: null, error: json.error ?? "UPLOAD_FAILED" }
+    }
     return { data: json as FSItem, error: null }
-  } catch {
+  } catch (err: any) {
+    console.error("[apiUploadFile] Network error:", err)
     return { data: null, error: "NETWORK_ERROR" }
   }
 }
@@ -128,4 +135,26 @@ export async function apiDeleteItem(
 
 export function getFileDownloadUrl(itemId: string): string {
   return `${API_BASE_URL}/explorer/${itemId}/download`
+}
+
+// ─── Inline content edit (Personal Storage) ───────────────────────────────────
+
+/**
+ * Overwrite a Personal Storage text file's content in place.
+ * No lock is required — Personal Storage files are single-owner.
+ * Encryption is transparently preserved by the backend.
+ */
+export async function updateExplorerFileContent(
+  itemId: string,
+  content: string,
+): Promise<{ data: FSItem | null; error: string | null }> {
+  try {
+    const data = await apiRequest<FSItem>(`/explorer/${itemId}/content`, {
+      method: "PUT",
+      body: { content },
+    })
+    return { data, error: null }
+  } catch (err: any) {
+    return { data: null, error: err?.message ?? "UNKNOWN_ERROR" }
+  }
 }

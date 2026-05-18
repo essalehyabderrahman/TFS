@@ -33,20 +33,13 @@ export interface GroupSettings {
   updatedBy: string | null
 }
 
-export interface UserSuggestion {
+export interface FileVersion {
   id: string
-  email: string
-  name: string
-  avatar: string
-}
-
-export async function searchUsers(q: string): Promise<UserSuggestion[]> {
-  if (q.length < 2) return []
-  try {
-    return await apiRequest<UserSuggestion[]>(`/team/search?q=${encodeURIComponent(q)}`)
-  } catch {
-    return []
-  }
+  versionNum: number
+  sizeBytes: number
+  description: string
+  author: string
+  createdAt: string
 }
 
 export async function fetchGroups(): Promise<{ data: Group[]; error: string | null }> {
@@ -155,6 +148,8 @@ export async function uploadGroupTransfer(
   groupId: string,
   file: File,
   expiryDays = 7,
+  parentId?: string | null,
+  encrypt = true,
 ): Promise<{ ok: boolean; transfer?: Transfer; error?: string }> {
   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
   if (!API_BASE_URL) return { ok: false, error: "API_BASE_URL not configured" }
@@ -162,6 +157,10 @@ export async function uploadGroupTransfer(
     const formData = new FormData()
     formData.append("file", file)
     formData.append("expiryDays", String(expiryDays))
+    formData.append("encrypt", String(encrypt))
+    if (parentId) {
+      formData.append("parentId", parentId)
+    }
     const csrfToken = document.cookie.split("; ").find(r => r.startsWith("csrf_token="))?.split("=")[1] ?? ""
     const res = await fetch(`${API_BASE_URL}/groups/${groupId}/transfers`, {
       method: "POST",
@@ -174,5 +173,166 @@ export async function uploadGroupTransfer(
     return { ok: true, transfer: data as Transfer }
   } catch {
     return { ok: false, error: "NETWORK_ERROR" }
+  }
+}
+
+// ── Virtual Folder creation ───────────────────────────────────────────────────
+export async function createGroupFolder(
+  groupId: string,
+  name: string,
+  parentId: string | null,
+): Promise<{ data: Transfer | null; error: string | null }> {
+  try {
+    const data = await apiRequest<Transfer>(`/groups/${groupId}/folders`, {
+      method: "POST",
+      body: { name, parentId },
+    })
+    return { data, error: null }
+  } catch (err: any) {
+    return { data: null, error: err?.message ?? String(err) }
+  }
+}
+
+// ── Rename item ───────────────────────────────────────────────────────────────
+export async function renameGroupItem(
+  groupId: string,
+  transferId: string,
+  name: string,
+): Promise<{ data: Transfer | null; error: string | null; lockedBy?: string }> {
+  try {
+    const data = await apiRequest<Transfer>(`/groups/${groupId}/transfers/${transferId}/rename`, {
+      method: "PATCH",
+      body: { name },
+    })
+    return { data, error: null }
+  } catch (err: any) {
+    return { data: null, error: err?.message ?? String(err), lockedBy: err?.lockedBy }
+  }
+}
+
+// ── Move item ────────────────────────────────────────────────────────────────
+export async function moveGroupItem(
+  groupId: string,
+  transferId: string,
+  parentId: string | null,
+): Promise<{ data: Transfer | null; error: string | null; lockedBy?: string }> {
+  try {
+    const data = await apiRequest<Transfer>(`/groups/${groupId}/transfers/${transferId}/move`, {
+      method: "PATCH",
+      body: { parentId },
+    })
+    return { data, error: null }
+  } catch (err: any) {
+    return { data: null, error: err?.message ?? String(err), lockedBy: err?.lockedBy }
+  }
+}
+
+// ── Acquire Lock ──────────────────────────────────────────────────────────────
+export async function lockGroupItem(
+  groupId: string,
+  transferId: string,
+): Promise<{ ok: boolean; error: string | null; lockedBy?: string }> {
+  try {
+    await apiRequest(`/groups/${groupId}/transfers/${transferId}/lock`, {
+      method: "POST",
+    })
+    return { ok: true, error: null }
+  } catch (err: any) {
+    return { ok: false, error: err?.message ?? String(err), lockedBy: err?.lockedBy }
+  }
+}
+
+// ── Release Lock ──────────────────────────────────────────────────────────────
+export async function unlockGroupItem(
+  groupId: string,
+  transferId: string,
+): Promise<{ ok: boolean; error: string | null }> {
+  try {
+    await apiRequest(`/groups/${groupId}/transfers/${transferId}/unlock`, {
+      method: "POST",
+    })
+    return { ok: true, error: null }
+  } catch (err: any) {
+    return { ok: false, error: err?.message ?? String(err) }
+  }
+}
+
+// ── Versioning API ────────────────────────────────────────────────────────────
+export async function fetchItemVersions(
+  groupId: string,
+  transferId: string,
+): Promise<{ data: FileVersion[]; error: string | null }> {
+  try {
+    const data = await apiRequest<FileVersion[]>(`/groups/${groupId}/transfers/${transferId}/versions`)
+    return { data, error: null }
+  } catch (err: any) {
+    return { data: [], error: err?.message ?? String(err) }
+  }
+}
+
+export async function restoreItemVersion(
+  groupId: string,
+  transferId: string,
+  versionNum: number,
+): Promise<{ data: Transfer | null; error: string | null; lockedBy?: string }> {
+  try {
+    const data = await apiRequest<Transfer>(`/groups/${groupId}/transfers/${transferId}/versions/${versionNum}/restore`, {
+      method: "POST",
+    })
+    return { data, error: null }
+  } catch (err: any) {
+    return { data: null, error: err?.message ?? String(err), lockedBy: err?.lockedBy }
+  }
+}
+
+export async function uploadGroupVersion(
+  groupId: string,
+  transferId: string,
+  file: File,
+): Promise<{ ok: boolean; transfer?: Transfer; error?: string; lockedBy?: string }> {
+  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
+  if (!API_BASE_URL) return { ok: false, error: "API_BASE_URL not configured" }
+  try {
+    const formData = new FormData()
+    formData.append("file", file)
+    const csrfToken = document.cookie.split("; ").find(r => r.startsWith("csrf_token="))?.split("=")[1] ?? ""
+    const res = await fetch(`${API_BASE_URL}/groups/${groupId}/transfers/${transferId}/versions`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "X-CSRF-Token": csrfToken },
+      body: formData,
+    })
+    const data = await res.json()
+    if (!res.ok) {
+      return { ok: false, error: data.error ?? "VERSION_UPLOAD_FAILED", lockedBy: data.lockedBy }
+    }
+    return { ok: true, transfer: data as Transfer }
+  } catch {
+    return { ok: false, error: "NETWORK_ERROR" }
+  }
+}
+
+/**
+ * Overwrite a group-workspace text file's content in place.
+ * The caller must already hold the pessimistic lock before calling this
+ * (acquired via lockGroupItem). A new FileVersion is created automatically.
+ */
+export async function updateGroupFileContent(
+  groupId: string,
+  transferId: string,
+  content: string,
+): Promise<{ data: Transfer | null; error: string | null; lockedBy?: string }> {
+  try {
+    const data = await apiRequest<Transfer>(
+      `/groups/${groupId}/transfers/${transferId}/content`,
+      { method: "PUT", body: { content } },
+    )
+    return { data, error: null }
+  } catch (err: any) {
+    return {
+      data: null,
+      error: err?.message ?? "UNKNOWN_ERROR",
+      lockedBy: err?.lockedBy,
+    }
   }
 }

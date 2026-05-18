@@ -1,9 +1,10 @@
 import { useState, useCallback, useRef, useEffect } from "react";
-import { CloudUpload, ShieldCheck, ShieldOff, X, Loader2, Lock, LockOpen } from "lucide-react";
+import { CloudUpload, ShieldCheck, X, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { uploadTransfer } from "@/app/api/transfers";
 import { fetchContacts, type Contact } from "@/app/api/contacts";
 import { useLocation } from "react-router";
+import { EncryptionChoiceModal } from "./EncryptionChoiceModal";
 
 interface UploadZoneProps {
   onUploaded?: () => void;
@@ -14,7 +15,7 @@ export function UploadZone({ onUploaded }: UploadZoneProps) {
   const [uploading, setUploading] = useState(false);
   const [recipientEmail, setRecipientEmail] = useState("");
   const [expiryDays, setExpiryDays] = useState(7);
-  const [encrypt, setEncrypt] = useState(true);
+  const [pendingFiles, setPendingFiles] = useState<FileList | null>(null);
   const [emailError, setEmailError] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const emailInputRef = useRef<HTMLInputElement>(null);
@@ -48,8 +49,8 @@ export function UploadZone({ onUploaded }: UploadZoneProps) {
   const validateEmail = (email: string) =>
     email.trim() !== "" && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
 
-  const handleFiles = useCallback(
-    async (files: FileList | null) => {
+  const queueFiles = useCallback(
+    (files: FileList | null) => {
       if (!files || files.length === 0) return;
 
       if (!validateEmail(recipientEmail)) {
@@ -60,13 +61,23 @@ export function UploadZone({ onUploaded }: UploadZoneProps) {
         return;
       }
       setEmailError(false);
+      setPendingFiles(files);
+    },
+    [recipientEmail],
+  );
+
+  const handleEncryptionChoice = useCallback(
+    async (encryptChoice: boolean) => {
+      const files = pendingFiles;
+      setPendingFiles(null);
+      if (!files || files.length === 0) return;
 
       setUploading(true);
       let successCount = 0;
       let failCount = 0;
 
       for (const file of Array.from(files)) {
-        const result = await uploadTransfer(file, recipientEmail, expiryDays, encrypt);
+        const result = await uploadTransfer(file, recipientEmail, expiryDays, encryptChoice);
         if (result.ok) {
           successCount++;
         } else {
@@ -97,8 +108,13 @@ export function UploadZone({ onUploaded }: UploadZoneProps) {
 
       if (fileInputRef.current) fileInputRef.current.value = "";
     },
-    [recipientEmail, expiryDays, encrypt, onUploaded],
+    [pendingFiles, recipientEmail, expiryDays, onUploaded],
   );
+
+  const handleCancelUpload = useCallback(() => {
+    setPendingFiles(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  }, []);
 
   const onDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -111,9 +127,9 @@ export function UploadZone({ onUploaded }: UploadZoneProps) {
     (e: React.DragEvent) => {
       e.preventDefault();
       setDragging(false);
-      handleFiles(e.dataTransfer.files);
+      queueFiles(e.dataTransfer.files);
     },
-    [handleFiles],
+    [queueFiles],
   );
 
   const handleClick = useCallback(() => {
@@ -130,9 +146,9 @@ export function UploadZone({ onUploaded }: UploadZoneProps) {
 
   const handleFileInputChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
-      handleFiles(e.target.files);
+      queueFiles(e.target.files);
     },
-    [handleFiles],
+    [queueFiles],
   );
 
   return (
@@ -229,67 +245,7 @@ export function UploadZone({ onUploaded }: UploadZoneProps) {
         </select>
       </div>
 
-      {/* Encryption toggle */}
-      <button
-        type="button"
-        onClick={() => setEncrypt(prev => !prev)}
-        className="flex items-center gap-3 px-4 py-2.5 rounded-xl w-full transition-all duration-300"
-        style={{
-          background: encrypt
-            ? "rgba(0,229,160,0.07)"
-            : "rgba(251,191,36,0.07)",
-          border: encrypt
-            ? "1px solid rgba(0,229,160,0.25)"
-            : "1px solid rgba(251,191,36,0.3)",
-        }}
-      >
-        {/* Icon */}
-        <div
-          className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 transition-all duration-300"
-          style={{
-            background: encrypt ? "rgba(0,229,160,0.15)" : "rgba(251,191,36,0.15)",
-          }}
-        >
-          {encrypt
-            ? <Lock size={15} style={{ color: "#00E5A0" }} strokeWidth={2} />
-            : <LockOpen size={15} style={{ color: "#FBBF24" }} strokeWidth={2} />
-          }
-        </div>
 
-        {/* Label */}
-        <div className="flex-1 text-left min-w-0">
-          <p className="text-[12px] font-semibold" style={{ color: encrypt ? "#00E5A0" : "#FBBF24" }}>
-            {encrypt ? "AES-256-GCM Encryption" : "No Encryption"}
-          </p>
-          <p className="text-[10.5px]" style={{ color: "#475569" }}>
-            {encrypt
-              ? "File will be encrypted at rest"
-              : "File stored as-is — not recommended for sensitive data"}
-          </p>
-        </div>
-
-        {/* Pill toggle */}
-        <div
-          className="relative shrink-0 transition-all duration-300"
-          style={{
-            width: "38px",
-            height: "22px",
-            borderRadius: "11px",
-            background: encrypt ? "#00E5A0" : "rgba(255,255,255,0.12)",
-            boxShadow: encrypt ? "0 0 10px rgba(0,229,160,0.4)" : "none",
-          }}
-        >
-          <div
-            className="absolute top-[3px] transition-all duration-300 rounded-full"
-            style={{
-              width: "16px",
-              height: "16px",
-              background: "white",
-              left: encrypt ? "19px" : "3px",
-            }}
-          />
-        </div>
-      </button>
 
       <div
         onDragOver={onDragOver}
@@ -346,32 +302,22 @@ export function UploadZone({ onUploaded }: UploadZoneProps) {
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-4 mt-1">
-            {encrypt ? (
-              [
-                { label: "AES-256", full: "AES-256 Encrypted" },
-                { label: "Zero-Knowledge", full: "Zero-Knowledge" },
-                { label: "SOC 2", full: "SOC 2 Compliant" },
-              ].map((badge) => (
-                <div key={badge.label} className="flex items-center gap-1.5">
-                  <ShieldCheck size={11} style={{ color: "#00E5A0" }} />
-                  <span className="text-[10px] sm:text-[11px]" style={{ color: "#475569", fontWeight: 500 }}>
-                    <span className="sm:hidden">{badge.label}</span>
-                    <span className="hidden sm:inline">{badge.full}</span>
-                  </span>
-                </div>
-              ))
-            ) : (
-              <div className="flex items-center gap-1.5">
-                <ShieldOff size={11} style={{ color: "#FBBF24" }} />
-                <span className="text-[10px] sm:text-[11px]" style={{ color: "#FBBF24", fontWeight: 600 }}>
-                  Encryption disabled
-                </span>
-              </div>
-            )}
+          <div className="flex items-center justify-center gap-1.5 mt-1">
+            <ShieldCheck size={11} style={{ color: "#00E5A0" }} />
+            <span className="text-[10px] sm:text-[11px]" style={{ color: "#475569", fontWeight: 500 }}>
+              You'll choose encryption after selecting a file
+            </span>
           </div>
         </div>
       </div>
+
+      {pendingFiles && (
+        <EncryptionChoiceModal
+          files={pendingFiles}
+          onChoose={handleEncryptionChoice}
+          onCancel={handleCancelUpload}
+        />
+      )}
     </div>
   );
 }

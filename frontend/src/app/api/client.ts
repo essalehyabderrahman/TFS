@@ -7,6 +7,33 @@ function getCsrfToken(): string {
 }
 
 
+let isRefreshing = false;
+let refreshPromise: Promise<boolean> | null = null;
+
+async function attemptRefresh(): Promise<boolean> {
+  if (isRefreshing) return refreshPromise!;
+  isRefreshing = true;
+  refreshPromise = (async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/auth/refresh`, {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRF-Token": getCsrfToken(),
+        }
+      });
+      return res.ok;
+    } catch {
+      return false;
+    } finally {
+      isRefreshing = false;
+      refreshPromise = null;
+    }
+  })();
+  return refreshPromise;
+}
+
 /**
  * Enhanced API request helper.
  * Strictly communicates with the configured backend and throws on error.
@@ -42,12 +69,6 @@ export async function apiRequest<T>(
   let response = await makeRequest()
 
   // [Session] Intercept expired/invalidated sessions.
-  // TOKEN_EXPIRED   → natural 15-min JWT expiry    → attempt silent refresh; if refresh
-  //                   returns SESSION_EXPIRED (idle grace exceeded) show inactivity modal
-  // UNAUTHORIZED    → invalid/missing token         → attempt silent refresh; show modal if fails
-  // SESSION_EXPIRED → 8-hour absolute wall OR idle  → show modal immediately (no refresh)
-  // SESSION_REVOKED → password changed elsewhere    → show modal immediately (no refresh)
-  // All other 401s (INVALID_CREDENTIALS etc.) pass through untouched.
   if (response.status === 401) {
     let errorCode: string | null = null
     try {
@@ -55,6 +76,22 @@ export async function apiRequest<T>(
       const errorData = await cloned.json()
       errorCode = errorData.error ?? null
     } catch { /* ignore */ }
+
+    if (errorCode === "TOKEN_EXPIRED" && !path.includes("/auth/refresh") && !path.includes("/auth/signin") && !path.includes("/auth/signup")) {
+      const refreshed = await attemptRefresh();
+      if (refreshed) {
+        response = await makeRequest();
+        if (response.ok) {
+          if (response.status === 204) return {} as T;
+          return (await response.json()) as T;
+        }
+        try {
+          const clonedRetry = response.clone()
+          const retryData = await clonedRetry.json()
+          errorCode = retryData.error ?? null
+        } catch { /* ignore */ }
+      }
+    }
 
     if (errorCode === "TOKEN_EXPIRED" || errorCode === "SESSION_EXPIRED") {
       const { getExpireSession } = await import("@/app/context/AuthContext")
@@ -70,7 +107,9 @@ export async function apiRequest<T>(
       // General 401 (invalid credentials, missing token, deleted user, etc.)
       const { getExpireSession } = await import("@/app/context/AuthContext")
       const expireSession = getExpireSession()
-      if (expireSession) await expireSession("unauthorized")
+      if (!path.includes("/auth/signin") && !path.includes("/auth/signup")) {
+        if (expireSession) await expireSession("unauthorized")
+      }
       throw new Error("UNAUTHORIZED")
     }
   }

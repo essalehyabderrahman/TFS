@@ -37,8 +37,18 @@ class UserFile(db.Model):
     # ── helpers ──────────────────────────────────────────────────────────────
 
     @property
+    def get_recursive_size(self) -> int:
+        if self.item_type == "file":
+            return self.size_bytes or 0
+        total_size = 0
+        children = self.children.filter_by(is_deleted=False).all()
+        for child in children:
+            total_size += child.get_recursive_size
+        return total_size
+
+    @property
     def size_label(self) -> str:
-        b = self.size_bytes
+        b = self.get_recursive_size
         if b < 1024:
             return f"{b} B"
         if b < 1_048_576:
@@ -53,8 +63,8 @@ class UserFile(db.Model):
             "type":          self.item_type,
             "name":          self.name,
             "parentId":      self.parent_id,
-            "size":          self.size_bytes if self.item_type == "file" else None,
-            "sizeLabel":     self.size_label if self.item_type == "file" else None,
+            "size":          self.get_recursive_size,
+            "sizeLabel":     self.size_label,
             "fileKind":      self.file_kind,
             "isEncrypted":   self.is_encrypted,
             "createdAt":     self._fmt_date(self.created_at),

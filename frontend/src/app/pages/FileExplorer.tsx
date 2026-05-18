@@ -27,11 +27,18 @@ import {
   List,
   FolderSymlink,
   AlertTriangle,
-  Lock,
-  LockOpen,
   ShieldCheck,
-  ShieldOff,
+  Eye,
+  Download,
+  SquarePen,
 } from "lucide-react";
+
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../components/ui/dialog";
+
+const isEditableText = (name: string, fileKind: string | null) => {
+  const ext = name.split(".").pop()?.toLowerCase() ?? "";
+  return fileKind === "doc" || ["txt", "md", "csv", "json", "xml", "yaml", "yml", "toml", "ini", "log", "sh", "py", "js", "ts", "tsx", "jsx", "html", "css"].includes(ext);
+};
 import { toast } from "sonner";
 import {
   apiListItems,
@@ -42,6 +49,8 @@ import {
   apiDeleteItem,
   type FSItem,
 } from "../api/explorer";
+import { EncryptionChoiceModal } from "../components/EncryptionChoiceModal";
+import { FileViewer } from "../components/ui/FileViewer";
 
 // ─── Local types (FSItem is imported from ../api/explorer) ───────────────────
 
@@ -271,6 +280,9 @@ export function FileExplorer() {
   const [items, setItems] = useState<FSItem[]>([]);
   const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
   const [folderPath, setFolderPath] = useState<string[]>([]);
+  // loadKey increments on every navigation or post-upload refresh to force a re-fetch
+  // even when currentFolderId hasn't changed (e.g. navigating back to root).
+  const [loadKey, setLoadKey] = useState(0);
 
   const [viewMode, setViewMode] = useState<ViewMode>("list");
   const [sortField, setSortField] = useState<SortField>("name");
@@ -290,22 +302,35 @@ export function FileExplorer() {
   const [dropTargetId, setDropTargetId] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
-  const [encrypt, setEncrypt] = useState(true);
+
+  // Pending files waiting for encryption choice (stored as File[] so the
+  // reference stays valid after the file input is reset via e.target.value="").
+  const [pendingFiles, setPendingFiles] = useState<File[] | null>(null);
+
+  const [previewItem, setPreviewItem] = useState<FSItem | null>(null);
+  const [previewEditMode, setPreviewEditMode] = useState(false);
+  const [detailsItem, setDetailsItem] = useState<FSItem | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const renameInputRef = useRef<HTMLInputElement>(null);
   const newFolderInputRef = useRef<HTMLInputElement>(null);
 
-  // ── Load items from API when folder changes ───────────────────────────────
+  // ── Load items from API when folder changes or loadKey bumps ─────────────
   useEffect(() => {
     let cancelled = false;
+    console.log('[Explorer] useEffect: fetching items for folderId=', currentFolderId, 'loadKey=', loadKey);
     apiListItems(currentFolderId).then(({ data, error }) => {
-      if (cancelled) return;
-      if (error) toast.error("Failed to load files.");
-      else setItems(data);
+      if (cancelled) { console.log('[Explorer] useEffect: CANCELLED'); return; }
+      if (error) {
+        console.error('[Explorer] useEffect: apiListItems error =', error);
+        toast.error("Failed to load files.");
+      } else {
+        console.log('[Explorer] useEffect: setItems with', data.length, 'items:', data);
+        setItems(data);
+      }
     });
     return () => { cancelled = true; };
-  }, [currentFolderId]);
+  }, [currentFolderId, loadKey]);
 
   // Focus rename / new folder inputs
   useEffect(() => {
@@ -338,20 +363,22 @@ export function FileExplorer() {
 
   // ── Navigation — path is built incrementally on click ────────────────────
   const navigateTo = useCallback((folderId: string | null, newPath?: string[]) => {
+    setItems([]);
+    setSearchQuery("");
     if (folderId === null) {
       setFolderPath([]);
       setCurrentFolderId(null);
-      setItems([]);
+      // currentFolderId is already null on first load, so bump loadKey to force a re-fetch
+      setLoadKey((k) => k + 1);
       return;
     }
     setFolderPath(newPath ?? [...folderPath, folderId]);
     setCurrentFolderId(folderId);
-    setItems([]);
-    setSearchQuery("");
   }, [folderPath]);
 
   const handleItemClick = (item: FSItem) => {
     if (item.type === "folder") navigateTo(item.id);
+    else setDetailsItem(item);
   };
 
   // ── Create Folder ──────────────────────────────────────────────────────────
@@ -376,6 +403,8 @@ export function FileExplorer() {
   const confirmRename = async () => {
     const name = renameValue.trim();
     if (!name || !renamingId) { setRenamingId(null); return; }
+    const item = items.find((i) => i.id === renamingId);
+    if (item && item.name === name) { setRenamingId(null); return; }
     const { data, error } = await apiRenameItem(renamingId, name);
     if (error === "NAME_CONFLICT") { toast.error(`An item named "${name}" already exists.`); return; }
     if (error || !data) { toast.error("Failed to rename."); return; }
@@ -414,22 +443,40 @@ export function FileExplorer() {
   };
 
   // ── Upload ─────────────────────────────────────────────────────────────────
-  const handleUploadFiles = useCallback(async (fileList: FileList | null) => {
-    if (!fileList || fileList.length === 0) return;
+  const handleUploadFiles = useCallback(async (files: File[], encrypt: boolean) => {
+    if (!files || files.length === 0) return;
     setUploading(true);
     const uploaded: FSItem[] = [];
-    for (const file of Array.from(fileList)) {
+    for (const file of files) {
       const { data, error } = await apiUploadFile(file, currentFolderId, encrypt);
       if (error || !data) { toast.error(`Failed to upload "${file.name}".`); }
       else uploaded.push(data);
     }
     if (uploaded.length > 0) {
       setItems((prev) => [...prev, ...uploaded]);
+      setLoadKey((k) => k + 1);
       toast.success(uploaded.length === 1 ? `"${uploaded[0].name}" uploaded.` : `${uploaded.length} files uploaded.`);
     }
     setUploading(false);
+  }, [currentFolderId]);
+
+  // Queue files → convert to plain array immediately so the reference
+  // survives input.value="" (which clears the live FileList object).
+  const queueFiles = useCallback((fileList: FileList | File[] | null) => {
+    if (!fileList || fileList.length === 0) return;
+    setPendingFiles(Array.from(fileList));
+  }, []);
+
+  const handleEncryptionChoice = useCallback((encrypt: boolean) => {
+    const files = pendingFiles;
+    setPendingFiles(null);
+    if (files && files.length > 0) handleUploadFiles(files, encrypt);
+  }, [pendingFiles, handleUploadFiles]);
+
+  const handleCancelUpload = useCallback(() => {
+    setPendingFiles(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
-  }, [currentFolderId, encrypt]);
+  }, []);
 
   // ── Drag-over drop zone ────────────────────────────────────────────────────
   const onZoneDragOver = (e: React.DragEvent) => {
@@ -444,7 +491,7 @@ export function FileExplorer() {
   const onZoneDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragOver(false);
-    if (e.dataTransfer.files.length) { handleUploadFiles(e.dataTransfer.files); return; }
+    if (e.dataTransfer.files.length) { queueFiles(e.dataTransfer.files); return; }
     // Item drag-and-drop
     const id = e.dataTransfer.getData("itemId");
     if (id) {
@@ -494,6 +541,32 @@ export function FileExplorer() {
     if (error) { toast.error(error === "CIRCULAR_MOVE" ? "Cannot move a folder into itself." : "Move failed."); return; }
     if (data) setItems((prev) => prev.filter((i) => i.id !== item.id));
     toast.success(`"${item.name}" moved into folder.`);
+  };
+
+  const handleExplorerDownload = async (item: FSItem) => {
+    const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
+    try {
+      const res = await fetch(`${API_BASE_URL}/explorer/${item.id}/download`, {
+        method: "GET",
+        credentials: "include",
+      });
+      if (!res.ok) {
+        toast.error("Download failed.");
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = item.name;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      toast.success(`"${item.name}" downloaded.`);
+    } catch (err) {
+      toast.error("Network error.");
+    }
   };
 
   // ── Sort toggle ────────────────────────────────────────────────────────────
@@ -598,7 +671,7 @@ export function FileExplorer() {
         onDragOver={isFolder ? (e) => onFolderDragOver(e, item.id) : undefined}
         onDragLeave={isFolder ? () => setDropTargetId(null) : undefined}
         onDrop={isFolder ? (e) => onFolderDrop(e, item.id) : undefined}
-        className="group flex items-center gap-3 sm:gap-4 px-4 sm:px-5 py-3 sm:py-3.5 transition-all duration-150 hover:bg-white/[0.025] relative cursor-pointer"
+        className="group grid grid-cols-[1fr_80px] sm:grid-cols-[1fr_90px_120px_80px] items-center px-5 py-3.5 transition-all duration-150 hover:bg-white/[0.025] relative cursor-pointer"
         style={{
           borderBottom: "1px solid rgba(255,255,255,0.04)",
           background: isDragging ? "rgba(11,127,255,0.06)" : isDropTarget ? `${iconColor}0a` : "transparent",
@@ -609,96 +682,119 @@ export function FileExplorer() {
         onClick={() => !isRenaming && !isDeleteConfirm && handleItemClick(item)}
         onDoubleClick={() => isFolder && navigateTo(item.id)}
       >
-        {/* Icon */}
-        <div
-          className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 transition-transform group-hover:scale-105"
-          style={{ background: `${iconColor}18`, border: `1px solid ${iconColor}28` }}
-        >
-          {isFolder
-            ? isDropTarget
-              ? <FolderOpen size={16} style={{ color: iconColor }} strokeWidth={1.8} />
-              : <Folder size={16} style={{ color: iconColor }} strokeWidth={1.8} />
-            : <FileIcon size={16} style={{ color: iconColor }} strokeWidth={1.8} />
-          }
+        {/* Cell 1 — icon + name together (sharing the 1fr column) */}
+        <div className="flex items-center gap-3 min-w-0">
+          <div
+            className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 transition-transform group-hover:scale-105"
+            style={{ background: `${iconColor}18`, border: `1px solid ${iconColor}28` }}
+          >
+            {isFolder
+              ? isDropTarget
+                ? <FolderOpen size={16} style={{ color: iconColor }} strokeWidth={1.8} />
+                : <Folder size={16} style={{ color: iconColor }} strokeWidth={1.8} />
+              : <FileIcon size={16} style={{ color: iconColor }} strokeWidth={1.8} />
+            }
+          </div>
+
+          <div className="flex-1 min-w-0">
+            {isRenaming ? (
+              <input
+                ref={renameInputRef}
+                value={renameValue}
+                onChange={(e) => setRenameValue(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") confirmRename(); if (e.key === "Escape") setRenamingId(null); }}
+                onBlur={confirmRename}
+                onClick={(e) => e.stopPropagation()}
+                className="w-full text-[13px] rounded-lg px-2 py-1 outline-none"
+                style={{ background: "rgba(11,127,255,0.15)", border: "1px solid rgba(11,127,255,0.4)", color: "#e2e8f0" }}
+              />
+            ) : (
+              <p className="text-[13px] font-medium truncate" style={{ color: "#cbd5e1" }}>{item.name}</p>
+            )}
+          </div>
         </div>
 
-        {/* Name */}
-        <div className="flex-1 min-w-0">
-          {isRenaming ? (
-            <input
-              ref={renameInputRef}
-              value={renameValue}
-              onChange={(e) => setRenameValue(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") confirmRename(); if (e.key === "Escape") setRenamingId(null); }}
-              onBlur={confirmRename}
-              onClick={(e) => e.stopPropagation()}
-              className="w-full text-[13px] rounded-lg px-2 py-1 outline-none"
-              style={{ background: "rgba(11,127,255,0.15)", border: "1px solid rgba(11,127,255,0.4)", color: "#e2e8f0" }}
-            />
-          ) : (
-            <p className="text-[13px] font-medium truncate" style={{ color: "#cbd5e1" }}>{item.name}</p>
-          )}
-        </div>
-
-        {/* Size — desktop */}
-        <div className="hidden sm:block w-[90px] shrink-0">
+        {/* Cell 2 — size */}
+        <div className="hidden sm:block">
           <p style={{ fontSize: "12px", color: "#3d4f6e" }}>{item.sizeLabel ?? "—"}</p>
         </div>
 
-        {/* Date — desktop */}
-        <div className="hidden md:block w-[120px] shrink-0">
+        {/* Cell 3 — date */}
+        <div className="hidden sm:block">
           <p style={{ fontSize: "12px", color: "#3d4f6e" }}>{item.createdAt}</p>
         </div>
 
-        {/* Delete confirm inline */}
-        {isDeleteConfirm ? (
-          <div
-            className="flex items-center gap-2"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <span style={{ fontSize: "11px", color: "#F87171" }}>Delete?</span>
-            <button
-              onClick={() => deleteItem(item.id)}
-              className="w-6 h-6 flex items-center justify-center rounded-lg hover:bg-red-500/20 transition-colors"
-            >
-              <Check size={13} style={{ color: "#F87171" }} />
-            </button>
-            <button
-              onClick={() => setDeleteConfirmId(null)}
-              className="w-6 h-6 flex items-center justify-center rounded-lg hover:bg-white/10 transition-colors"
-            >
-              <X size={13} style={{ color: "#64748b" }} />
-            </button>
-          </div>
-        ) : (
-          /* Row actions */
-          <div
-            className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <button
-              title="Rename"
-              onClick={() => startRename(item)}
-              className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-white/10 transition-colors"
-            >
-              <Pencil size={13} style={{ color: "#64748b" }} />
-            </button>
-            <button
-              title="Move"
-              onClick={() => setMoveItem(item)}
-              className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-white/10 transition-colors"
-            >
-              <MoveRight size={13} style={{ color: "#64748b" }} />
-            </button>
-            <button
-              title="Delete"
-              onClick={() => setDeleteConfirmId(item.id)}
-              className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-red-500/10 transition-colors"
-            >
-              <Trash2 size={13} style={{ color: "#F87171" }} />
-            </button>
-          </div>
-        )}
+        {/* Cell 4 — actions / delete confirm */}
+        <div onClick={(e) => e.stopPropagation()}>
+          {isDeleteConfirm ? (
+            <div className="flex items-center gap-2 justify-end">
+              <span style={{ fontSize: "11px", color: "#F87171" }}>Delete?</span>
+              <button
+                onClick={() => deleteItem(item.id)}
+                className="w-6 h-6 flex items-center justify-center rounded-lg hover:bg-red-500/20 transition-colors"
+              >
+                <Check size={13} style={{ color: "#F87171" }} />
+              </button>
+              <button
+                onClick={() => setDeleteConfirmId(null)}
+                className="w-6 h-6 flex items-center justify-center rounded-lg hover:bg-white/10 transition-colors"
+              >
+                <X size={13} style={{ color: "#64748b" }} />
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity justify-end">
+              <button
+                title="Details"
+                onClick={() => setDetailsItem(item)}
+                className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-white/10 transition-colors"
+              >
+                <Eye size={13} style={{ color: "#64748b" }} />
+              </button>
+              {!isFolder && (
+                <>
+                  {isEditableText(item.name, item.fileKind) && (
+                    <button
+                      title="Edit Content"
+                      onClick={() => { setPreviewItem(item); setPreviewEditMode(true); }}
+                      className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-emerald-500/10 transition-colors"
+                    >
+                      <SquarePen size={13} style={{ color: "#34D399" }} />
+                    </button>
+                  )}
+                  <button
+                    title="Download"
+                    onClick={() => handleExplorerDownload(item)}
+                    className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-blue-500/10 transition-colors"
+                  >
+                    <Download size={13} style={{ color: "#0B7FFF" }} />
+                  </button>
+                </>
+              )}
+              <button
+                title="Rename"
+                onClick={() => startRename(item)}
+                className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-white/10 transition-colors"
+              >
+                <Pencil size={13} style={{ color: "#64748b" }} />
+              </button>
+              <button
+                title="Move"
+                onClick={() => setMoveItem(item)}
+                className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-white/10 transition-colors"
+              >
+                <MoveRight size={13} style={{ color: "#64748b" }} />
+              </button>
+              <button
+                title="Delete"
+                onClick={() => setDeleteConfirmId(item.id)}
+                className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-red-500/10 transition-colors"
+              >
+                <Trash2 size={13} style={{ color: "#F87171" }} />
+              </button>
+            </div>
+          )}
+        </div>
       </div>
     );
   };
@@ -719,6 +815,9 @@ export function FileExplorer() {
         onClick={(e) => e.stopPropagation()}
       >
         {[
+          ...(item.type === "file" && isEditableText(item.name, item.fileKind) ? [{ icon: SquarePen, label: "Edit Content", color: "#34D399", action: () => { setPreviewItem(item); setPreviewEditMode(true); onClose(); } }] : []),
+          ...(item.type === "file" ? [{ icon: Download, label: "Download", color: "#94a3b8", action: () => { handleExplorerDownload(item); onClose(); } }] : []),
+          { icon: Eye, label: "Details", color: "#94a3b8", action: () => { setDetailsItem(item); onClose(); } },
           { icon: Pencil, label: "Rename", color: "#94a3b8", action: () => startRename(item) },
           { icon: MoveRight, label: "Move to…", color: "#94a3b8", action: () => { setMoveItem(item); onClose(); } },
           { icon: Trash2, label: "Delete", color: "#F87171", action: () => { setDeleteConfirmId(item.id); onClose(); } },
@@ -754,7 +853,7 @@ export function FileExplorer() {
         <div className="flex items-center gap-2">
           {/* Upload button */}
           <button
-            onClick={() => fileInputRef.current?.click()}
+            onClick={() => !uploading && fileInputRef.current?.click()}
             disabled={uploading}
             className="flex items-center gap-2 px-4 py-2 rounded-xl text-[13px] font-semibold transition-all hover:brightness-110 disabled:opacity-50"
             style={{
@@ -868,64 +967,6 @@ export function FileExplorer() {
 
       {/* ── Upload Zone ─────────────────────────────────────────────────── */}
       <div className="flex flex-col gap-3">
-        {/* Encryption toggle */}
-        <button
-          type="button"
-          onClick={() => setEncrypt((prev) => !prev)}
-          className="flex items-center gap-3 px-4 py-2.5 rounded-xl w-full transition-all duration-300"
-          style={{
-            background: encrypt ? "rgba(0,229,160,0.07)" : "rgba(251,191,36,0.07)",
-            border: encrypt ? "1px solid rgba(0,229,160,0.25)" : "1px solid rgba(251,191,36,0.3)",
-          }}
-        >
-          {/* Icon */}
-          <div
-            className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 transition-all duration-300"
-            style={{
-              background: encrypt ? "rgba(0,229,160,0.15)" : "rgba(251,191,36,0.15)",
-            }}
-          >
-            {encrypt
-              ? <Lock size={15} style={{ color: "#00E5A0" }} strokeWidth={2} />
-              : <LockOpen size={15} style={{ color: "#FBBF24" }} strokeWidth={2} />
-            }
-          </div>
-
-          {/* Label */}
-          <div className="flex-1 text-left min-w-0">
-            <p className="text-[12px] font-semibold" style={{ color: encrypt ? "#00E5A0" : "#FBBF24" }}>
-              {encrypt ? "AES-256-GCM Encryption" : "No Encryption"}
-            </p>
-            <p className="text-[10.5px]" style={{ color: "#475569" }}>
-              {encrypt
-                ? "File will be encrypted at rest"
-                : "File stored as-is — not recommended for sensitive data"}
-            </p>
-          </div>
-
-          {/* Pill toggle */}
-          <div
-            className="relative shrink-0 transition-all duration-300"
-            style={{
-              width: "38px",
-              height: "22px",
-              borderRadius: "11px",
-              background: encrypt ? "#00E5A0" : "rgba(255,255,255,0.12)",
-              boxShadow: encrypt ? "0 0 10px rgba(0,229,160,0.4)" : "none",
-            }}
-          >
-            <div
-              className="absolute top-[3px] transition-all duration-300 rounded-full"
-              style={{
-                width: "16px",
-                height: "16px",
-                background: "white",
-                left: encrypt ? "19px" : "3px",
-              }}
-            />
-          </div>
-        </button>
-
         {/* Drop zone */}
         <div
           onDragOver={onZoneDragOver}
@@ -980,29 +1021,11 @@ export function FileExplorer() {
               </p>
             </div>
 
-            <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-4 mt-1">
-              {encrypt ? (
-                [
-                  { label: "AES-256", full: "AES-256 Encrypted" },
-                  { label: "Zero-Knowledge", full: "Zero-Knowledge" },
-                  { label: "SOC 2", full: "SOC 2 Compliant" },
-                ].map((badge) => (
-                  <div key={badge.label} className="flex items-center gap-1.5">
-                    <ShieldCheck size={11} style={{ color: "#00E5A0" }} />
-                    <span className="text-[10px] sm:text-[11px]" style={{ color: "#475569", fontWeight: 500 }}>
-                      <span className="sm:hidden">{badge.label}</span>
-                      <span className="hidden sm:inline">{badge.full}</span>
-                    </span>
-                  </div>
-                ))
-              ) : (
-                <div className="flex items-center gap-1.5">
-                  <ShieldOff size={11} style={{ color: "#FBBF24" }} />
-                  <span className="text-[10px] sm:text-[11px]" style={{ color: "#FBBF24", fontWeight: 600 }}>
-                    Encryption disabled
-                  </span>
-                </div>
-              )}
+            <div className="flex items-center justify-center gap-1.5 mt-1">
+              <ShieldCheck size={11} style={{ color: "#00E5A0" }} />
+              <span className="text-[10px] sm:text-[11px]" style={{ color: "#475569", fontWeight: 500 }}>
+                You'll choose encryption after selecting a file
+              </span>
             </div>
           </div>
         </div>
@@ -1134,10 +1157,18 @@ export function FileExplorer() {
         )}
       </div>
 
-      {/* (Drop-zone hint removed from here) */}
-
       {/* Hidden file input */}
-      <input ref={fileInputRef} type="file" multiple className="hidden" onChange={(e) => handleUploadFiles(e.target.files)} />
+      {/* Convert to File[] BEFORE resetting value, otherwise the live FileList is cleared */}
+      <input ref={fileInputRef} type="file" multiple className="hidden" onChange={(e) => { queueFiles(e.target.files); e.target.value = ""; }} />
+
+      {/* ── Encryption Choice Modal ───────────────────────────────────────── */}
+      {pendingFiles && (
+        <EncryptionChoiceModal
+          files={pendingFiles}
+          onChoose={handleEncryptionChoice}
+          onCancel={handleCancelUpload}
+        />
+      )}
 
       {/* ── Move Modal ────────────────────────────────────────────────────── */}
       {moveItem && (
@@ -1172,6 +1203,110 @@ export function FileExplorer() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* ── Details Dialog ──────────────────────────────────────────────── */}
+      <Dialog open={!!detailsItem} onOpenChange={() => setDetailsItem(null)}>
+        <DialogContent
+          style={{
+            background: "linear-gradient(180deg, #0d1228 0%, #0b0f20 100%)",
+            border: "1px solid rgba(255,255,255,0.1)",
+            maxWidth: "420px",
+            boxShadow: "0 24px 64px rgba(0,0,0,0.7)",
+            borderRadius: "16px",
+          }}
+        >
+          {detailsItem && (
+            <>
+              <DialogHeader>
+                <DialogTitle className="text-white text-lg flex items-center gap-2">
+                  <div
+                    className="w-8 h-8 rounded-lg flex items-center justify-center"
+                    style={{
+                      background: `rgba(${detailsItem.type === "folder" ? "251,191,36" : "11,127,255"}, 0.15)`,
+                      border: `1px solid rgba(${detailsItem.type === "folder" ? "251,191,36" : "11,127,255"}, 0.25)`,
+                    }}
+                  >
+                    <Eye size={15} style={{ color: detailsItem.type === "folder" ? "#FBBF24" : "#0B7FFF" }} />
+                  </div>
+                  <span>Item Details</span>
+                </DialogTitle>
+              </DialogHeader>
+
+              <div className="flex flex-col gap-3 my-4">
+                {[
+                  { label: "NAME", value: detailsItem.name },
+                  { label: "TYPE", value: detailsItem.type.toUpperCase() },
+                  { label: "SIZE", value: detailsItem.sizeLabel ?? "0 B" },
+                  { label: "ENCRYPTION", value: detailsItem.isEncrypted ? "AES-256-GCM" : "None" },
+                  { label: "CREATED AT", value: detailsItem.createdAt },
+                ].map(({ label, value }) => (
+                  <div
+                    key={label}
+                    className="flex items-center justify-between px-3 py-2.5 rounded-lg"
+                    style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.04)" }}
+                  >
+                    <span style={{ fontSize: "10px", color: "#475569", fontWeight: 700, letterSpacing: "0.05em" }}>
+                      {label}
+                    </span>
+                    <span style={{ fontSize: "13px", color: "#cbd5e1", fontWeight: 500 }} className="truncate max-w-[240px]">
+                      {value}
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Action buttons at bottom if it's a file */}
+              {detailsItem.type === "file" && (
+                <div className="flex gap-2 mt-4 pt-3" style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+                  <button
+                    onClick={() => {
+                      setPreviewItem(detailsItem);
+                      setPreviewEditMode(false);
+                      setDetailsItem(null);
+                    }}
+                    className="flex-1 py-2.5 rounded-xl text-[13px] font-semibold transition-colors hover:bg-white/5 flex items-center justify-center gap-1.5"
+                    style={{ color: "#94a3b8", border: "1px solid rgba(255,255,255,0.1)" }}
+                  >
+                    <Eye size={14} />
+                    Preview
+                  </button>
+                  <button
+                    onClick={() => {
+                      handleExplorerDownload(detailsItem);
+                      setDetailsItem(null);
+                    }}
+                    className="flex-1 py-2.5 rounded-xl text-[13px] font-semibold transition-all hover:brightness-110 flex items-center justify-center gap-1.5"
+                    style={{
+                      background: "linear-gradient(135deg, #0B7FFF 0%, #0960CC 100%)",
+                      color: "#fff",
+                      boxShadow: "0 4px 16px rgba(11,127,255,0.25)",
+                    }}
+                  >
+                    <Download size={14} />
+                    Download
+                  </button>
+                </div>
+              )}
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* ── FileViewer Modal ──────────────────────────────────────────────── */}
+      {previewItem && (
+        <FileViewer
+          fileId={previewItem.id}
+          fileName={previewItem.name}
+          fileType={(previewItem.fileKind as any) ?? "other"}
+          source="explorer"
+          initialEditMode={previewEditMode}
+          onClose={() => setPreviewItem(null)}
+          onDownload={() => {
+            handleExplorerDownload(previewItem);
+            setPreviewItem(null);
+          }}
+        />
       )}
     </div>
   );

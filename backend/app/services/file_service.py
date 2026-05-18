@@ -2,6 +2,7 @@ import uuid
 import os
 import io
 import base64
+import zipfile
 from datetime import datetime, timezone, timedelta
 import struct
 import hashlib
@@ -20,9 +21,70 @@ from app.extensions import db
 from app.models.transfer import Transfer, FileVersion
 from app.models.audit_log import AuditLog
 from app.models.user import User
+from app.models.group import GroupMember
+from app.models.audit_log import ACLEntry
+
+LOCK_TIMEOUT_MINUTES = 15
+
+def has_permission(user: "User", transfer: "Transfer", permission_type: str) -> bool:
+    """
+    Vérifie si user a la permission demandée sur transfer.
+    permission_type: 'read' | 'write' | 'delete' | 'share'
+    """
+    # Admin global → tout autorisé
+    if user.role == "admin":
+        return True
+
+    # Admin de l'espace → tout autorisé
+    if transfer.group_id:
+        member = GroupMember.query.filter_by(
+            group_id=transfer.group_id, user_id=user.id
+        ).first()
+        if member and member.role == "admin":
+            return True
+
+    # Propriétaire → tout autorisé
+    if transfer.uploaded_by_id == user.id:
+        return True
+
+    # Vérification ACL
+    acl_entry = next((a for a in transfer.acl_entries if a.user_id == user.id), None)
+    flag_map = {
+        "read":   "can_read",
+        "write":  "can_write",
+        "delete": "can_delete",
+        "share":  "can_share",
+    }
+    flag = flag_map.get(permission_type, "can_read")
+
+    if acl_entry:
+        # Entrée ACL trouvée → vérifier le flag
+        if not getattr(acl_entry, flag):
+            return False
+    else:
+        # Pas d'entrée ACL pour cet utilisateur
+        # Si le fichier a des ACL (= fichier restreint) → refus
+        if transfer.acl_entries:
+            return False
+        # Sinon fichier public du groupe → accès autorisé aux membres
+        if transfer.group_id:
+            is_member = GroupMember.query.filter_by(
+                group_id=transfer.group_id, user_id=user.id
+            ).first()
+            if not is_member:
+                return False
+        else:
+            return False
+
+    # Pour la lecture : vérification récursive des dossiers parents
+    if permission_type == "read" and transfer.parent_id:
+        parent = db.session.get(Transfer, transfer.parent_id)
+        if parent and not has_permission(user, parent, "read"):
+            return False
+
+    return True
 
 
-LOCK_TIMEOUT_MINUTES = 15  # Verrou expiré après 15 min d'inactivité
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Encryption helpers (AES-256-GCM)
@@ -31,32 +93,23 @@ LOCK_TIMEOUT_MINUTES = 15  # Verrou expiré après 15 min d'inactivité
 CURRENT_KEY_VERSION = 1
 
 def _get_aes_key(key_version: int = CURRENT_KEY_VERSION) -> bytes:
-    """
-    Returns a 32-byte key for AES-256-GCM, with versioning support.
-    """
     raw_key = current_app.config.get("ENCRYPTION_KEY", "")
-    
-    # Versioned key derivation
     versioned_input = f"v{key_version}:{raw_key}"
     return hashlib.sha256(versioned_input.encode()).digest()
 
 
 def _encrypt_file(data: bytes) -> bytes:
-    """Encrypt raw file bytes using AES-256-GCM and return version + nonce + tag + ciphertext."""
     version = CURRENT_KEY_VERSION
     key = _get_aes_key(version)
     aesgcm = AESGCM(key)
-    nonce = os.urandom(12)  # 12-byte nonce for GCM
+    nonce = os.urandom(12)
     ciphertext = aesgcm.encrypt(nonce, data, None)
-    # Layout: [2-byte version LE][12-byte nonce][ciphertext (includes tag)]
     return struct.pack("<H", version) + nonce + ciphertext
 
 
 def _decrypt_file(data: bytes) -> bytes:
-    """Decrypt ciphertext (header + nonce + encrypted data) and return original bytes."""
-    if len(data) < 15: # 2 (version) + 12 (nonce) + tag
+    if len(data) < 15:
         raise ValueError("Invalid encrypted data: too short")
-    
     version = struct.unpack("<H", data[:2])[0]
     key = _get_aes_key(version)
     nonce = data[2:14]
@@ -99,13 +152,49 @@ def _log(action, user_email, user_id, status, ip, resource="", details="", group
     ))
 
 
+def _is_lock_active(t: Transfer) -> bool:
+    """Returns True if the transfer's pessimistic lock is still within its timeout window."""
+    if not t.locked_by_id or not t.locked_at:
+        return False
+    locked_at_utc = t.locked_at if t.locked_at.tzinfo else t.locked_at.replace(tzinfo=timezone.utc)
+    elapsed = (datetime.now(timezone.utc) - locked_at_utc).total_seconds() / 60
+    return elapsed <= LOCK_TIMEOUT_MINUTES
+
+
+def _locked_by_other(t: Transfer, user: User) -> dict | None:
+    """If file is actively locked by someone other than `user`, return the lock-error dict."""
+    if t.locked_by_id and t.locked_by_id != user.id and _is_lock_active(t):
+        locked_by = db.session.get(User, t.locked_by_id)
+        return {"ok": False, "error": "FILE_LOCKED",
+                "lockedBy": locked_by.email if locked_by else "unknown"}
+    return None
+
+
+def _is_inside_folder(target_id: str, folder_id: str) -> bool:
+    """Returns True if target_id is a descendant of folder_id (circular-move guard)."""
+    visited: set = set()
+    current_id: str | None = target_id
+    while current_id:
+        if current_id in visited:
+            break
+        if current_id == folder_id:
+            return True
+        visited.add(current_id)
+        t = db.session.get(Transfer, current_id)
+        if not t:
+            break
+        current_id = t.parent_id
+    return False
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Upload  (encrypt → save)
 # ──────────────────────────────────────────────────────────────────────────────
 
 def upload_file(file: FileStorage, uploader_id: str, recipient_email: str,
                 expiry_days: int, upload_folder: str, allowed_ext: set, ip: str,
-                group_id: str = None, encrypt: bool = True) -> dict:
+                group_id: str = None, encrypt: bool = True,
+                parent_id: str = None) -> dict:
     uploader = db.session.get(User, uploader_id)
     if not uploader:
         return {"ok": False, "error": "USER_NOT_FOUND"}
@@ -115,22 +204,20 @@ def upload_file(file: FileStorage, uploader_id: str, recipient_email: str,
 
     safe_name   = secure_filename(file.filename)
     stored_id   = str(uuid.uuid4())
-    stored_path = os.path.join(upload_folder, f"{stored_id}_{safe_name}.enc")
 
     os.makedirs(upload_folder, exist_ok=True)
 
-    # ── Read → encrypt → write ───────────────────────────────────────────────
-    raw_data      = file.read()
-    size_bytes    = len(raw_data)          # store original size for display
+    raw_data   = file.read()
+    size_bytes = len(raw_data)
 
     if encrypt:
         data_to_save = _encrypt_file(raw_data)
-        enc_type = "AES-256-GCM"
-        ext_suffix = ".enc"
+        enc_type     = "AES-256-GCM"
+        ext_suffix   = ".enc"
     else:
         data_to_save = raw_data
-        enc_type = "None"
-        ext_suffix = ""
+        enc_type     = "None"
+        ext_suffix   = ""
 
     stored_path = os.path.join(upload_folder, f"{stored_id}_{safe_name}{ext_suffix}")
 
@@ -152,12 +239,13 @@ def upload_file(file: FileStorage, uploader_id: str, recipient_email: str,
         expiry_date=expiry,
         uploaded_by_id=uploader_id,
         group_id=group_id,
+        parent_id=parent_id,
+        item_type="file",
         status="Delivered" if recipient_email else "Pending",
         current_version=1,
     )
     db.session.add(transfer)
 
-    # First version record
     v = FileVersion(
         id=str(uuid.uuid4()),
         transfer_id=stored_id,
@@ -169,7 +257,6 @@ def upload_file(file: FileStorage, uploader_id: str, recipient_email: str,
     )
     db.session.add(v)
 
-    # Notification for recipient
     if recipient_email:
         recipient = User.query.filter_by(email=recipient_email).first()
         if recipient:
@@ -187,11 +274,9 @@ def upload_file(file: FileStorage, uploader_id: str, recipient_email: str,
          resource=safe_name, details=f"{size_bytes} bytes ({'encrypted' if encrypt else 'plain'})",
          group_id=transfer.group_id)
 
-    # [Contacts] Auto-add recipient as a contact of the uploader
     if recipient_email:
         from app.routes.contacts import _auto_add_contact
         _auto_add_contact(uploader_id, recipient_email, "sent_to")
-        # Auto-add uploader as a contact of the recipient (received_from)
         recipient = User.query.filter_by(email=recipient_email).first()
         if recipient:
             _auto_add_contact(recipient.id, uploader.email, "received_from")
@@ -206,10 +291,15 @@ def upload_file(file: FileStorage, uploader_id: str, recipient_email: str,
 
 def list_transfers(user: User) -> list:
     if user.role == "admin":
-        transfers = Transfer.query.filter_by(is_deleted=False).order_by(Transfer.created_at.desc()).all()
+        transfers = Transfer.query.filter(
+            Transfer.is_deleted == False,
+            Transfer.recipient_email.isnot(None)
+        ).order_by(Transfer.created_at.desc()).all()
     else:
-        transfers = Transfer.query.filter_by(
-            uploaded_by_id=user.id, is_deleted=False
+        transfers = Transfer.query.filter(
+            Transfer.uploaded_by_id == user.id,
+            Transfer.is_deleted == False,
+            Transfer.recipient_email.isnot(None)
         ).order_by(Transfer.created_at.desc()).all()
     return [t.to_dict() for t in transfers]
 
@@ -232,34 +322,10 @@ def get_transfer_file(transfer_id: str, user: User, ip: str, context: str = None
     if not t or t.is_deleted:
         return {"ok": False, "error": "NOT_FOUND"}
 
-    # Access control
-    # [Security] recipient_email grants implicit read access UNLESS an explicit
-    # ACL entry exists for this user — in which case the ACL is authoritative.
-    user_acl = next((a for a in t.acl_entries if a.user_id == user.id), None)
-    recipient_has_implicit_access = (
-        t.recipient_email == user.email and user_acl is None
-    )
-    
-    is_admin = user.role == "admin"
-    is_uploader = t.uploaded_by_id == user.id
-    has_acl_read = user_acl is not None and user_acl.can_read
-
-    if context == "received":
-        # In received context, uploader should not be able to download
-        # (they have Active Transfers for that)
-        is_core = is_admin or recipient_has_implicit_access or has_acl_read
-    else:
-        is_core = is_admin or is_uploader or recipient_has_implicit_access or has_acl_read
-
-    if not is_core:
-        # Step 2: if not core, external sharing must be enabled to allow access
-        from app.models.team_settings import TeamSettings
-        settings = TeamSettings.query.first()
-        if not settings or not settings.allow_external_sharing:
-            _log("UNAUTHORIZED_ACCESS", user.email, user.id, "failed", ip, resource=t.file_name)
-            db.session.commit()
-            return {"ok": False, "error": "FORBIDDEN"}
-        # External sharing is on — allow the request to proceed
+    if not has_permission(user, t, "read"):
+        _log("UNAUTHORIZED_ACCESS", user.email, user.id, "failed", ip, resource=t.file_name)
+        db.session.commit()
+        return {"ok": False, "error": "FORBIDDEN"}
 
     if t.expiry_date:
         expiry_utc = t.expiry_date if t.expiry_date.tzinfo else t.expiry_date.replace(tzinfo=timezone.utc)
@@ -268,23 +334,17 @@ def get_transfer_file(transfer_id: str, user: User, ip: str, context: str = None
             db.session.commit()
             return {"ok": False, "error": "EXPIRED"}
 
-    # ── Decrypt in memory if needed ──────────────────────────────────────────
     try:
         with open(t.stored_path, "rb") as f:
             file_data = f.read()
-        
-        if t.is_encrypted:
-            decrypted = _decrypt_file(file_data)
-        else:
-            decrypted = file_data
+        decrypted = _decrypt_file(file_data) if t.is_encrypted else file_data
     except Exception:
         _log("DECRYPT_ERROR", user.email, user.id, "failed", ip, resource=t.file_name, group_id=t.group_id)
         db.session.commit()
         return {"ok": False, "error": "DECRYPT_ERROR"}
 
     db.session.execute(
-        update(Transfer)
-        .where(Transfer.id == t.id)
+        update(Transfer).where(Transfer.id == t.id)
         .values(download_count=Transfer.download_count + 1)
     )
     _log("FILE_DOWNLOAD", user.email, user.id, "success", ip, resource=t.file_name, group_id=t.group_id)
@@ -304,15 +364,18 @@ def delete_transfer(transfer_id: str, user: User, ip: str) -> dict:
     if not t or t.is_deleted:
         return {"ok": False, "error": "NOT_FOUND"}
 
-    if user.role != "admin" and t.uploaded_by_id != user.id:
-        acl = next((a for a in t.acl_entries if a.user_id == user.id and a.can_delete), None)
-        if not acl:
-            _log("UNAUTHORIZED_ACCESS", user.email, user.id, "failed", ip, resource=t.file_name, group_id=t.group_id)
-            db.session.commit()
-            return {"ok": False, "error": "FORBIDDEN"}
+    lock_err = _locked_by_other(t, user)
+    if lock_err and user.role != "admin":
+        return lock_err
 
-    deleted_paths = set()
-    paths_to_delete = [t.stored_path]
+    if not has_permission(user, t, "delete"):
+        _log("UNAUTHORIZED_ACCESS", user.email, user.id, "failed", ip,
+             resource=t.file_name, group_id=t.group_id)
+        db.session.commit()
+        return {"ok": False, "error": "FORBIDDEN"}
+
+    deleted_paths: set = set()
+    paths_to_delete = [t.stored_path] if t.stored_path else []
     for v in t.versions:
         if v.stored_path and v.stored_path not in paths_to_delete:
             paths_to_delete.append(v.stored_path)
@@ -323,12 +386,12 @@ def delete_transfer(transfer_id: str, user: User, ip: str) -> dict:
                 os.remove(path)
                 deleted_paths.add(path)
             except Exception as e:
-                _log("FILE_DELETE_DISK_ERROR", user.email, user.id, "warning", ip, resource=t.file_name, details=str(e))
+                _log("FILE_DELETE_DISK_ERROR", user.email, user.id, "warning", ip,
+                     resource=t.file_name, details=str(e))
 
-    # [Concurrency] Always release lock before deletion to avoid dangling lock state
     t.locked_by_id = None
-    t.locked_at = None
-    t.is_deleted = True
+    t.locked_at    = None
+    t.is_deleted   = True
     _log("FILE_DELETE", user.email, user.id, "success", ip, resource=t.file_name, group_id=t.group_id)
     db.session.commit()
     return {"ok": True}
@@ -355,24 +418,15 @@ def restore_version(transfer_id: str, version_num: int, user: User, ip: str) -> 
     if not t or t.is_deleted:
         return {"ok": False, "error": "NOT_FOUND"}
 
-    if user.role != "admin" and t.uploaded_by_id != user.id:
-        acl = next((a for a in t.acl_entries if a.user_id == user.id and a.can_write), None)
-        if not acl:
-            _log("UNAUTHORIZED_ACCESS", user.email, user.id, "failed", ip, resource=t.file_name,
-                 details="Restore attempt blocked: no can_write ACL entry.", group_id=t.group_id)
-            db.session.commit()
-            return {"ok": False, "error": "FORBIDDEN"}
+    if not has_permission(user, t, "write"):
+        _log("UNAUTHORIZED_ACCESS", user.email, user.id, "failed", ip,
+             resource=t.file_name, group_id=t.group_id)
+        db.session.commit()
+        return {"ok": False, "error": "FORBIDDEN"}
 
-    # [Concurrency] Reject restore if another user holds the lock
-    if t.locked_by_id and t.locked_by_id != user.id:
-        # Check if lock has expired first
-        if t.locked_at:
-            locked_at_utc = t.locked_at if t.locked_at.tzinfo is not None else t.locked_at.replace(tzinfo=timezone.utc)
-            elapsed = (datetime.now(timezone.utc) - locked_at_utc).total_seconds() / 60
-            if elapsed <= LOCK_TIMEOUT_MINUTES:
-                locked_by = db.session.get(User, t.locked_by_id)
-                return {"ok": False, "error": "FILE_LOCKED",
-                        "lockedBy": locked_by.email if locked_by else "unknown"}
+    lock_err = _locked_by_other(t, user)
+    if lock_err:
+        return lock_err
 
     target_v = db.session.execute(
         db.select(FileVersion)
@@ -393,8 +447,8 @@ def restore_version(transfer_id: str, version_num: int, user: User, ip: str) -> 
         description=f"Restored from v{version_num}",
     )
     t.current_version = new_num
-    t.stored_path = target_v.stored_path
-    t.size_bytes  = target_v.size_bytes
+    t.stored_path     = target_v.stored_path
+    t.size_bytes      = target_v.size_bytes
     db.session.add(new_v)
     _log("FILE_RESTORE", user.email, user.id, "success", ip,
          resource=t.file_name, details=f"Restored to v{version_num}", group_id=t.group_id)
@@ -411,22 +465,18 @@ def acquire_lock(transfer_id: str, user: User, ip: str) -> dict:
     if not t:
         return {"ok": False, "error": "NOT_FOUND"}
 
-    # [ACL] Only owner, admin, or users with can_write may acquire a lock
     if user.role != "admin" and t.uploaded_by_id != user.id:
         acl = next((a for a in t.acl_entries if a.user_id == user.id and a.can_write), None)
         if not acl:
-            _log("UNAUTHORIZED_ACCESS", user.email, user.id, "failed", ip, resource=t.file_name,
-                 details="Lock attempt blocked: no can_write ACL entry.", group_id=t.group_id)
+            _log("UNAUTHORIZED_ACCESS", user.email, user.id, "failed", ip,
+                 resource=t.file_name, group_id=t.group_id)
             db.session.commit()
             return {"ok": False, "error": "FORBIDDEN"}
 
-    # Check if lock has expired
-    if t.locked_by_id and t.locked_at:
-        locked_at_utc = t.locked_at if t.locked_at.tzinfo is not None else t.locked_at.replace(tzinfo=timezone.utc)
-        elapsed = (datetime.now(timezone.utc) - locked_at_utc).total_seconds() / 60
-        if elapsed > LOCK_TIMEOUT_MINUTES:
-            t.locked_by_id = None
-            t.locked_at    = None
+    # Expire stale lock
+    if t.locked_by_id and t.locked_at and not _is_lock_active(t):
+        t.locked_by_id = None
+        t.locked_at    = None
 
     if t.locked_by_id and t.locked_by_id != user.id:
         locked_by = db.session.get(User, t.locked_by_id)
@@ -451,3 +501,238 @@ def release_lock(transfer_id: str, user: User) -> dict:
         return {"ok": True}
 
     return {"ok": False, "error": "NOT_LOCK_OWNER"}
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Group Folder / Rename / Move / Version Upload
+# ──────────────────────────────────────────────────────────────────────────────
+
+def create_group_folder(group_id: str, name: str, parent_id: str | None,
+                        user: User, ip: str) -> dict:
+    """Create a virtual folder inside a group workspace."""
+    name = name.strip()
+    if not name:
+        return {"ok": False, "error": "MISSING_NAME"}
+
+    if parent_id:
+        parent = db.session.get(Transfer, parent_id)
+        if parent and not has_permission(user, parent, "write"):
+            return {"ok": False, "error": "FORBIDDEN"}
+
+    collision = Transfer.query.filter_by(
+        group_id=group_id,
+        parent_id=parent_id,
+        file_name=name,
+        is_deleted=False,
+        item_type="folder",
+    ).first()
+    if collision:
+        return {"ok": False, "error": "NAME_CONFLICT"}
+
+    folder = Transfer(
+        id=str(uuid.uuid4()),
+        file_name=name,
+        original_name=name,
+        file_type="other",
+        stored_path=None,
+        size_bytes=0,
+        is_encrypted=False,
+        encryption_type="None",
+        uploaded_by_id=user.id,
+        group_id=group_id,
+        parent_id=parent_id,
+        item_type="folder",
+        status="Delivered",
+        current_version=0,
+    )
+    db.session.add(folder)
+    _log("FOLDER_CREATED", user.email, user.id, "success", ip,
+         resource=name, group_id=group_id)
+    db.session.commit()
+    return {"ok": True, "transfer": folder.to_dict()}
+
+
+def rename_group_item(transfer_id: str, new_name: str, user: User, ip: str) -> dict:
+    new_name = new_name.strip()
+    if not new_name:
+        return {"ok": False, "error": "MISSING_NAME"}
+
+    t = db.session.get(Transfer, transfer_id)
+    if not t or t.is_deleted:
+        return {"ok": False, "error": "NOT_FOUND"}
+
+    lock_err = _locked_by_other(t, user)
+    if lock_err:
+        return lock_err
+
+    if not has_permission(user, t, "write"):
+        return {"ok": False, "error": "FORBIDDEN"}
+
+    collision = Transfer.query.filter(
+        Transfer.group_id == t.group_id,
+        Transfer.parent_id == t.parent_id,
+        Transfer.file_name == new_name,
+        Transfer.is_deleted == False,
+        Transfer.id != t.id,
+    ).first()
+    if collision:
+        return {"ok": False, "error": "NAME_CONFLICT"}
+
+    t.file_name     = new_name
+    t.original_name = new_name
+    _log("ITEM_RENAMED", user.email, user.id, "success", ip,
+         resource=new_name, group_id=t.group_id)
+    db.session.commit()
+    return {"ok": True, "transfer": t.to_dict()}
+
+
+def move_group_item(transfer_id: str, target_parent_id: str | None,
+                    user: User, ip: str) -> dict:
+    t = db.session.get(Transfer, transfer_id)
+    if not t or t.is_deleted:
+        return {"ok": False, "error": "NOT_FOUND"}
+
+    lock_err = _locked_by_other(t, user)
+    if lock_err:
+        return lock_err
+
+    if not has_permission(user, t, "write"):
+        return {"ok": False, "error": "FORBIDDEN"}
+
+    # Vérifier aussi les droits d'écriture sur le dossier cible
+    if target_parent_id:
+        target_folder = db.session.get(Transfer, target_parent_id)
+        if target_folder and not has_permission(user, target_folder, "write"):
+            return {"ok": False, "error": "FORBIDDEN"}
+
+    if t.item_type == "folder" and target_parent_id:
+        if target_parent_id == t.id or _is_inside_folder(target_parent_id, t.id):
+            return {"ok": False, "error": "CIRCULAR_MOVE"}
+
+    t.parent_id = target_parent_id
+    _log("ITEM_MOVED", user.email, user.id, "success", ip,
+         resource=t.file_name, group_id=t.group_id)
+    db.session.commit()
+    return {"ok": True, "transfer": t.to_dict()}
+
+
+def upload_group_version(transfer_id: str, file: FileStorage, user: User, ip: str,
+                         upload_folder: str, allowed_ext: set) -> dict:
+    """Upload a new explicit version to an existing Transfer record."""
+    t = db.session.get(Transfer, transfer_id)
+    if not t or t.is_deleted:
+        return {"ok": False, "error": "NOT_FOUND"}
+
+    if t.item_type == "folder":
+        return {"ok": False, "error": "CANNOT_VERSION_FOLDER"}
+
+    lock_err = _locked_by_other(t, user)
+    if lock_err:
+        return lock_err
+
+    if not has_permission(user, t, "write"):
+        return {"ok": False, "error": "FORBIDDEN"}
+
+    if not _allowed(file.filename, allowed_ext):
+        return {"ok": False, "error": "FILE_TYPE_NOT_ALLOWED"}
+
+    safe_name  = secure_filename(file.filename)
+    stored_id  = str(uuid.uuid4())
+    raw_data   = file.read()
+    size_bytes = len(raw_data)
+
+    data_to_save = _encrypt_file(raw_data) if t.is_encrypted else raw_data
+    ext_suffix   = ".enc" if t.is_encrypted else ""
+    stored_path  = os.path.join(upload_folder, f"{stored_id}_{safe_name}{ext_suffix}")
+
+    os.makedirs(upload_folder, exist_ok=True)
+    with open(stored_path, "wb") as f:
+        f.write(data_to_save)
+
+    new_num = t.current_version + 1
+    v = FileVersion(
+        id=str(uuid.uuid4()),
+        transfer_id=t.id,
+        version_num=new_num,
+        stored_path=stored_path,
+        size_bytes=size_bytes,
+        author_id=user.id,
+        description=f"Version {new_num}",
+    )
+    t.current_version = new_num
+    t.stored_path     = stored_path
+    t.size_bytes      = size_bytes
+    db.session.add(v)
+    _log("FILE_VERSION_UPLOAD", user.email, user.id, "success", ip,
+         resource=t.file_name, details=f"v{new_num} uploaded", group_id=t.group_id)
+    db.session.commit()
+    return {"ok": True, "transfer": t.to_dict()}
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Inline Text Edit  (overwrite in place, version-bump for group files)
+# ──────────────────────────────────────────────────────────────────────────────
+
+def update_file_content(transfer_id: str, new_text: str, user: User, ip: str) -> dict:
+    """
+    Overwrite a text file's content directly without re-uploading.
+
+    Rules:
+    - Caller must hold the pessimistic lock (checked here; 423 if another user holds it).
+    - If the file belongs to a group workspace, a new FileVersion row is created and
+      current_version is incremented, exactly like an explicit version upload.
+    - Encryption is preserved: if is_encrypted=True the new bytes are re-encrypted
+      with _encrypt_file() before being written to disk.
+    - size_bytes is updated to reflect the new UTF-8 byte length.
+    """
+    t = db.session.get(Transfer, transfer_id)
+    if not t or t.is_deleted:
+        return {"ok": False, "error": "NOT_FOUND"}
+
+    if t.item_type == "folder":
+        return {"ok": False, "error": "CANNOT_EDIT_FOLDER"}
+
+    if not t.stored_path or not os.path.exists(t.stored_path):
+        return {"ok": False, "error": "FILE_MISSING_ON_DISK"}
+
+    # Permission check: uploader, admin, or ACL can_write
+    if not has_permission(user, t, "write"):
+        _log("UNAUTHORIZED_ACCESS", user.email, user.id, "failed", ip,
+             resource=t.file_name, group_id=t.group_id)
+        db.session.commit()
+        return {"ok": False, "error": "FORBIDDEN"}
+
+    # Lock guard — caller must already hold the lock
+    lock_err = _locked_by_other(t, user)
+    if lock_err:
+        return lock_err
+
+    raw_bytes     = new_text.encode("utf-8")
+    data_to_write = _encrypt_file(raw_bytes) if t.is_encrypted else raw_bytes
+
+    with open(t.stored_path, "wb") as f:
+        f.write(data_to_write)
+
+    t.size_bytes = len(raw_bytes)
+
+    # Group workspace: bump version so history is preserved
+    if t.group_id:
+        new_num = (t.current_version or 1) + 1
+        v = FileVersion(
+            id=str(uuid.uuid4()),
+            transfer_id=t.id,
+            version_num=new_num,
+            stored_path=t.stored_path,
+            size_bytes=len(raw_bytes),
+            author_id=user.id,
+            description=f"Inline edit v{new_num}",
+        )
+        t.current_version = new_num
+        db.session.add(v)
+
+    _log("FILE_CONTENT_UPDATED", user.email, user.id, "success", ip,
+         resource=t.file_name,
+         details=f"{len(raw_bytes)} bytes written ({'encrypted' if t.is_encrypted else 'plain'})",
+         group_id=t.group_id)
+    db.session.commit()
+    return {"ok": True, "transfer": t.to_dict()}

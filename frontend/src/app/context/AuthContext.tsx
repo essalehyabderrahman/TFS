@@ -1,4 +1,4 @@
-import { createContext, useState, useCallback, useEffect } from "react"
+import { createContext, useState, useCallback, useEffect, useRef } from "react"
 import type { ReactNode } from "react"
 import type { AuthUser } from "@/types"
 import { apiGetMe, apiSignOut } from "@/app/api/auth"
@@ -90,6 +90,50 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setIsInitializing(false)
       })
   }, [])
+
+  // [Session] Track user activity to proactively refresh the token
+  const lastActivityRef = useRef<number>(Date.now())
+  useEffect(() => {
+    const updateActivity = () => { lastActivityRef.current = Date.now() }
+    window.addEventListener("mousemove", updateActivity, { passive: true })
+    window.addEventListener("keydown", updateActivity, { passive: true })
+    window.addEventListener("click", updateActivity, { passive: true })
+    window.addEventListener("scroll", updateActivity, { passive: true })
+    return () => {
+      window.removeEventListener("mousemove", updateActivity)
+      window.removeEventListener("keydown", updateActivity)
+      window.removeEventListener("click", updateActivity)
+      window.removeEventListener("scroll", updateActivity)
+    }
+  }, [])
+
+  // [Session] Proactive token refresh based on activity
+  useEffect(() => {
+    // Only proactively refresh if we have a fully authenticated user
+    if (!user || isMfaPending) return
+
+    // Token expires in 15 minutes. We check every 4 minutes.
+    const REFRESH_INTERVAL_MS = 4 * 60 * 1000
+    const interval = setInterval(async () => {
+      const timeSinceLastActivity = Date.now() - lastActivityRef.current
+      // If user was active within the last refresh interval
+      if (timeSinceLastActivity < REFRESH_INTERVAL_MS) {
+        try {
+          const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
+          const { csrfFetch } = await import("@/app/lib/csrfFetch")
+          await csrfFetch(`${API_BASE_URL}/auth/refresh`, {
+            method: "POST",
+            credentials: "include",
+          })
+        } catch (e) {
+          // Silent catch — if it fails, the apiRequest interceptor will handle
+          // the expiration when the user makes a real request.
+        }
+      }
+    }, REFRESH_INTERVAL_MS)
+
+    return () => clearInterval(interval)
+  }, [user, isMfaPending])
 
   const signIn = useCallback((u: AuthUser, mfaPending = false) => {
     setUser(u)

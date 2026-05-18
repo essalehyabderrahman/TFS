@@ -337,6 +337,12 @@ def list_group_transfers(group_id):
         .order_by(Transfer.created_at.desc())
         .all()
     )
+    # Importer has_permission
+    from app.services.file_service import has_permission
+
+    # Filtrer par permission de lecture (récursif via has_permission)
+    transfers = [t for t in transfers if has_permission(user, t, "read")]
+
     return jsonify([t.to_dict() for t in transfers]), 200
 
 
@@ -377,6 +383,12 @@ def upload_group_transfer(group_id):
     if expiry_days != 0:
         expiry_days = max(1, min(expiry_days, 365))
 
+    parent_id = request.form.get("parentId") or None
+    if parent_id == "null" or parent_id == "":
+        parent_id = None
+
+    encrypt = request.form.get("encrypt", "true").strip().lower() == "true"
+
     result = file_service.upload_file(
         file=file,
         uploader_id=user.id,
@@ -386,6 +398,8 @@ def upload_group_transfer(group_id):
         allowed_ext=current_app.config["ALLOWED_EXTENSIONS"],
         ip=_ip(),
         group_id=group_id,
+        encrypt=encrypt,
+        parent_id=parent_id,
     )
 
     if not result["ok"]:
@@ -478,3 +492,264 @@ def update_settings(group_id):
     ))
     db.session.commit()
     return jsonify(s.to_dict()), 200
+
+
+# ── POST /groups/<group_id>/folders ───────────────────────────────────────────
+@groups_bp.post("/<group_id>/folders")
+@csrf_protect
+@jwt_required_custom
+@limiter.limit("10 per minute")
+def create_folder(group_id):
+    from app.services import file_service
+    user = current_user()
+    group = db.session.get(Group, group_id)
+    if not group:
+        return jsonify({"error": "NOT_FOUND"}), 404
+    if not _is_group_member(user, group):
+        return jsonify({"error": "FORBIDDEN"}), 403
+
+    data = request.get_json(silent=True) or {}
+    name = data.get("name", "").strip()
+    parent_id = data.get("parentId") or None
+
+    result = file_service.create_group_folder(
+        group_id=group_id,
+        name=name,
+        parent_id=parent_id,
+        user=user,
+        ip=_ip()
+    )
+    if not result["ok"]:
+        return jsonify({"error": result["error"]}), 400
+    return jsonify(result["transfer"]), 201
+
+
+# ── PATCH /groups/<group_id>/transfers/<transfer_id>/rename ───────────────────
+@groups_bp.patch("/<group_id>/transfers/<transfer_id>/rename")
+@csrf_protect
+@jwt_required_custom
+@limiter.limit("20 per minute")
+def rename_item(group_id, transfer_id):
+    from app.services import file_service
+    user = current_user()
+    group = db.session.get(Group, group_id)
+    if not group:
+        return jsonify({"error": "NOT_FOUND"}), 404
+    if not _is_group_member(user, group):
+        return jsonify({"error": "FORBIDDEN"}), 403
+
+    data = request.get_json(silent=True) or {}
+    new_name = data.get("name", "").strip()
+
+    result = file_service.rename_group_item(
+        transfer_id=transfer_id,
+        new_name=new_name,
+        user=user,
+        ip=_ip()
+    )
+    if not result["ok"]:
+        status_code = 423 if result["error"] == "FILE_LOCKED" else 400
+        return jsonify({"error": result["error"], "lockedBy": result.get("lockedBy")}), status_code
+    return jsonify(result["transfer"]), 200
+
+
+# ── PATCH /groups/<group_id>/transfers/<transfer_id>/move ─────────────────────
+@groups_bp.patch("/<group_id>/transfers/<transfer_id>/move")
+@csrf_protect
+@jwt_required_custom
+@limiter.limit("20 per minute")
+def move_item(group_id, transfer_id):
+    from app.services import file_service
+    user = current_user()
+    group = db.session.get(Group, group_id)
+    if not group:
+        return jsonify({"error": "NOT_FOUND"}), 404
+    if not _is_group_member(user, group):
+        return jsonify({"error": "FORBIDDEN"}), 403
+
+    data = request.get_json(silent=True) or {}
+    target_parent_id = data.get("parentId") or None
+
+    result = file_service.move_group_item(
+        transfer_id=transfer_id,
+        target_parent_id=target_parent_id,
+        user=user,
+        ip=_ip()
+    )
+    if not result["ok"]:
+        status_code = 423 if result["error"] == "FILE_LOCKED" else 400
+        return jsonify({"error": result["error"], "lockedBy": result.get("lockedBy")}), status_code
+    return jsonify(result["transfer"]), 200
+
+
+# ── POST /groups/<group_id>/transfers/<transfer_id>/lock ──────────────────────
+@groups_bp.post("/<group_id>/transfers/<transfer_id>/lock")
+@csrf_protect
+@jwt_required_custom
+@limiter.limit("20 per minute")
+def lock_item(group_id, transfer_id):
+    from app.services import file_service
+    user = current_user()
+    group = db.session.get(Group, group_id)
+    if not group:
+        return jsonify({"error": "NOT_FOUND"}), 404
+    if not _is_group_member(user, group):
+        return jsonify({"error": "FORBIDDEN"}), 403
+
+    result = file_service.acquire_lock(
+        transfer_id=transfer_id,
+        user=user,
+        ip=_ip()
+    )
+    if not result["ok"]:
+        status_code = 423 if result["error"] == "FILE_LOCKED" else 400
+        return jsonify({"error": result["error"], "lockedBy": result.get("lockedBy")}), status_code
+    return jsonify({"locked": True}), 200
+
+
+# ── POST /groups/<group_id>/transfers/<transfer_id>/unlock ────────────────────
+@groups_bp.post("/<group_id>/transfers/<transfer_id>/unlock")
+@csrf_protect
+@jwt_required_custom
+@limiter.limit("20 per minute")
+def unlock_item(group_id, transfer_id):
+    from app.services import file_service
+    user = current_user()
+    group = db.session.get(Group, group_id)
+    if not group:
+        return jsonify({"error": "NOT_FOUND"}), 404
+    if not _is_group_member(user, group):
+        return jsonify({"error": "FORBIDDEN"}), 403
+
+    result = file_service.release_lock(
+        transfer_id=transfer_id,
+        user=user
+    )
+    if not result["ok"]:
+        return jsonify({"error": result["error"]}), 400
+    return jsonify({"unlocked": True}), 200
+
+
+# ── GET /groups/<group_id>/transfers/<transfer_id>/versions ───────────────────
+@groups_bp.get("/<group_id>/transfers/<transfer_id>/versions")
+@jwt_required_custom
+@limiter.limit("30 per minute")
+def list_item_versions(group_id, transfer_id):
+    from app.services import file_service
+    user = current_user()
+    group = db.session.get(Group, group_id)
+    if not group:
+        return jsonify({"error": "NOT_FOUND"}), 404
+    if not _is_group_member(user, group):
+        return jsonify({"error": "FORBIDDEN"}), 403
+
+    result = file_service.get_versions(
+        transfer_id=transfer_id,
+        user=user
+    )
+    if not result["ok"]:
+        return jsonify({"error": result["error"]}), 400
+    return jsonify(result["versions"]), 200
+
+
+# ── POST /groups/<group_id>/transfers/<transfer_id>/versions/<version_num>/restore ──
+@groups_bp.post("/<group_id>/transfers/<transfer_id>/versions/<int:version_num>/restore")
+@csrf_protect
+@jwt_required_custom
+@limiter.limit("10 per minute")
+def restore_item_version(group_id, transfer_id, version_num):
+    from app.services import file_service
+    user = current_user()
+    group = db.session.get(Group, group_id)
+    if not group:
+        return jsonify({"error": "NOT_FOUND"}), 404
+    if not _is_group_member(user, group):
+        return jsonify({"error": "FORBIDDEN"}), 403
+
+    result = file_service.restore_version(
+        transfer_id=transfer_id,
+        version_num=version_num,
+        user=user,
+        ip=_ip()
+    )
+    if not result["ok"]:
+        status_code = 423 if result["error"] == "FILE_LOCKED" else 400
+        return jsonify({"error": result["error"], "lockedBy": result.get("lockedBy")}), status_code
+    return jsonify(result["transfer"]), 200
+
+
+# ── POST /groups/<group_id>/transfers/<transfer_id>/versions ──────────────────
+@groups_bp.post("/<group_id>/transfers/<transfer_id>/versions")
+@csrf_protect
+@jwt_required_custom
+@limiter.limit("10 per minute")
+def upload_item_version(group_id, transfer_id):
+    from flask import current_app
+    from app.services import file_service
+
+    user = current_user()
+    group = db.session.get(Group, group_id)
+    if not group:
+        return jsonify({"error": "NOT_FOUND"}), 404
+    if not _is_group_member(user, group):
+        return jsonify({"error": "FORBIDDEN"}), 403
+
+    if "file" not in request.files:
+        return jsonify({"error": "NO_FILE"}), 400
+
+    file = request.files["file"]
+    result = file_service.upload_group_version(
+        transfer_id=transfer_id,
+        file=file,
+        user=user,
+        ip=_ip(),
+        upload_folder=current_app.config["UPLOAD_FOLDER"],
+        allowed_ext=current_app.config["ALLOWED_EXTENSIONS"]
+    )
+    if not result["ok"]:
+        status_code = 423 if result["error"] == "FILE_LOCKED" else 400
+        return jsonify({"error": result["error"], "lockedBy": result.get("lockedBy")}), status_code
+    return jsonify(result["transfer"]), 200
+
+
+# ── PUT /groups/<group_id>/transfers/<transfer_id>/content ────────────────────
+#
+# Paste this route at the END of backend/app/routes/groups.py
+#
+@groups_bp.put("/<group_id>/transfers/<transfer_id>/content")
+@csrf_protect
+@jwt_required_custom
+@limiter.limit("20 per minute")
+def update_item_content(group_id, transfer_id):
+    """
+    Overwrite a group-workspace text file's content in place.
+
+    The caller MUST already hold the pessimistic lock
+    (POST /groups/<gid>/transfers/<tid>/lock).
+    If another user holds the lock the service returns 423 FILE_LOCKED.
+    A new FileVersion row is created automatically so history is preserved.
+    """
+    from app.services import file_service
+
+    user  = current_user()
+    group = db.session.get(Group, group_id)
+    if not group:
+        return jsonify({"error": "NOT_FOUND"}), 404
+    if not _is_group_member(user, group):
+        return jsonify({"error": "FORBIDDEN"}), 403
+
+    body    = request.get_json(silent=True) or {}
+    content = body.get("content", "")
+
+    result = file_service.update_file_content(transfer_id, content, user, _ip())
+    if not result["ok"]:
+        error = result["error"]
+        if error == "NOT_FOUND":
+            return jsonify({"error": error}), 404
+        if error == "FORBIDDEN":
+            return jsonify({"error": error}), 403
+        if error == "FILE_LOCKED":
+            return jsonify({"error": error, "lockedBy": result.get("lockedBy")}), 423
+        return jsonify({"error": error}), 400
+
+    return jsonify(result["transfer"]), 200

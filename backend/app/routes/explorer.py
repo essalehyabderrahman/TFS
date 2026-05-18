@@ -1,3 +1,5 @@
+import logging
+import mimetypes
 from flask import Blueprint, request, jsonify, send_file, current_app
 
 from app.middleware.auth_middleware import jwt_required_custom, current_user
@@ -6,6 +8,7 @@ from app.extensions import limiter
 from app.services import explorer_service
 
 explorer_bp = Blueprint("explorer", __name__, url_prefix="/explorer")
+log = logging.getLogger(__name__)
 
 
 def _ip():
@@ -13,8 +16,6 @@ def _ip():
 
 
 # ── GET /explorer ──────────────────────────────────────────────────────────────
-# Returns the items at a given folder level.
-# Query param: parentId (omit or send "null" for root level)
 @explorer_bp.get("")
 @jwt_required_custom
 @limiter.limit("60 per minute")
@@ -27,7 +28,6 @@ def list_items():
 
 
 # ── POST /explorer/folders ─────────────────────────────────────────────────────
-# Creates a new folder.
 @explorer_bp.post("/folders")
 @csrf_protect
 @jwt_required_custom
@@ -47,7 +47,6 @@ def create_folder():
 
 
 # ── POST /explorer/upload ──────────────────────────────────────────────────────
-# Uploads and encrypts a file into the user's personal storage.
 @explorer_bp.post("/upload")
 @csrf_protect
 @jwt_required_custom
@@ -55,13 +54,42 @@ def create_folder():
 def upload_file():
     user = current_user()
 
+    log.debug(
+        "[upload] content-type=%r  files_keys=%r  form_keys=%r",
+        request.content_type,
+        list(request.files.keys()),
+        list(request.form.keys()),
+    )
+
     if "file" not in request.files:
-        return jsonify({"error": "NO_FILE"}), 400
+        log.warning(
+            "[upload] NO_FILE — content-type=%r files=%r",
+            request.content_type,
+            list(request.files.keys()),
+        )
+        return jsonify({
+            "error": "NO_FILE",
+            "detail": (
+                "The 'file' field was missing from the multipart body. "
+                f"Received Content-Type: {request.content_type!r}. "
+                "Ensure the request is sent as multipart/form-data without "
+                "a manually-set Content-Type header so the browser can "
+                "generate the correct boundary."
+            ),
+        }), 400
 
     file = request.files["file"]
+    if not file or not file.filename:
+        return jsonify({"error": "NO_FILE"}), 400
+
     raw_parent = request.form.get("parentId", None)
     parent_id = None if (raw_parent is None or raw_parent == "null" or raw_parent == "") else raw_parent
     encrypt_flag = request.form.get("encrypt", "true").lower() == "true"
+
+    log.debug(
+        "[upload] user=%s  filename=%r  parent_id=%r  encrypt=%s",
+        user.id, file.filename, parent_id, encrypt_flag,
+    )
 
     result = explorer_service.upload_file(
         user=user,
@@ -72,12 +100,14 @@ def upload_file():
         is_encrypted=encrypt_flag,
     )
     if not result["ok"]:
+        log.warning("[upload] service error: %s", result["error"])
         return jsonify({"error": result["error"]}), 400
+
+    log.info("[upload] success: item_id=%s  filename=%r", result["item"]["id"], result["item"]["name"])
     return jsonify(result["item"]), 201
 
 
 # ── PATCH /explorer/<id>/rename ────────────────────────────────────────────────
-# Renames a file or folder.
 @explorer_bp.patch("/<item_id>/rename")
 @csrf_protect
 @jwt_required_custom
@@ -101,7 +131,6 @@ def rename_item(item_id):
 
 
 # ── PATCH /explorer/<id>/move ──────────────────────────────────────────────────
-# Moves a file or folder to a new parent.
 @explorer_bp.patch("/<item_id>/move")
 @csrf_protect
 @jwt_required_custom
@@ -126,7 +155,6 @@ def move_item(item_id):
 
 
 # ── DELETE /explorer/<id> ──────────────────────────────────────────────────────
-# Soft-deletes a file or folder (recursive for folders).
 @explorer_bp.delete("/<item_id>")
 @csrf_protect
 @jwt_required_custom
@@ -145,7 +173,6 @@ def delete_item(item_id):
 
 
 # ── GET /explorer/<id>/download ────────────────────────────────────────────────
-# Decrypts and streams a file back to the client.
 @explorer_bp.get("/<item_id>/download")
 @jwt_required_custom
 @limiter.limit("30 per minute")
@@ -166,3 +193,62 @@ def download_file(item_id):
         as_attachment=True,
         mimetype="application/octet-stream",
     )
+
+
+# ── GET /explorer/<id>/preview ─────────────────────────────────────────────────
+@explorer_bp.get("/<item_id>/preview")
+@jwt_required_custom
+@limiter.limit("30 per minute")
+def preview_file(item_id):
+    """
+    Decrypt and stream a personal-storage file with inline Content-Disposition
+    so the browser can render it without saving.
+    """
+    user   = current_user()
+    result = explorer_service.download_file(user, item_id)
+
+    if not result["ok"]:
+        error  = result["error"]
+        if error == "NOT_FOUND":
+            return jsonify({"error": error}), 404
+        if error == "FORBIDDEN":
+            return jsonify({"error": error}), 403
+        return jsonify({"error": error}), 400
+
+    mime, _ = mimetypes.guess_type(result["filename"])
+    if not mime:
+        mime = "application/octet-stream"
+
+    return send_file(
+        result["stream"],
+        mimetype=mime,
+        as_attachment=False,
+        download_name=result["filename"],
+    )
+
+
+# ── PUT /explorer/<id>/content ─────────────────────────────────────────────────
+@explorer_bp.put("/<item_id>/content")
+@csrf_protect
+@jwt_required_custom
+@limiter.limit("30 per minute")
+def update_file_content(item_id):
+    """
+    Overwrite a text file's content in place without re-uploading.
+    Personal Storage files are single-owner — no pessimistic lock required.
+    Encryption is transparently preserved (re-encrypted if the file was encrypted).
+    """
+    user = current_user()
+    body = request.get_json(silent=True) or {}
+    content = body.get("content", "")
+
+    result = explorer_service.update_file_content(user, item_id, content)
+    if not result["ok"]:
+        error = result["error"]
+        if error == "NOT_FOUND":
+            return jsonify({"error": error}), 404
+        if error == "FORBIDDEN":
+            return jsonify({"error": error}), 403
+        return jsonify({"error": error}), 400
+
+    return jsonify(result["item"]), 200

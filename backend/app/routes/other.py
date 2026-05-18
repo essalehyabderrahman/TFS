@@ -31,45 +31,6 @@ def _get_settings() -> TeamSettings:
     return s
 
 
-@team_bp.get("/search")
-@jwt_required_custom
-def search_users():
-    """
-    Email prefix search for invite autocomplete.
-    [Security] Admin-only. Returns at most 5 non-suspended, non-root users.
-    Requires at least 2 characters to prevent full-directory enumeration.
-    """
-    actor = current_user()
-    if actor.role != "admin":
-        return jsonify({"error": "FORBIDDEN"}), 403
-
-    q = request.args.get("q", "").strip().lower()
-    if len(q) < 2:
-        return jsonify([]), 200
-
-    users = (
-        User.query
-        .filter(
-            User.email.ilike(f"%{q}%"),
-            User.status != "suspended",
-            User.is_root == False,          # noqa: E712 — SQLAlchemy requires ==
-            User.id != actor.id,
-        )
-        .order_by(User.email)
-        .limit(5)
-        .all()
-    )
-
-    return jsonify([
-        {
-            "id":     u.id,
-            "email":  u.email,
-            "name":   u.name,
-            "avatar": u.avatar or u._initials(),
-        }
-        for u in users
-    ]), 200
-
 
 @team_bp.get("")
 @jwt_required_custom

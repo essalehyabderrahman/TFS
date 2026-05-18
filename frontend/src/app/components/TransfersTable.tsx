@@ -26,6 +26,7 @@ import {
   Lock,
 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
+import { FileViewer } from "./ui/FileViewer";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -91,13 +92,28 @@ export function TransfersTable({ refreshKey }: TransfersTableProps = {}) {
   const { transfers: fetchedTransfers, refetch } = useTransfers();
   const [transfers, setTransfers] = useState<Transfer[]>([]);
   const [openMenu, setOpenMenu] = useState<string | null>(null);
+  const [menuDirection, setMenuDirection] = useState<"down" | "up">("down");
   const [detailsTransfer, setDetailsTransfer] = useState<Transfer | null>(null);
+  const [previewTransfer, setPreviewTransfer] = useState<Transfer | null>(null);
   const [deleteTransfer, setDeleteTransfer] = useState<Transfer | null>(null);
   const [revokeTransfer, setRevokeTransfer] = useState<Transfer | null>(null);
   const [resendTransfer, setResendTransfer] = useState<Transfer | null>(null);
 
   // Sync fetched transfers into local state (allows local mutations: delete/revoke/resend)
   useEffect(() => { setTransfers(fetchedTransfers); }, [fetchedTransfers]);
+
+  // Scroll mobile menu into view when opened
+  useEffect(() => {
+    if (openMenu) {
+      const timer = setTimeout(() => {
+        const menuEl = document.getElementById(`mobile-menu-${openMenu}`);
+        if (menuEl) {
+          menuEl.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        }
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [openMenu]);
 
   // Re-fetch when parent signals a new upload completed
   useEffect(() => {
@@ -640,7 +656,21 @@ export function TransfersTable({ refreshKey }: TransfersTableProps = {}) {
                   <div className="flex items-center justify-center relative">
                     <button
                       className="w-7 h-7 flex items-center justify-center rounded-lg opacity-0 group-hover:opacity-100 transition-all duration-150 hover:bg-white/10"
-                      onClick={() => setOpenMenu(openMenu === transfer.id ? null : transfer.id)}
+                      onClick={(e) => {
+                        if (openMenu === transfer.id) {
+                          setOpenMenu(null);
+                        } else {
+                          const rect = e.currentTarget.getBoundingClientRect();
+                          const spaceBelow = window.innerHeight - rect.bottom;
+                          // If less than 220px below and enough space above, open upwards
+                          if (spaceBelow < 220 && rect.top > 220) {
+                            setMenuDirection("up");
+                          } else {
+                            setMenuDirection("down");
+                          }
+                          setOpenMenu(transfer.id);
+                        }
+                      }}
                     >
                       <MoreHorizontal size={15} style={{ color: "#64748b" }} />
                     </button>
@@ -652,13 +682,26 @@ export function TransfersTable({ refreshKey }: TransfersTableProps = {}) {
                           onClick={() => setOpenMenu(null)}
                         />
                         <div
-                          className="absolute right-0 top-8 rounded-xl overflow-hidden z-50 min-w-[160px]"
+                          className={`absolute right-0 rounded-xl overflow-hidden z-50 min-w-[160px] animate-in fade-in slide-in-from-top-2 duration-150 ${
+                            menuDirection === "up" ? "bottom-8" : "top-8"
+                          }`}
                           style={{
                             background: "#131929",
                             border: "1px solid rgba(255,255,255,0.1)",
                             boxShadow: "0 16px 40px rgba(0,0,0,0.5)",
                           }}
                         >
+                          <button
+                            onClick={() => {
+                              setPreviewTransfer(transfer);
+                              setOpenMenu(null);
+                            }}
+                            className="w-full text-left px-4 py-2.5 transition-colors hover:bg-white/5 flex items-center gap-2"
+                            style={{ fontSize: "13px", color: "#94a3b8" }}
+                          >
+                            <Eye size={14} />
+                            Preview
+                          </button>
                           <button
                             onClick={() => {
                               handleDownload(transfer);
@@ -774,7 +817,20 @@ export function TransfersTable({ refreshKey }: TransfersTableProps = {}) {
                   </div>
                   <button
                     className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 transition-colors"
-                    onClick={() => setOpenMenu(openMenu === transfer.id ? null : transfer.id)}
+                    onClick={(e) => {
+                      if (openMenu === transfer.id) {
+                        setOpenMenu(null);
+                      } else {
+                        const rect = e.currentTarget.getBoundingClientRect();
+                        const spaceBelow = window.innerHeight - rect.bottom;
+                        if (spaceBelow < 220 && rect.top > 220) {
+                          setMenuDirection("up");
+                        } else {
+                          setMenuDirection("down");
+                        }
+                        setOpenMenu(transfer.id);
+                      }
+                    }}
                   >
                     <MoreHorizontal size={16} style={{ color: "#64748b" }} />
                   </button>
@@ -832,12 +888,24 @@ export function TransfersTable({ refreshKey }: TransfersTableProps = {}) {
                 {/* Mobile menu */}
                 {openMenu === transfer.id && (
                   <div
-                    className="mt-3 rounded-xl overflow-hidden"
+                    id={`mobile-menu-${transfer.id}`}
+                    className="mt-3 rounded-xl overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200"
                     style={{
                       background: "#131929",
                       border: "1px solid rgba(255,255,255,0.1)",
                     }}
                   >
+                    <button
+                      onClick={() => {
+                        setPreviewTransfer(transfer);
+                        setOpenMenu(null);
+                      }}
+                      className="w-full text-left px-4 py-2.5 transition-colors hover:bg-white/5 flex items-center gap-2"
+                      style={{ fontSize: "13px", color: "#94a3b8" }}
+                    >
+                      <Eye size={14} />
+                      Preview
+                    </button>
                     <button
                       onClick={() => {
                         handleDownload(transfer);
@@ -1060,6 +1128,20 @@ export function TransfersTable({ refreshKey }: TransfersTableProps = {}) {
                   </button>
                   <button
                     onClick={() => {
+                      setPreviewTransfer(detailsTransfer);
+                      setDetailsTransfer(null);
+                    }}
+                    className="px-4 lg:px-5 py-2.5 lg:py-3 rounded-xl transition-colors hover:bg-white/5"
+                    style={{
+                      fontSize: "13px",
+                      color: "#94a3b8",
+                      border: "1px solid rgba(255,255,255,0.1)",
+                    }}
+                  >
+                    <span className="lg:text-[14px]">Preview</span>
+                  </button>
+                  <button
+                    onClick={() => {
                       setResendTransfer(detailsTransfer);
                       setDetailsTransfer(null);
                     }}
@@ -1266,6 +1348,20 @@ export function TransfersTable({ refreshKey }: TransfersTableProps = {}) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {previewTransfer && (
+        <FileViewer
+          fileId={previewTransfer.id}
+          fileName={previewTransfer.fileName}
+          fileType={previewTransfer.fileType}
+          source="transfer"
+          onClose={() => setPreviewTransfer(null)}
+          onDownload={() => {
+            handleDownload(previewTransfer);
+            setPreviewTransfer(null);
+          }}
+        />
+      )}
     </div>
   );
 }

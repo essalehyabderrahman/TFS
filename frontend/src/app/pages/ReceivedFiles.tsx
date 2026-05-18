@@ -1,9 +1,10 @@
 import { useState } from "react";
-import { Download, FileCheck, Eye, Search, Filter, ChevronDown, Loader2 } from "lucide-react";
+import { Download, FileCheck, Eye, Info, Search, Filter, ChevronDown, Loader2 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../components/ui/dialog";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { useReceivedTransfers } from "../hooks/useReceivedTransfers";
+import { FileViewer } from "../components/ui/FileViewer";
 // import { useAuth } from "../hooks/useAuth"; // unused
 
 interface ReceivedFile {
@@ -16,6 +17,7 @@ interface ReceivedFile {
   status: "available" | "downloaded" | "expired" | "Pending" | "Delivered";
   encryption: string;
   message?: string;
+  fileType: "pdf" | "img" | "doc" | "video" | "zip" | "other";
 }
 
 export function ReceivedFiles() {
@@ -24,6 +26,7 @@ export function ReceivedFiles() {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "available" | "downloaded" | "expired">("all");
   const [selectedFile, setSelectedFile] = useState<ReceivedFile | null>(null);
+  const [previewFile, setPreviewFile] = useState<ReceivedFile | null>(null);
   const [showFilterDropdown, setShowFilterDropdown] = useState(false);
 
   // /transfers/received already scopes to current user — no client-side filter needed
@@ -40,7 +43,8 @@ export function ReceivedFiles() {
         t.status === "Expired"   ? "expired" :
         "available"  // Pending / Sending... files addressed to this user are treated as available
       ) as ReceivedFile["status"],
-      encryption: t.encryptionType
+      encryption: t.encryptionType,
+      fileType: t.fileType as any,
     }));
 
   const filteredFiles = receivedFiles.filter((file) => {
@@ -304,7 +308,7 @@ export function ReceivedFiles() {
                 <div className="flex items-center gap-2 pt-2 border-t" style={{ borderColor: "rgba(255,255,255,0.08)" }}>
                   <button
                     onClick={() => setSelectedFile(file)}
-                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg transition-colors"
+                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg transition-colors hover:bg-white/5"
                     style={{ 
                       background: "rgba(255,255,255,0.04)",
                       border: "1px solid rgba(255,255,255,0.08)",
@@ -313,23 +317,39 @@ export function ReceivedFiles() {
                       fontWeight: 600,
                     }}
                   >
-                    <Eye size={16} />
-                    <span className="hidden sm:inline">View</span>
+                    <Info size={16} />
+                    <span className="hidden sm:inline">Details</span>
                   </button>
                   {file.status === "available" && (
-                    <button
-                      onClick={() => handleDownload(file)}
-                      className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg transition-all hover:opacity-80"
-                      style={{
-                        background: "linear-gradient(135deg, #0B7FFF 0%, #0960D9 100%)",
-                        color: "white",
-                        fontSize: "13px",
-                        fontWeight: 600,
-                      }}
-                    >
-                      <Download size={16} />
-                      <span className="hidden sm:inline">Download</span>
-                    </button>
+                    <>
+                      <button
+                        onClick={() => setPreviewFile(file)}
+                        className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg transition-colors hover:bg-white/5"
+                        style={{ 
+                          background: "rgba(255,255,255,0.04)",
+                          border: "1px solid rgba(255,255,255,0.08)",
+                          color: "#e2e8f0",
+                          fontSize: "13px",
+                          fontWeight: 600,
+                        }}
+                      >
+                        <Eye size={16} />
+                        <span className="hidden sm:inline">Preview</span>
+                      </button>
+                      <button
+                        onClick={() => handleDownload(file)}
+                        className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg transition-all hover:opacity-80"
+                        style={{
+                          background: "linear-gradient(135deg, #0B7FFF 0%, #0960D9 100%)",
+                          color: "white",
+                          fontSize: "13px",
+                          fontWeight: 600,
+                        }}
+                      >
+                        <Download size={16} />
+                        <span className="hidden sm:inline">Download</span>
+                      </button>
+                    </>
                   )}
                 </div>
               </div>
@@ -403,6 +423,21 @@ export function ReceivedFiles() {
           )}
         </DialogContent>
       </Dialog>
+
+      {previewFile && (
+        <FileViewer
+          fileId={previewFile.id}
+          fileName={previewFile.fileName}
+          fileType={previewFile.fileType as any}
+          source="transfer"
+          context="received"
+          onClose={() => setPreviewFile(null)}
+          onDownload={() => {
+            handleDownload(previewFile);
+            setPreviewFile(null);
+          }}
+        />
+      )}
 
     </div>
   );

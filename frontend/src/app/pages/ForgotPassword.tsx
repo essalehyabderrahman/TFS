@@ -9,6 +9,7 @@ import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import Lenis from "lenis";
 import { Send, ShieldAlert, CheckCircle2 } from "lucide-react";
+import { csrfFetch } from "../lib/csrfFetch";
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -89,8 +90,10 @@ export function ForgotPassword() {
 
     try {
       // Send recovery request to the backend which forwards to admin Gmail
-      const response = await fetch("/api/auth/recovery-request", {
+      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
+      const response = await csrfFetch(`${API_BASE_URL}/auth/recovery-request`, {
         method: "POST",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           fullName: formData.fullName,
@@ -118,6 +121,7 @@ export function ForgotPassword() {
       }
 
       setIsSubmitted(true);
+      window.scrollTo(0, 0);
       toast.success("Recovery request transmitted to administration.");
     } catch {
       toast.error("An unexpected error occurred.");

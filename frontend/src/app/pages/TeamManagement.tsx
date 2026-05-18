@@ -9,7 +9,7 @@ import { Switch } from "../components/ui/switch"
 import {
   fetchGroups, createGroup, deleteGroup,
   fetchGroupMembers, inviteGroupMember, updateGroupMember, removeGroupMember,
-  fetchGroupSettings, updateGroupSettings, searchUsers,
+  fetchGroupSettings, updateGroupSettings,
   type Group, type GroupMember, type GroupSettings
 } from "../api/groups"
 
@@ -45,9 +45,6 @@ export function TeamManagement() {
   const [isInviting, setIsInviting] = useState(false)
   const [showRoleDropdown, setShowRoleDropdown] = useState(false)
   const [openMemberRoleDropdown, setOpenMemberRoleDropdown] = useState<string | null>(null)
-  const [emailSuggestions, setEmailSuggestions] = useState<import("../api/groups").UserSuggestion[]>([])
-  const [showSuggestions, setShowSuggestions] = useState(false)
-  const [suggestionDebounce, setSuggestionDebounce] = useState<ReturnType<typeof setTimeout> | null>(null)
 
   // Delete group dialog
   const [groupToDelete, setGroupToDelete] = useState<Group | null>(null)
@@ -124,21 +121,6 @@ export function TeamManagement() {
 
   function handleEmailInput(value: string) {
     setInviteEmail(value)
-    setShowSuggestions(false)
-    if (suggestionDebounce) clearTimeout(suggestionDebounce)
-    if (value.length < 2) { setEmailSuggestions([]); return }
-    const t = setTimeout(async () => {
-      const results = await searchUsers(value)
-      setEmailSuggestions(results)
-      setShowSuggestions(results.length > 0)
-    }, 250)
-    setSuggestionDebounce(t)
-  }
-
-  function handleSuggestionSelect(email: string) {
-    setInviteEmail(email)
-    setEmailSuggestions([])
-    setShowSuggestions(false)
   }
 
   async function handleInviteMember() {
@@ -463,55 +445,21 @@ export function TeamManagement() {
       </Dialog>
 
       {/* Invite Member Dialog */}
-      <Dialog open={!!inviteGroupId} onOpenChange={() => { setInviteGroupId(null); setShowRoleDropdown(false); setEmailSuggestions([]); setShowSuggestions(false) }}>
+      <Dialog open={!!inviteGroupId} onOpenChange={() => { setInviteGroupId(null); setShowRoleDropdown(false) }}>
         <DialogContent style={{ background: "linear-gradient(180deg, #0d1228 0%, #0b0f20 100%)", border: "1px solid rgba(255,255,255,0.1)" }}>
           <DialogHeader><DialogTitle className="text-white text-xl">Invite to Group</DialogTitle></DialogHeader>
           <div className="space-y-4">
             <div>
               <label style={{ color: "#4a5578", fontSize: "12px", fontWeight: 600, letterSpacing: "0.05em" }}>USER EMAIL</label>
-              <div className="relative mt-1">
-                <input
-                  type="email"
-                  placeholder="user@company.com"
-                  value={inviteEmail}
-                  onChange={e => handleEmailInput(e.target.value)}
-                  onKeyDown={e => { if (e.key === "Enter" && !isInviting) handleInviteMember() }}
-                  onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
-                  onFocus={() => emailSuggestions.length > 0 && setShowSuggestions(true)}
-                  className="w-full px-4 py-2.5 rounded-lg text-white placeholder:text-slate-500 outline-none"
-                  style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", fontSize: "14px" }}
-                />
-                {showSuggestions && (
-                  <div
-                    className="absolute left-0 right-0 mt-1 rounded-lg overflow-hidden z-20"
-                    style={{
-                      background: "#0d1228",
-                      border: "1px solid rgba(255,255,255,0.1)",
-                      boxShadow: "0 10px 40px rgba(0,0,0,0.5)",
-                    }}
-                  >
-                    {emailSuggestions.map(s => (
-                      <button
-                        key={s.id}
-                        type="button"
-                        onMouseDown={() => handleSuggestionSelect(s.email)}
-                        className="w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-white/5"
-                      >
-                        <div
-                          className="w-7 h-7 rounded-full flex items-center justify-center shrink-0 text-xs font-bold text-white"
-                          style={{ background: "linear-gradient(135deg, #0B7FFF 0%, #0960D9 100%)" }}
-                        >
-                          {s.avatar}
-                        </div>
-                        <div className="min-w-0">
-                          <p style={{ color: "#e2e8f0", fontSize: "13px", fontWeight: 500 }} className="truncate">{s.name}</p>
-                          <p style={{ color: "#6b7fa8", fontSize: "11px" }} className="truncate">{s.email}</p>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
+              <input
+                type="email"
+                placeholder="user@company.com"
+                value={inviteEmail}
+                onChange={e => handleEmailInput(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter" && !isInviting) handleInviteMember() }}
+                className="w-full mt-1 px-4 py-2.5 rounded-lg text-white placeholder:text-slate-500 outline-none"
+                style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", fontSize: "14px" }}
+              />
             </div>
             <div>
               <label style={{ color: "#4a5578", fontSize: "12px", fontWeight: 600, letterSpacing: "0.05em" }}>ROLE</label>
