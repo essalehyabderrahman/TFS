@@ -545,12 +545,15 @@ export function FileExplorer() {
 
   const handleExplorerDownload = async (item: FSItem) => {
     const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
+    const isFolder = item.type === "folder";
+    const toastId = toast.loading(`Downloading ${isFolder ? "folder" : "file"} "${item.name}"...`);
     try {
       const res = await fetch(`${API_BASE_URL}/explorer/${item.id}/download`, {
         method: "GET",
         credentials: "include",
       });
       if (!res.ok) {
+        toast.dismiss(toastId);
         toast.error("Download failed.");
         return;
       }
@@ -558,13 +561,16 @@ export function FileExplorer() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = item.name;
+      const downloadName = isFolder ? `${item.name}.zip` : item.name;
+      a.download = downloadName;
       document.body.appendChild(a);
       a.click();
       a.remove();
       URL.revokeObjectURL(url);
-      toast.success(`"${item.name}" downloaded.`);
+      toast.dismiss(toastId);
+      toast.success(isFolder ? `Folder "${item.name}" downloaded.` : `File "${item.name}" downloaded.`);
     } catch (err) {
+      toast.dismiss(toastId);
       toast.error("Network error.");
     }
   };
@@ -751,26 +757,22 @@ export function FileExplorer() {
               >
                 <Eye size={13} style={{ color: "#64748b" }} />
               </button>
-              {!isFolder && (
-                <>
-                  {isEditableText(item.name, item.fileKind) && (
-                    <button
-                      title="Edit Content"
-                      onClick={() => { setPreviewItem(item); setPreviewEditMode(true); }}
-                      className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-emerald-500/10 transition-colors"
-                    >
-                      <SquarePen size={13} style={{ color: "#34D399" }} />
-                    </button>
-                  )}
-                  <button
-                    title="Download"
-                    onClick={() => handleExplorerDownload(item)}
-                    className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-blue-500/10 transition-colors"
-                  >
-                    <Download size={13} style={{ color: "#0B7FFF" }} />
-                  </button>
-                </>
+              {isEditableText(item.name, item.fileKind) && (
+                <button
+                  title="Edit Content"
+                  onClick={() => { setPreviewItem(item); setPreviewEditMode(true); }}
+                  className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-emerald-500/10 transition-colors"
+                >
+                  <SquarePen size={13} style={{ color: "#34D399" }} />
+                </button>
               )}
+              <button
+                title="Download"
+                onClick={() => handleExplorerDownload(item)}
+                className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-blue-500/10 transition-colors"
+              >
+                <Download size={13} style={{ color: "#0B7FFF" }} />
+              </button>
               <button
                 title="Rename"
                 onClick={() => startRename(item)}
@@ -816,7 +818,7 @@ export function FileExplorer() {
       >
         {[
           ...(item.type === "file" && isEditableText(item.name, item.fileKind) ? [{ icon: SquarePen, label: "Edit Content", color: "#34D399", action: () => { setPreviewItem(item); setPreviewEditMode(true); onClose(); } }] : []),
-          ...(item.type === "file" ? [{ icon: Download, label: "Download", color: "#94a3b8", action: () => { handleExplorerDownload(item); onClose(); } }] : []),
+          { icon: Download, label: "Download", color: "#94a3b8", action: () => { handleExplorerDownload(item); onClose(); } },
           { icon: Eye, label: "Details", color: "#94a3b8", action: () => { setDetailsItem(item); onClose(); } },
           { icon: Pencil, label: "Rename", color: "#94a3b8", action: () => startRename(item) },
           { icon: MoveRight, label: "Move to…", color: "#94a3b8", action: () => { setMoveItem(item); onClose(); } },
@@ -1256,9 +1258,9 @@ export function FileExplorer() {
                 ))}
               </div>
 
-              {/* Action buttons at bottom if it's a file */}
-              {detailsItem.type === "file" && (
-                <div className="flex gap-2 mt-4 pt-3" style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+              {/* Action buttons at bottom */}
+              <div className="flex gap-2 mt-4 pt-3" style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+                {detailsItem.type === "file" && (
                   <button
                     onClick={() => {
                       setPreviewItem(detailsItem);
@@ -1271,23 +1273,23 @@ export function FileExplorer() {
                     <Eye size={14} />
                     Preview
                   </button>
-                  <button
-                    onClick={() => {
-                      handleExplorerDownload(detailsItem);
-                      setDetailsItem(null);
-                    }}
-                    className="flex-1 py-2.5 rounded-xl text-[13px] font-semibold transition-all hover:brightness-110 flex items-center justify-center gap-1.5"
-                    style={{
-                      background: "linear-gradient(135deg, #0B7FFF 0%, #0960CC 100%)",
-                      color: "#fff",
-                      boxShadow: "0 4px 16px rgba(11,127,255,0.25)",
-                    }}
-                  >
-                    <Download size={14} />
-                    Download
-                  </button>
-                </div>
-              )}
+                )}
+                <button
+                  onClick={() => {
+                    handleExplorerDownload(detailsItem);
+                    setDetailsItem(null);
+                  }}
+                  className="flex-1 py-2.5 rounded-xl text-[13px] font-semibold transition-all hover:brightness-110 flex items-center justify-center gap-1.5"
+                  style={{
+                    background: "linear-gradient(135deg, #0B7FFF 0%, #0960CC 100%)",
+                    color: "#fff",
+                    boxShadow: "0 4px 16px rgba(11,127,255,0.25)",
+                  }}
+                >
+                  <Download size={14} />
+                  Download
+                </button>
+              </div>
             </>
           )}
         </DialogContent>

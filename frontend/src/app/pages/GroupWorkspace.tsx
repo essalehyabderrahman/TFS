@@ -117,8 +117,7 @@ export function GroupWorkspace() {
   // Deleting
   const [deleteId, setDeleteId] = useState<string | null>(null)
 
-  // Lock toggling
-  const [togglingLockId, setTogglingLockId] = useState<string | null>(null)
+
 
   // Versioning (Details dialog)
   const [detailsFile, setDetailsFile] = useState<GT | null>(null)
@@ -290,36 +289,7 @@ export function GroupWorkspace() {
     return folder.uploadedBy === user.email
   }
 
-  const LockBadge = ({ item, myEmail, onToggle }: { item: GT; myEmail: string; onToggle: (item: GT) => void }) => {
-    if (item.itemType === "folder") return null
-    if (!item.isLocked) {
-      return (
-        <button
-          onClick={e => { e.stopPropagation(); onToggle(item) }}
-          className="p-1 rounded-md opacity-0 group-hover:opacity-100 hover:bg-white/10 transition-all shrink-0"
-          title="Lock file"
-        >
-          <Unlock size={12} style={{ color: "#64748b" }} />
-        </button>
-      )
-    }
-    const mine = item.lockedByEmail === myEmail
-    return (
-      <button
-        onClick={e => { e.stopPropagation(); onToggle(item) }}
-        className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold transition-all hover:opacity-85 shrink-0"
-        style={{
-          color: mine ? "#00d2ff" : "#ef4444",
-          background: mine ? "rgba(0,210,255,0.1)" : "rgba(239,68,68,0.1)",
-          border: `1px solid ${mine ? "rgba(0,210,255,0.2)" : "rgba(239,68,68,0.2)"}`
-        }}
-        title={mine ? "Locked by you (Click to unlock)" : `Locked by ${item.lockedByEmail}`}
-      >
-        <Lock size={9} />
-        <span>LOCKED</span>
-      </button>
-    )
-  }
+
 
   // Circular check
   const _isInsideFolder = (targetId: string, folderId: string): boolean => {
@@ -338,43 +308,7 @@ export function GroupWorkspace() {
 
   // ── Operations ──────────────────────────────────────────────────────────────
 
-  const handleLockToggle = async (item: GT) => {
-    if (!selectedGroup || togglingLockId) return
-    setTogglingLockId(item.id)
-    try {
-      if (item.isLocked) {
-        if (item.lockedByEmail !== user?.email && user?.role !== "admin") {
-          toast.error("You cannot unlock a file locked by another user.")
-          return
-        }
-        const res = await unlockGroupItem(selectedGroup.id, item.id)
-        if (!res.error) {
-          toast.success("File unlocked successfully.")
-          setTransfers(prev => prev.map(t => t.id === item.id ? { ...t, isLocked: false, lockedByEmail: null } : t))
-          if (detailsFile?.id === item.id) {
-            setDetailsFile(prev => prev ? { ...prev, isLocked: false, lockedByEmail: null } : null)
-          }
-        } else {
-          toast.error(res.error)
-        }
-      } else {
-        const res = await lockGroupItem(selectedGroup.id, item.id)
-        if (res.ok) {
-          toast.success("File locked successfully (15m inactivity buffer).")
-          setTransfers(prev => prev.map(t => t.id === item.id ? { ...t, isLocked: true, lockedByEmail: user?.email ?? null } : t))
-          if (detailsFile?.id === item.id) {
-            setDetailsFile(prev => prev ? { ...prev, isLocked: true, lockedByEmail: user?.email ?? null } : null)
-          }
-        } else {
-          toast.error(res.error === "FILE_LOCKED" ? `Locked by ${res.lockedBy}` : res.error)
-        }
-      }
-    } catch {
-      toast.error("Lock toggling failed.")
-    } finally {
-      setTogglingLockId(null)
-    }
-  }
+
 
   // Versioning fetch
   useEffect(() => {
@@ -822,11 +756,14 @@ export function GroupWorkspace() {
   async function handleDownload(transfer: GT) {
     const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
     if (!API_BASE_URL) return
+    const isFolder = transfer.itemType === "folder"
+    const toastId = toast.loading(`Downloading ${isFolder ? "folder" : "file"} "${transfer.fileName}"...`)
     try {
       const res = await fetch(`${API_BASE_URL}/transfers/${transfer.id}/download`, {
         credentials: "include",
       })
       if (!res.ok) {
+        toast.dismiss(toastId)
         const data = await res.json().catch(() => ({}))
         toast.error(
           data.error === "EXPIRED"   ? "This file has expired." :
@@ -839,13 +776,16 @@ export function GroupWorkspace() {
       const url  = URL.createObjectURL(blob)
       const a    = document.createElement("a")
       a.href     = url
-      a.download = transfer.fileName
+      const downloadName = isFolder ? `${transfer.fileName}.zip` : transfer.fileName
+      a.download = downloadName
       document.body.appendChild(a)
       a.click()
       a.remove()
       URL.revokeObjectURL(url)
-      toast.success(`${transfer.fileName} downloaded.`)
+      toast.dismiss(toastId)
+      toast.success(isFolder ? `Folder "${transfer.fileName}" downloaded.` : `File "${transfer.fileName}" downloaded.`)
     } catch {
+      toast.dismiss(toastId)
       toast.error("Network error.")
     }
   }
@@ -887,15 +827,15 @@ export function GroupWorkspace() {
                     <SquarePen size={14} /> Edit Content
                   </button>
                 )}
-                <button
-                  onClick={() => { handleDownload(item); onClose(); }}
-                  className="w-full flex items-center gap-2 px-3 py-2 text-[13px] hover:bg-white/5 transition-colors"
-                  style={{ color: "#94a3b8" }}
-                >
-                  <Download size={14} /> Download
-                </button>
               </>
             )}
+            <button
+              onClick={() => { handleDownload(item); onClose(); }}
+              className="w-full flex items-center gap-2 px-3 py-2 text-[13px] hover:bg-white/5 transition-colors"
+              style={{ color: "#94a3b8" }}
+            >
+              <Download size={14} /> Download
+            </button>
             <button
               onClick={() => { setDetailsFile(item); onClose(); }}
               className="w-full flex items-center gap-2 px-3 py-2 text-[13px] hover:bg-white/5 transition-colors"
@@ -1000,9 +940,7 @@ export function GroupWorkspace() {
           {item.size ?? "—"}
         </p>
 
-        <div className="absolute top-2 left-2 flex items-center gap-1">
-          <LockBadge item={item} myEmail={user?.email ?? ""} onToggle={handleLockToggle} />
-        </div>
+
 
         <button
           className="absolute top-2 right-2 w-6 h-6 flex items-center justify-center rounded-lg opacity-0 group-hover:opacity-100 transition-all hover:bg-white/10"
@@ -1071,7 +1009,7 @@ export function GroupWorkspace() {
               <p className="text-[13px] font-medium truncate text-white">{item.fileName}</p>
             )}
 
-            <LockBadge item={item} myEmail={user?.email ?? ""} onToggle={handleLockToggle} />
+
           </div>
         </div>
 
@@ -1102,25 +1040,21 @@ export function GroupWorkspace() {
             </div>
           ) : (
             <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity justify-end">
-              {!isFolder && (
-                <>
-                  <button
-                    onClick={() => handleDownload(item)}
-                    className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-blue-500/10 transition-colors"
-                    title="Download"
-                  >
-                    <Download size={13} style={{ color: "#0B7FFF" }} />
-                  </button>
-                  {isEditableText(item.fileName, item.fileType) && (
-                    <button
-                      onClick={() => { setPreviewFile(item); setPreviewEditMode(true); }}
-                      className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-emerald-500/10 transition-colors"
-                      title="Edit Content"
-                    >
-                      <SquarePen size={13} style={{ color: "#34D399" }} />
-                    </button>
-                  )}
-                </>
+              <button
+                onClick={() => handleDownload(item)}
+                className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-blue-500/10 transition-colors"
+                title="Download"
+              >
+                <Download size={13} style={{ color: "#0B7FFF" }} />
+              </button>
+              {!isFolder && isEditableText(item.fileName, item.fileType) && (
+                <button
+                  onClick={() => { setPreviewFile(item); setPreviewEditMode(true); }}
+                  className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-emerald-500/10 transition-colors"
+                  title="Edit Content"
+                >
+                  <SquarePen size={13} style={{ color: "#34D399" }} />
+                </button>
               )}
 
               <button
@@ -1679,8 +1613,8 @@ export function GroupWorkspace() {
                 </div>
               )}
 
-               {detailsFile.itemType === "file" && (
-                <div className="flex gap-3 mt-5">
+               <div className="flex gap-3 mt-5">
+                {detailsFile.itemType === "file" && (
                   <button
                     onClick={() => { setPreviewFile(detailsFile); setPreviewEditMode(false); setDetailsFile(null) }}
                     className="flex-1 h-10 rounded-xl font-bold text-sm transition-all hover:brightness-110 flex items-center justify-center gap-2 text-white"
@@ -1689,16 +1623,16 @@ export function GroupWorkspace() {
                     <Eye size={14} style={{ color: "#0B7FFF" }} />
                     <span>Preview</span>
                   </button>
-                  <button
-                    onClick={() => { handleDownload(detailsFile); setDetailsFile(null) }}
-                    className="flex-1 h-10 rounded-xl font-bold text-sm transition-all hover:opacity-90 flex items-center justify-center gap-2 text-white"
-                    style={{ background: "linear-gradient(135deg, #0B7FFF 0%, #0960D9 100%)" }}
-                  >
-                    <Download size={14} />
-                    <span>Download</span>
-                  </button>
-                </div>
-              )}
+                )}
+                <button
+                  onClick={() => { handleDownload(detailsFile); setDetailsFile(null) }}
+                  className="flex-1 h-10 rounded-xl font-bold text-sm transition-all hover:opacity-90 flex items-center justify-center gap-2 text-white"
+                  style={{ background: "linear-gradient(135deg, #0B7FFF 0%, #0960D9 100%)" }}
+                >
+                  <Download size={14} />
+                  <span>Download</span>
+                </button>
+              </div>
             </>
           )}
         </DialogContent>

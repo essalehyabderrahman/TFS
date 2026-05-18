@@ -66,12 +66,14 @@ def has_permission(user: "User", transfer: "Transfer", permission_type: str) -> 
         # Si le fichier a des ACL (= fichier restreint) → refus
         if transfer.acl_entries:
             return False
-        # Sinon fichier public du groupe → accès autorisé aux membres
+        # Sinon fichier du groupe → politique de moindre privilège (lecture seule par défaut)
         if transfer.group_id:
             is_member = GroupMember.query.filter_by(
                 group_id=transfer.group_id, user_id=user.id
             ).first()
             if not is_member:
+                return False
+            if permission_type != "read":
                 return False
         else:
             return False
@@ -333,6 +335,43 @@ def get_transfer_file(transfer_id: str, user: User, ip: str, context: str = None
             t.status = "Expired"
             db.session.commit()
             return {"ok": False, "error": "EXPIRED"}
+
+    if t.item_type == "folder":
+        zip_buffer = io.BytesIO()
+        with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+            def add_folder_to_zip(folder: Transfer, current_path: str):
+                children = Transfer.query.filter_by(parent_id=folder.id, is_deleted=False).all()
+                for child in children:
+                    child_path = os.path.join(current_path, child.file_name) if current_path else child.file_name
+                    if child.item_type == "folder":
+                        add_folder_to_zip(child, child_path)
+                    else:
+                        if child.stored_path and os.path.exists(child.stored_path):
+                            try:
+                                with open(child.stored_path, "rb") as fp:
+                                    file_data = fp.read()
+                                if getattr(child, "is_encrypted", True):
+                                    file_data = _decrypt_file(file_data)
+                                zip_file.writestr(child_path, file_data)
+                            except Exception:
+                                pass
+            add_folder_to_zip(t, "")
+        
+        zip_buffer.seek(0)
+        
+        db.session.execute(
+            update(Transfer).where(Transfer.id == t.id)
+            .values(download_count=Transfer.download_count + 1)
+        )
+        _log("FILE_DOWNLOAD", user.email, user.id, "success", ip, resource=t.file_name, group_id=t.group_id)
+        db.session.commit()
+
+        return {
+            "ok": True,
+            "stream": zip_buffer,
+            "filename": f"{t.file_name}.zip",
+            "size": zip_buffer.getbuffer().nbytes
+        }
 
     try:
         with open(t.stored_path, "rb") as f:

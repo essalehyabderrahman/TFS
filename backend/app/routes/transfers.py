@@ -252,6 +252,55 @@ def grant_acl(transfer_id):
         return jsonify({"error": "FORBIDDEN"}), 403
 
     data = request.json or {}
+    apply_to_all = bool(data.get("applyToAll", False))
+    
+    can_read   = bool(data.get("canRead", False))
+    can_write  = bool(data.get("canWrite", False))
+    can_delete = bool(data.get("canDelete", False))
+    can_share  = bool(data.get("canShare", False))
+
+    if apply_to_all:
+        from app.models.group import GroupMember
+        members = GroupMember.query.filter_by(group_id=t.group_id).all()
+        # skip owner and admins
+        targets = [m.user for m in members if m.user_id != t.uploaded_by_id and m.role != 'admin']
+        count = 0
+        for target in targets:
+            existing = next((a for a in t.acl_entries if a.user_id == target.id), None)
+            if existing:
+                existing.can_read = can_read
+                existing.can_write = can_write
+                existing.can_delete = can_delete
+                existing.can_share = can_share
+                existing.granted_by_id = user.id
+            else:
+                entry = ACLEntry(
+                    id=str(uuid.uuid4()),
+                    transfer_id=t.id,
+                    user_id=target.id,
+                    can_read=can_read,
+                    can_write=can_write,
+                    can_delete=can_delete,
+                    can_share=can_share,
+                    granted_by_id=user.id
+                )
+                db.session.add(entry)
+            count += 1
+        
+        log = AuditLog(
+            id=str(uuid.uuid4()),
+            user_id=user.id,
+            user_email=user.email,
+            action="ACL_GRANTED_BULK",
+            resource=t.file_name,
+            details=f"Bulk granted to {count} members: R={can_read} W={can_write} D={can_delete} S={can_share}",
+            ip_address=_ip(),
+            status="success"
+        )
+        db.session.add(log)
+        db.session.commit()
+        return jsonify({"message": f"Applied to {count} members"}), 201
+
     user_email = data.get("userEmail")
 
     target = User.query.filter_by(email=user_email).first()
@@ -263,10 +312,6 @@ def grant_acl(transfer_id):
 
     existing = next((a for a in t.acl_entries if a.user_id == target.id), None)
 
-    can_read   = bool(data.get("canRead", False))
-    can_write  = bool(data.get("canWrite", False))
-    can_delete = bool(data.get("canDelete", False))
-    can_share  = bool(data.get("canShare", False))
 
     if existing:
         entry = existing

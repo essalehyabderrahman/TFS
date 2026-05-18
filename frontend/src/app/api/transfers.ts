@@ -127,7 +127,8 @@ export interface AclEntry {
 }
 
 export interface AclPayload {
-  userEmail: string;
+  userEmail?: string;
+  applyToAll?: boolean;
   canRead: boolean;
   canWrite: boolean;
   canDelete: boolean;

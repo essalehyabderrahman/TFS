@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react"
-import { X, Shield, Trash2, Loader2, Plus, Check } from "lucide-react"
+import { X, Shield, Trash2, Loader2, Plus, Check, Users } from "lucide-react"
 import { fetchAcl, grantAcl, revokeAcl, type AclEntry } from "../../api/transfers"
 import { fetchGroupMembers, type GroupMember } from "../../api/groups"
 import { toast } from "sonner"
@@ -36,20 +36,23 @@ export function AclModal({ transferId, transferName, groupId, onClose }: AclModa
     })
   }, [transferId, groupId])
 
-  const handleGrant = async () => {
-    if (!email.trim()) return toast.error("Enter a user email.")
+  const handleGrant = async (applyToAll = false) => {
+    if (!applyToAll && !email.trim()) return toast.error("Enter a user email.")
     setSaving(true)
-    const res = await grantAcl(transferId, { userEmail: email.trim(), ...perms })
+    const payload = applyToAll 
+      ? { applyToAll: true, ...perms } 
+      : { userEmail: email.trim(), ...perms }
+      
+    const res = await grantAcl(transferId, payload)
     if (res.error) {
       toast.error(res.error === "USER_NOT_FOUND" ? "User not found." : res.error)
     } else {
-      toast.success("Permissions saved.")
+      toast.success(applyToAll ? "Permissions applied to all members." : "Permissions saved.")
       setEmail("")
       setPerms({ canRead: true, canWrite: false, canDelete: false, canShare: false })
       const updated = await fetchAcl(transferId)
       if (!updated.error) setEntries(updated.data)
     }
-    setSaving(saving => !saving) // Wait, is that a boolean toggle? Ah, let's keep setSaving(false) to be safe.
     setSaving(false)
   }
 
@@ -122,15 +125,28 @@ export function AclModal({ transferId, transferName, groupId, onClose }: AclModa
               })}
             </div>
 
-            <button
-              onClick={handleGrant}
-              disabled={saving || !email.trim()}
-              className="flex items-center justify-center gap-2 py-2 rounded-lg text-xs font-bold text-white transition-all disabled:opacity-40"
-              style={{ background: "linear-gradient(135deg, #a855f7 0%, #7c3aed 100%)" }}
-            >
-              {saving ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />}
-              Save Permission
-            </button>
+            <div className="flex gap-2 mt-2">
+              <button
+                onClick={() => handleGrant(false)}
+                disabled={saving || !email.trim()}
+                className="flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-xs font-bold text-white transition-all disabled:opacity-40"
+                style={{ background: "linear-gradient(135deg, #a855f7 0%, #7c3aed 100%)" }}
+              >
+                {saving ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />}
+                Grant to User
+              </button>
+              
+              <button
+                onClick={() => handleGrant(true)}
+                disabled={saving}
+                className="flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-xs font-bold text-[#a855f7] transition-all disabled:opacity-40 hover:bg-purple-500/10"
+                style={{ border: "1px solid rgba(168,85,247,0.4)" }}
+                title="Apply these permissions to all members"
+              >
+                {saving ? <Loader2 size={13} className="animate-spin" /> : <Users size={13} />}
+                Apply to All
+              </button>
+            </div>
           </div>
 
           {/* Current ACL list */}
