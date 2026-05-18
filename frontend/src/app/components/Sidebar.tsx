@@ -12,6 +12,7 @@ import {
   ChevronRight,
   X,
   FolderOpen,
+  Key,
 } from "lucide-react";
 
 const allNavItems = [
@@ -20,6 +21,7 @@ const allNavItems = [
   { icon: Users,         label: "Contacts",                id: "contacts",  path: "/dashboard/contacts",  adminOnly: false, hideForAdmin: false },
   { icon: FolderOpen,    label: "File Manager",            id: "explorer",  path: "/dashboard/explorer",  adminOnly: false, hideForAdmin: false },
   { icon: ClipboardList, label: "Audit & Compliance Logs", id: "audit",     path: "/dashboard/audit",     adminOnly: false, hideForAdmin: false, adminOrGroupAdminOnly: true },
+  { icon: Key,           label: "Recovery Requests",       id: "recovery",  path: "/dashboard/recovery-management", adminOnly: true,  hideForAdmin: false },
   { icon: UserCog,       label: "User Management",         id: "users",     path: "/dashboard/users",     adminOnly: true,  hideForAdmin: false },
   { icon: Users,         label: "Team Management",         id: "team",      path: "/dashboard/team",      adminOnly: true,  hideForAdmin: false },
   { icon: FolderOpen,    label: "Group Workspace",         id: "groups",    path: "/dashboard/groups",    adminOnly: false, hideForAdmin: false },

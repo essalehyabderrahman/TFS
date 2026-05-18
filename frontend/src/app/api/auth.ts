@@ -303,3 +303,81 @@ export async function apiResetPassword(payload: { token: string; password: strin
     return { ok: false, error: "NETWORK_ERROR" }
   }
 }
+
+// ── Recovery requests (admin) ────────────────────────────────────────────────
+export async function apiListRecoveryRequests(status = "pending") {
+  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
+  const res = await csrfFetch(`${API_BASE_URL}/auth/recovery-requests?status=${status}`);
+  if (!res.ok) return [];
+  return res.json();
+}
+
+export async function apiRejectRecoveryRequest(id: string) {
+  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
+  const res = await csrfFetch(`${API_BASE_URL}/auth/recovery-requests/${id}/reject`, { method: "POST" });
+  return res.json();
+}
+
+/**
+ * Admin sets a temporary password for the user behind a recovery request.
+ * Pass `auto: true` to let the backend generate one, or provide `password` manually.
+ * Returns `{ ok, password, userEmail, userName }`.
+ */
+export async function apiSetRecoveryPassword(
+  id: string,
+  opts: { password?: string; auto?: boolean }
+): Promise<{ ok: boolean; password?: string; userEmail?: string; userName?: string; error?: string }> {
+  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
+  try {
+    const res = await csrfFetch(`${API_BASE_URL}/auth/recovery-requests/${id}/set-password`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(opts),
+    });
+    const data = await res.json();
+    if (!res.ok) return { ok: false, error: data.error ?? "UNKNOWN_ERROR" };
+    return { ok: true, ...data };
+  } catch {
+    return { ok: false, error: "NETWORK_ERROR" };
+  }
+}
+
+/**
+ * Admin sends a fully custom email and marks the request as approved.
+ * Returns `{ ok, emailSent }`.
+ */
+export async function apiSendRecoveryEmail(
+  id: string,
+  payload: { to: string; subject: string; body: string }
+): Promise<{ ok: boolean; emailSent?: boolean; error?: string }> {
+  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
+  try {
+    const res = await csrfFetch(`${API_BASE_URL}/auth/recovery-requests/${id}/send-email`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!res.ok) return { ok: false, error: data.error ?? "UNKNOWN_ERROR" };
+    return { ok: true, ...data };
+  } catch {
+    return { ok: false, error: "NETWORK_ERROR" };
+  }
+}
+
+export async function apiSubmitRecoveryRequest(payload: {
+  email: string;
+  fullName: string;
+  message?: string;
+  mfaCode?: string;
+}) {
+  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
+  const res = await csrfFetch(`${API_BASE_URL}/auth/recovery-request`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const data = await res.json();
+  return { ok: res.ok, status: res.status, ...data };
+}

@@ -20,6 +20,7 @@ import { Mfa } from "./pages/Mfa";
 import { MfaSetup } from "./pages/MfaSetup";
 import { ForgotPassword } from "./pages/ForgotPassword";
 import { FileExplorer } from "./pages/FileExplorer";
+import { RecoveryManagement } from "./pages/RecoveryManagement";
 
 
 function RootLayout() {
@@ -122,6 +123,7 @@ export const router = createBrowserRouter([
               { path: "account", Component: AccountManagement },
               { path: "contacts", Component: Contacts },
               { path: "explorer", Component: FileExplorer },
+              { path: "recovery-management", Component: RecoveryManagement },
             ],
           },
         ],

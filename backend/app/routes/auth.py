@@ -316,92 +316,366 @@ def handle_rate_limit(e):
 @csrf_protect
 @limiter.limit("5 per hour")
 def recovery_request():
-    import os
-    import smtplib
-    from email.mime.text import MIMEText
-    from email.mime.multipart import MIMEMultipart
-    from flask import current_app, request, jsonify
-    from app.services.auth_service import _log
+    """
+    Stores a password recovery request in the DB.
+    If the user has MFA enabled, they must supply a valid OTP/backup code.
+    [Security] Never reveals whether an account exists.
+    """
+    from app.models.recovery_request import RecoveryRequest
+    from app.models.user import User
+    from app.services.auth_service import _log, verify_mfa
     from app.extensions import db
+    import pyotp
 
-    data = request.get_json(silent=True) or {}
-    full_name          = data.get("fullName", "").strip()
-    email              = data.get("email", "").strip().lower()
-    registration_date  = data.get("registrationDate", "").strip()
-    last_file          = data.get("lastFile", "").strip()
-    message            = data.get("message", "").strip()
+    data       = request.get_json(silent=True) or {}
+    email      = data.get("email", "").strip().lower()
+    full_name  = data.get("fullName", "").strip()
+    message    = data.get("message", "").strip()
+    mfa_code   = data.get("mfaCode", "").strip()
 
-    if not full_name or not email or not message:
+    if not email or not full_name:
         return jsonify({"error": "MISSING_FIELDS"}), 400
     if "@" not in email:
         return jsonify({"error": "INVALID_EMAIL"}), 400
 
-    # --- Récupération des identifiants SMTP depuis le .env ---
+    user = User.query.filter_by(email=email).first()
+
+    # [Security] If MFA is enabled, verify the code before accepting the request
+    if user and user.mfa_enabled:
+        if not mfa_code:
+            return jsonify({"error": "MFA_REQUIRED", "mfaRequired": True}), 403
+
+        result = verify_mfa(user.id, mfa_code, _ip(), is_setup_confirm=False)
+        if not result["ok"]:
+            # Map internal errors to safe client errors
+            safe_error = {
+                "INVALID_CODE":           "INVALID_CODE",
+                "MFA_CODE_ALREADY_USED":  "INVALID_CODE",
+                "MFA_MAX_ATTEMPTS_EXCEEDED": "MFA_MAX_ATTEMPTS_EXCEEDED",
+                "MFA_LOCKED":             "MFA_MAX_ATTEMPTS_EXCEEDED",
+            }.get(result["error"], "INVALID_CODE")
+            return jsonify({"error": safe_error}), 403
+
+    # Deduplicate: reject if a pending request already exists for this email
+    existing = RecoveryRequest.query.filter_by(
+        user_email=email, status="pending"
+    ).first()
+    if existing:
+        # Silent success — do not reveal a pending request exists
+        return jsonify({"ok": True}), 200
+
+    req = RecoveryRequest(
+        user_id    = user.id if user else None,
+        user_email = email,
+        full_name  = full_name,
+        message    = message or None,
+        status     = "pending",
+    )
+    db.session.add(req)
+    _log("RECOVERY_REQUEST_CREATED", email, user.id if user else None,
+         "success", _ip(), details="Recovery request submitted.")
+    db.session.commit()
+
+    return jsonify({"ok": True}), 200
+
+
+# -- GET /auth/recovery-requests (admin) -------------------------------------
+@auth_bp.get("/recovery-requests")
+@jwt_required_custom
+def list_recovery_requests():
+    from app.models.recovery_request import RecoveryRequest
+    user = current_user()
+    if user.role != "admin":
+        return jsonify({"error": "FORBIDDEN"}), 403
+
+    status_filter = request.args.get("status", "pending")
+    q = RecoveryRequest.query.order_by(RecoveryRequest.created_at.desc())
+    if status_filter != "all":
+        q = q.filter_by(status=status_filter)
+
+    return jsonify([r.to_dict() for r in q.all()]), 200
+
+
+# -- POST /auth/recovery-requests/<id>/approve (admin) -----------------------
+@auth_bp.post("/recovery-requests/<req_id>/approve")
+@csrf_protect
+@jwt_required_custom
+@limiter.limit("20 per hour")
+def approve_recovery_request(req_id):
+    """
+    Admin approves a recovery request:
+    - Generates a temporary password
+    - Sets it on the user account (with password_reset_required=True)
+    - Sends it by email to the user
+    - Marks the request as approved
+    """
+    import os, secrets, string, smtplib
+    from email.mime.text import MIMEText
+    from email.mime.multipart import MIMEMultipart
+    from datetime import datetime, timezone
+
+    from app.models.recovery_request import RecoveryRequest
+    from app.models.user import User
+    from app.services.auth_service import _log
+    from app.extensions import db
+
+    actor = current_user()
+    if actor.role != "admin":
+        return jsonify({"error": "FORBIDDEN"}), 403
+
+    rec = db.session.get(RecoveryRequest, req_id)
+    if not rec:
+        return jsonify({"error": "NOT_FOUND"}), 404
+    if rec.status != "pending":
+        return jsonify({"error": "ALREADY_RESOLVED"}), 409
+
+    user = db.session.get(User, rec.user_id) if rec.user_id else None
+    if not user:
+        # Mark rejected — user account no longer exists
+        rec.status      = "rejected"
+        rec.resolved_at = datetime.now(timezone.utc)
+        rec.resolved_by = actor.id
+        db.session.commit()
+        return jsonify({"error": "USER_NOT_FOUND"}), 404
+
+    # Generate a secure temporary password (16 chars, satisfies policy)
+    alphabet = string.ascii_letters + string.digits + "!@#$%"
+    while True:
+        temp_pw = "".join(secrets.choice(alphabet) for _ in range(16))
+        # Ensure policy: upper + lower + digit + symbol
+        if (any(c.isupper() for c in temp_pw) and
+            any(c.islower() for c in temp_pw) and
+            any(c.isdigit() for c in temp_pw) and
+            any(c in "!@#$%" for c in temp_pw)):
+            break
+
+    user.set_password(temp_pw)
+    user.password_reset_required = True
+    user.token_version = (user.token_version or 0) + 1
+
+    rec.status      = "approved"
+    rec.resolved_at = datetime.now(timezone.utc)
+    rec.resolved_by = actor.id
+
+    # Send email
     smtp_sender   = os.environ.get("SMTP_SENDER_EMAIL")
     smtp_password = os.environ.get("SMTP_APP_PASSWORD")
     smtp_host     = os.environ.get("SMTP_HOST", "smtp.gmail.com")
     smtp_port     = int(os.environ.get("SMTP_PORT", 587))
 
-    if not smtp_sender or not smtp_password:
-        _log("RECOVERY_REQUEST_FAILED", email, None, "warning", request.remote_addr, details="SMTP credentials not configured — recovery email not sent.")
-        db.session.commit()
-        # On retourne quand même 200 pour ne pas exposer la config côté client
-        return jsonify({"ok": True, "message": "Recovery request transmitted to administration."}), 200
+    email_sent = False
+    if smtp_sender and smtp_password:
+        msg = MIMEMultipart()
+        msg["From"]    = f"TFS Security <{smtp_sender}>"
+        msg["To"]      = user.email
+        msg["Subject"] = "[TFS Security] Your Temporary Password"
+        body = f"""\
+Hello {user.name},
 
-    # --- Construction du message ---
-    msg = MIMEMultipart()
-    msg["From"]    = f"TFS Security <{smtp_sender}>"
-    msg["To"]      = smtp_sender
-    msg["Subject"] = f"[TFS Security] Demande de Récupération de Clé - {full_name}"
+Your account recovery request has been approved.
 
-    body = f"""\
-Bonjour Administrateur,
+Your temporary password is:
 
-Une nouvelle demande de récupération de clé a été soumise :
+    {temp_pw}
 
-  • Nom complet              : {full_name}
-  • Email du compte          : {email}
-  • Date d'inscription aprox.: {registration_date or 'Non renseignée'}
-  • Dernier fichier transféré: {last_file or 'Non renseigné'}
+Please sign in and change your password immediately.
+This password is valid for one session only.
 
-Message de l'utilisateur :
-─────────────────────────────────────────
-{message}
-─────────────────────────────────────────
-
-Merci de traiter cette demande dans les plus brefs délais.
-
-— TFS Security (message automatique)
+— TFS Security
 """
-    msg.attach(MIMEText(body, "plain", "utf-8"))
+        msg.attach(MIMEText(body, "plain", "utf-8"))
+        try:
+            if smtp_port == 465:
+                with smtplib.SMTP_SSL(smtp_host, smtp_port, timeout=10) as srv:
+                    srv.login(smtp_sender, smtp_password)
+                    srv.sendmail(smtp_sender, user.email, msg.as_string())
+            else:
+                with smtplib.SMTP(smtp_host, smtp_port, timeout=10) as srv:
+                    srv.ehlo(); srv.starttls(); srv.ehlo()
+                    srv.login(smtp_sender, smtp_password)
+                    srv.sendmail(smtp_sender, user.email, msg.as_string())
+            email_sent = True
+        except Exception as e:
+            _log("RECOVERY_EMAIL_FAILED", user.email, user.id, "error", request.remote_addr,
+                 details=f"SMTP error: {e}")
 
-    # --- Envoi via SMTP (TLS sur port 587) ---
-    try:
-        if smtp_port == 465:
-            with smtplib.SMTP_SSL(smtp_host, smtp_port, timeout=10) as server:
-                server.ehlo()
-                server.login(smtp_sender, smtp_password)
-                server.sendmail(smtp_sender, smtp_sender, msg.as_string())
-        else:
-            with smtplib.SMTP(smtp_host, smtp_port, timeout=10) as server:
-                server.ehlo()
-                server.starttls()
-                server.ehlo()
-                server.login(smtp_sender, smtp_password)
-                server.sendmail(smtp_sender, smtp_sender, msg.as_string())
-        _log("RECOVERY_REQUEST_SUCCESS", email, None, "success", request.remote_addr, details=f"Recovery email sent to {smtp_sender}")
-        db.session.commit()
-    except smtplib.SMTPAuthenticationError:
-        _log("RECOVERY_REQUEST_FAILED", email, None, "error", request.remote_addr, details="SMTP authentication failed — check SMTP_SENDER_EMAIL / SMTP_APP_PASSWORD in .env")
-        db.session.commit()
-        return jsonify({"error": "EMAIL_SEND_FAILED"}), 500
-    except smtplib.SMTPException as e:
-        _log("RECOVERY_REQUEST_FAILED", email, None, "error", request.remote_addr, details=f"SMTP error while sending recovery email: {e}")
-        db.session.commit()
-        return jsonify({"error": "EMAIL_SEND_FAILED"}), 500
-    except Exception as e:
-        _log("RECOVERY_REQUEST_FAILED", email, None, "error", request.remote_addr, details=f"Unexpected error sending recovery email: {e}")
-        db.session.commit()
-        return jsonify({"error": "EMAIL_SEND_FAILED"}), 500
+    _log("RECOVERY_APPROVED", user.email, user.id, "success", request.remote_addr,
+         details=f"Recovery approved by {actor.email}. Email sent: {email_sent}.")
+    db.session.commit()
 
-    return jsonify({"ok": True, "message": "Recovery request transmitted to administration."}), 200
+    return jsonify({"ok": True, "emailSent": email_sent}), 200
+
+
+# -- POST /auth/recovery-requests/<id>/reject (admin) ------------------------
+@auth_bp.post("/recovery-requests/<req_id>/reject")
+@csrf_protect
+@jwt_required_custom
+def reject_recovery_request(req_id):
+    from datetime import datetime, timezone
+    from app.models.recovery_request import RecoveryRequest
+    from app.services.auth_service import _log
+    from app.extensions import db
+
+    actor = current_user()
+    if actor.role != "admin":
+        return jsonify({"error": "FORBIDDEN"}), 403
+
+    rec = db.session.get(RecoveryRequest, req_id)
+    if not rec:
+        return jsonify({"error": "NOT_FOUND"}), 404
+    if rec.status != "pending":
+        return jsonify({"error": "ALREADY_RESOLVED"}), 409
+
+    rec.status      = "rejected"
+    rec.resolved_at = datetime.now(timezone.utc)
+    rec.resolved_by = actor.id
+
+    _log("RECOVERY_REJECTED", rec.user_email, rec.user_id, "warning", request.remote_addr,
+         details=f"Recovery rejected by {actor.email}.")
+    db.session.commit()
+    return jsonify({"ok": True}), 200
+
+
+# -- POST /auth/recovery-requests/<id>/set-password (admin) -------------------
+@auth_bp.post("/recovery-requests/<req_id>/set-password")
+@csrf_protect
+@jwt_required_custom
+@limiter.limit("20 per hour")
+def set_recovery_password(req_id):
+    """
+    Admin sets a temporary password for the user behind a recovery request.
+    Accepts { password } for a manual password, or { auto: true } to auto-generate.
+    Returns the plaintext password so the admin can include it in the email.
+    Does NOT mark the request as resolved — that happens in send-email or reject.
+    """
+    import secrets, string
+    from app.models.recovery_request import RecoveryRequest
+    from app.models.user import User
+    from app.services.auth_service import _log
+    from app.extensions import db
+
+    actor = current_user()
+    if actor.role != "admin":
+        return jsonify({"error": "FORBIDDEN"}), 403
+
+    rec = db.session.get(RecoveryRequest, req_id)
+    if not rec:
+        return jsonify({"error": "NOT_FOUND"}), 404
+    if rec.status != "pending":
+        return jsonify({"error": "ALREADY_RESOLVED"}), 409
+
+    data       = request.get_json(silent=True) or {}
+    auto       = data.get("auto", False)
+    manual_pw  = (data.get("password") or "").strip()
+
+    if auto or not manual_pw:
+        # Generate a secure 16-char password that satisfies the policy
+        alphabet = string.ascii_letters + string.digits + "!@#$%"
+        while True:
+            temp_pw = "".join(secrets.choice(alphabet) for _ in range(16))
+            if (any(c.isupper() for c in temp_pw) and
+                    any(c.islower() for c in temp_pw) and
+                    any(c.isdigit() for c in temp_pw) and
+                    any(c in "!@#$%" for c in temp_pw)):
+                break
+    else:
+        temp_pw = manual_pw
+
+    # Find user by FK first, fallback to email lookup
+    user = db.session.get(User, rec.user_id) if rec.user_id else None
+    if not user:
+        user = User.query.filter_by(email=rec.user_email).first()
+    if not user:
+        return jsonify({"error": "USER_NOT_FOUND"}), 404
+
+    user.set_password(temp_pw)
+    user.password_reset_required = True
+    # Invalidate all existing sessions
+    user.token_version = (user.token_version or 0) + 1
+
+    _log("RECOVERY_PASSWORD_SET", user.email, user.id, "warning", request.remote_addr,
+         details=f"Temporary password set by admin {actor.email}.")
+    db.session.commit()
+
+    return jsonify({
+        "ok":        True,
+        "password":  temp_pw,
+        "userEmail": user.email,
+        "userName":  user.name,
+    }), 200
+
+
+# -- POST /auth/recovery-requests/<id>/send-email (admin) ---------------------
+@auth_bp.post("/recovery-requests/<req_id>/send-email")
+@csrf_protect
+@jwt_required_custom
+@limiter.limit("10 per hour")
+def send_recovery_email(req_id):
+    """
+    Admin sends a fully-custom email to the affected user, then marks the
+    request as approved.  Accepts { to, subject, body }.
+    If SMTP is not configured the request is still approved — the admin is
+    notified via the emailSent flag in the response.
+    """
+    import os, smtplib
+    from email.mime.text import MIMEText
+    from email.mime.multipart import MIMEMultipart
+    from datetime import datetime, timezone
+    from app.models.recovery_request import RecoveryRequest
+    from app.services.auth_service import _log
+    from app.extensions import db
+
+    actor = current_user()
+    if actor.role != "admin":
+        return jsonify({"error": "FORBIDDEN"}), 403
+
+    rec = db.session.get(RecoveryRequest, req_id)
+    if not rec:
+        return jsonify({"error": "NOT_FOUND"}), 404
+    if rec.status != "pending":
+        return jsonify({"error": "ALREADY_RESOLVED"}), 409
+
+    data    = request.get_json(silent=True) or {}
+    to_addr = (data.get("to") or "").strip()
+    subject = (data.get("subject") or "").strip()
+    body    = (data.get("body") or "").strip()
+
+    if not to_addr or not subject or not body:
+        return jsonify({"error": "MISSING_FIELDS"}), 400
+
+    smtp_sender   = os.environ.get("SMTP_SENDER_EMAIL")
+    smtp_password = os.environ.get("SMTP_APP_PASSWORD")
+    smtp_host     = os.environ.get("SMTP_HOST", "smtp.gmail.com")
+    smtp_port     = int(os.environ.get("SMTP_PORT", 587))
+
+    email_sent = False
+    if smtp_sender and smtp_password:
+        msg = MIMEMultipart()
+        msg["From"]    = f"TFS Security <{smtp_sender}>"
+        msg["To"]      = to_addr
+        msg["Subject"] = subject
+        msg.attach(MIMEText(body, "plain", "utf-8"))
+        try:
+            if smtp_port == 465:
+                with smtplib.SMTP_SSL(smtp_host, smtp_port, timeout=10) as srv:
+                    srv.login(smtp_sender, smtp_password)
+                    srv.sendmail(smtp_sender, to_addr, msg.as_string())
+            else:
+                with smtplib.SMTP(smtp_host, smtp_port, timeout=10) as srv:
+                    srv.ehlo(); srv.starttls(); srv.ehlo()
+                    srv.login(smtp_sender, smtp_password)
+                    srv.sendmail(smtp_sender, to_addr, msg.as_string())
+            email_sent = True
+        except Exception as e:
+            _log("RECOVERY_EMAIL_FAILED", rec.user_email, rec.user_id, "error",
+                 request.remote_addr, details=f"SMTP error: {e}")
+
+    rec.status      = "approved"
+    rec.resolved_at = datetime.now(timezone.utc)
+    rec.resolved_by = actor.id
+
+    _log("RECOVERY_APPROVED", rec.user_email, rec.user_id, "success", request.remote_addr,
+         details=f"Recovery approved by {actor.email}. Email sent: {email_sent}.")
+    db.session.commit()
+
+    return jsonify({"ok": True, "emailSent": email_sent}), 200

@@ -16,6 +16,7 @@ from app.models.audit_log import AuditLog
 from app.models.group import Group, GroupMember, GroupSettings
 from app.models.team_settings import TeamSettings
 from app.models.notification import Notification
+from app.models.recovery_request import RecoveryRequest  # noqa: F401
 
 # Create the flask app configured appropriately
 app = create_app()
