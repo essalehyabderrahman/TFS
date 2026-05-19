@@ -315,7 +315,8 @@ def remove_member(group_id, user_id):
 def list_group_transfers(group_id):
     """
     List all non-deleted transfers scoped to this group.
-    Gated by allow_group_transfers for non-admins.
+    All group members can list files; external sharing restrictions only apply
+    when sharing files outside the group via ACL.
     """
     user  = current_user()
     group = db.session.get(Group, group_id)
@@ -325,11 +326,6 @@ def list_group_transfers(group_id):
     if not _is_group_member(user, group):
         return jsonify({"error": "FORBIDDEN"}), 403
 
-    if not _is_group_admin(user, group):
-        settings = group.settings
-        if not settings or not settings.allow_group_transfers:
-            return jsonify({"error": "GROUP_TRANSFERS_DISABLED"}), 403
-
     from app.models.transfer import Transfer
     transfers = (
         Transfer.query
@@ -337,10 +333,7 @@ def list_group_transfers(group_id):
         .order_by(Transfer.created_at.desc())
         .all()
     )
-    # Importer has_permission
     from app.services.file_service import has_permission
-
-    # Filtrer par permission de lecture (récursif via has_permission)
     transfers = [t for t in transfers if has_permission(user, t, "read")]
 
     return jsonify([t.to_dict() for t in transfers]), 200
@@ -354,7 +347,8 @@ def list_group_transfers(group_id):
 def upload_group_transfer(group_id):
     """
     Upload a file scoped to this group.
-    Gated by allow_group_transfers for non-admins.
+    All group members can upload files; external sharing restrictions only apply
+    when sharing files outside the group via ACL.
     """
     from flask import current_app
     from app.services import file_service
@@ -366,11 +360,6 @@ def upload_group_transfer(group_id):
 
     if not _is_group_member(user, group):
         return jsonify({"error": "FORBIDDEN"}), 403
-
-    if not _is_group_admin(user, group):
-        settings = group.settings
-        if not settings or not settings.allow_group_transfers:
-            return jsonify({"error": "GROUP_TRANSFERS_DISABLED"}), 403
 
     if "file" not in request.files:
         return jsonify({"error": "NO_FILE"}), 400
@@ -461,7 +450,6 @@ def update_settings(group_id):
         "allowMemberDirectory": "allow_member_directory",
         "allowMemberInvite":    "allow_member_invite",
         "allowExternalSharing": "allow_external_sharing",
-        "allowGroupTransfers":  "allow_group_transfers",
     }
 
     changed = []

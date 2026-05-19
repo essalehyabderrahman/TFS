@@ -234,7 +234,6 @@ with app.app_context():
         allow_member_directory=True,
         allow_member_invite=True,
         allow_external_sharing=False,
-        allow_group_transfers=True,
     )
     gs2 = GroupSettings(
         id="gs2",
@@ -242,7 +241,6 @@ with app.app_context():
         allow_member_directory=True,
         allow_member_invite=False,
         allow_external_sharing=True,
-        allow_group_transfers=True,
     )
     db.session.add_all([gs1, gs2])
 

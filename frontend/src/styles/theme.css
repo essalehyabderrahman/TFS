@@ -289,3 +289,9 @@
     transition-delay: 0s !important;
   }
 }
+
+/* Date input calendar picker indicator in dark mode */
+.dark input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(1);
+  cursor: pointer;
+}

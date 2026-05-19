@@ -94,21 +94,24 @@ export async function apiRequest<T>(
     }
 
     if (errorCode === "TOKEN_EXPIRED" || errorCode === "SESSION_EXPIRED") {
-      const { getExpireSession } = await import("@/app/context/AuthContext")
+      const { getExpireSession, getIsAuthenticated } = await import("@/app/context/AuthContext")
       const expireSession = getExpireSession()
-      if (expireSession) await expireSession("inactivity")
+      const isAuthenticated = getIsAuthenticated()
+      if (expireSession && isAuthenticated) await expireSession("inactivity")
       throw new Error("SESSION_EXPIRED")
     } else if (errorCode === "SESSION_REVOKED") {
-      const { getExpireSession } = await import("@/app/context/AuthContext")
+      const { getExpireSession, getIsAuthenticated } = await import("@/app/context/AuthContext")
       const expireSession = getExpireSession()
-      if (expireSession) await expireSession("revoked")
+      const isAuthenticated = getIsAuthenticated()
+      if (expireSession && isAuthenticated) await expireSession("revoked")
       throw new Error("SESSION_REVOKED")
     } else {
       // General 401 (invalid credentials, missing token, deleted user, etc.)
-      const { getExpireSession } = await import("@/app/context/AuthContext")
+      const { getExpireSession, getIsAuthenticated } = await import("@/app/context/AuthContext")
       const expireSession = getExpireSession()
+      const isAuthenticated = getIsAuthenticated()
       if (!path.includes("/auth/signin") && !path.includes("/auth/signup")) {
-        if (expireSession) await expireSession("unauthorized")
+        if (expireSession && isAuthenticated) await expireSession("unauthorized")
       }
       throw new Error("UNAUTHORIZED")
     }

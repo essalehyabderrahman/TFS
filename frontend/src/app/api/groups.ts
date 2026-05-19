@@ -28,7 +28,6 @@ export interface GroupSettings {
   allowMemberDirectory: boolean
   allowMemberInvite: boolean
   allowExternalSharing: boolean
-  allowGroupTransfers: boolean
   updatedAt: string | null
   updatedBy: string | null
 }

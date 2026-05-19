@@ -310,6 +310,18 @@ def grant_acl(transfer_id):
     if target.id == t.uploaded_by_id:
         return jsonify({"error": "CANNOT_GRANT_TO_SELF"}), 400
 
+    # Enforce group-level external sharing policy
+    if t.group_id:
+        from app.models.group import Group, GroupMember
+        group = db.session.get(Group, t.group_id)
+        if group and group.settings and not group.settings.allow_external_sharing:
+            # Check if target is a member of the group
+            is_member = GroupMember.query.filter_by(
+                group_id=t.group_id, user_id=target.id
+            ).first()
+            if not is_member:
+                return jsonify({"error": "EXTERNAL_SHARING_DISABLED"}), 403
+
     existing = next((a for a in t.acl_entries if a.user_id == target.id), None)
 
 

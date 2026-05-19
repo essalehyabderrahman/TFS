@@ -356,38 +356,56 @@ export function AccountManagement() {
             <Key size={14} /> Change
           </button>
         </div>
-        {!account.requireMfa && (
-          <div className="flex items-center justify-between py-3 border-t" style={{ borderColor: "rgba(255,255,255,0.06)" }}>
-            {account.mfaEnabled ? (
-              <>
-                <div>
-                  <p className="text-white font-medium">Two-Factor Authentication</p>
-                  <p style={{ color: "#6b7fa8", fontSize: "13px" }}>MFA is currently active on your account</p>
-                </div>
+        <div className="flex items-center justify-between py-3 border-t" style={{ borderColor: "rgba(255,255,255,0.06)" }}>
+          {account.mfaEnabled ? (
+            <>
+              <div>
+                <p className="text-white font-medium flex items-center gap-2">
+                  Two-Factor Authentication
+                  {account.requireMfa && (
+                    <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-blue-500/10 border border-blue-500/25 text-[#0B7FFF]">
+                      Required by Policy
+                    </span>
+                  )}
+                </p>
+                <p style={{ color: "#6b7fa8", fontSize: "13px" }}>MFA is currently active on your account</p>
+              </div>
+              {!account.requireMfa && (
                 <button
                   onClick={() => setShowMfaDisableDialog(true)}
                   className="flex items-center gap-2 px-4 py-2 rounded-lg transition-colors hover:opacity-90"
                   style={{ background: "rgba(239,68,68,0.12)", border: "1px solid rgba(239,68,68,0.2)", color: "#ef4444", fontSize: "14px", fontWeight: 600 }}>
                   <Shield size={14} /> Disable MFA
                 </button>
-              </>
-            ) : (
-              <>
-                <div>
-                  <p className="text-white font-medium">Two-Factor Authentication</p>
-                  <p style={{ color: "#ef4444", fontSize: "13px" }}>MFA is not active — your account is less secure</p>
-                </div>
-                <button onClick={() => navigate("/dashboard/mfa-setup")}
-                  className="flex items-center gap-2 px-4 py-2 rounded-lg transition-colors hover:opacity-90"
-                  style={{ background: "rgba(0,229,160,0.12)", border: "1px solid rgba(0,229,160,0.2)", color: "#00E5A0", fontSize: "14px", fontWeight: 600 }}>
-                  <Shield size={14} /> Enable MFA
-                </button>
-              </>
-            )}
-          </div>
-        )}
+              )}
+            </>
+          ) : (
+            <>
+              <div>
+                <p className="text-white font-medium flex items-center gap-2">
+                  Two-Factor Authentication
+                  {account.requireMfa && (
+                    <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-amber-500/10 border border-amber-500/25 text-[#f59e0b]">
+                      Required
+                    </span>
+                  )}
+                </p>
+                <p style={{ color: account.requireMfa ? "#f59e0b" : "#ef4444", fontSize: "13px" }}>
+                  {account.requireMfa
+                    ? "MFA is mandatory under the current security policy — please set it up immediately"
+                    : "MFA is not active — your account is less secure"}
+                </p>
+              </div>
+              <button onClick={() => navigate("/dashboard/mfa-setup")}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg transition-colors hover:opacity-90"
+                style={{ background: "rgba(0,229,160,0.12)", border: "1px solid rgba(0,229,160,0.2)", color: "#00E5A0", fontSize: "14px", fontWeight: 600 }}>
+                <Shield size={14} /> Enable MFA
+              </button>
+            </>
+          )}
+        </div>
         
-        {account.mfaEnabled && !account.requireMfa && (
+        {account.mfaEnabled && (
           <div className="flex items-center justify-between py-3 border-t" style={{ borderColor: "rgba(255,255,255,0.06)" }}>
             <div>
               <p className="text-white font-medium">Backup Code</p>

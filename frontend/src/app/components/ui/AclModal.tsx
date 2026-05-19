@@ -45,7 +45,12 @@ export function AclModal({ transferId, transferName, groupId, onClose }: AclModa
       
     const res = await grantAcl(transferId, payload)
     if (res.error) {
-      toast.error(res.error === "USER_NOT_FOUND" ? "User not found." : res.error)
+      const errorMessages: Record<string, string> = {
+        USER_NOT_FOUND: "User not found.",
+        EXTERNAL_SHARING_DISABLED: "Sharing outside this group is disabled by the administrator.",
+        CANNOT_GRANT_TO_SELF: "You cannot grant permissions to yourself.",
+      }
+      toast.error(errorMessages[res.error] ?? res.error)
     } else {
       toast.success(applyToAll ? "Permissions applied to all members." : "Permissions saved.")
       setEmail("")

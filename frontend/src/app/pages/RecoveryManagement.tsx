@@ -21,6 +21,8 @@ interface RecoveryRequest {
   status: string;
   createdAt: string;
   mfaEnabled: boolean;
+  lastTransferredFile?: string | null;
+  estimatedRegistrationDate?: string | null;
 }
 
 /** Which panel is currently open for a pending card */
@@ -39,6 +41,14 @@ interface CardState {
   emailBody: string;
   loading: boolean;
 }
+
+// [Security] Password policy — must mirror backend _validate_password exactly
+const passwordRequirements = [
+  { label: "At least 12 characters", test: (p: string) => p.length >= 12 },
+  { label: "Contains a number", test: (p: string) => /\d/.test(p) },
+  { label: "Lowercase & Uppercase", test: (p: string) => /[a-z]/.test(p) && /[A-Z]/.test(p) },
+  { label: "Special character", test: (p: string) => /[!@#$%^&*(),.?":{}|<>_\-+=\[\]\\;'/`~]/.test(p) },
+];
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -123,15 +133,26 @@ export function RecoveryManagement() {
     const pw = cs.isManual ? cs.draftPassword.trim() : cs.draftPassword;
     if (!pw) { toast.error("Password cannot be empty."); return; }
 
+    const isPasswordStrong = passwordRequirements.every(reqRule => reqRule.test(pw));
+    if (!isPasswordStrong) {
+      toast.error("Security protocol violation: Password does not meet requirements.");
+      return;
+    }
+
     update(req.id, { loading: true });
     const res = await apiSetRecoveryPassword(req.id, { password: pw });
     update(req.id, { loading: false });
 
     if (!res.ok) {
       const msgs: Record<string, string> = {
-        USER_NOT_FOUND:    "User account not found.",
-        ALREADY_RESOLVED:  "This request has already been resolved.",
-        FORBIDDEN:         "You do not have permission.",
+        USER_NOT_FOUND:        "User account not found.",
+        ALREADY_RESOLVED:      "This request has already been resolved.",
+        FORBIDDEN:             "You do not have permission.",
+        PASSWORD_TOO_SHORT:    "Password must be at least 12 characters.",
+        PASSWORD_NO_UPPERCASE: "Password must contain an uppercase letter.",
+        PASSWORD_NO_LOWERCASE: "Password must contain a lowercase letter.",
+        PASSWORD_NO_DIGIT:     "Password must contain a number.",
+        PASSWORD_NO_SYMBOL:    "Password must contain a special character.",
       };
       toast.error(msgs[res.error ?? ""] ?? res.error ?? "Failed to set password.");
       return;
@@ -196,7 +217,7 @@ export function RecoveryManagement() {
       {/* ── Header ─────────────────────────────────────────────────────────── */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-black uppercase italic tracking-tighter">
+          <h1 className="text-white text-2xl font-black uppercase italic tracking-tighter">
             Recovery <span className="text-[#00d2ff]">Management</span>
           </h1>
           <p className="text-white/30 text-xs uppercase tracking-widest mt-1">
@@ -282,6 +303,27 @@ export function RecoveryManagement() {
                       <p className="text-white/30 text-xs italic">"{req.message}"</p>
                     </div>
                   )}
+
+                  {/* Verification data */}
+                  {(req.lastTransferredFile || req.estimatedRegistrationDate) && (
+                    <div className="mt-3 ml-[52px] p-3.5 rounded-xl bg-white/[0.01] border border-white/[0.04] space-y-1 text-xs">
+                      <div className="text-[10px] font-black uppercase tracking-widest text-[#00d2ff] mb-1">
+                        Identity Verification Data
+                      </div>
+                      {req.lastTransferredFile && (
+                        <div>
+                          <span className="text-white/30 uppercase font-black tracking-wider text-[9px] mr-1.5">Last File:</span>
+                          <span className="text-white/70">{req.lastTransferredFile}</span>
+                        </div>
+                      )}
+                      {req.estimatedRegistrationDate && (
+                        <div>
+                          <span className="text-white/30 uppercase font-black tracking-wider text-[9px] mr-1.5">Est. Registration Date:</span>
+                          <span className="text-white/70">{req.estimatedRegistrationDate}</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 {/* ── Pending actions ─────────────────────────── */}
@@ -289,83 +331,108 @@ export function RecoveryManagement() {
                   <div className="border-t border-white/[0.05]">
 
                     {/* Step 1: Set Password panel */}
-                    {cs.panel === "idle" && (
-                      <div className="p-5 space-y-4">
-                        <p className="text-[10px] font-black uppercase tracking-widest text-white/30 flex items-center gap-2">
-                          <Key size={11} /> Step 1 — Set a temporary password
-                        </p>
+                    {cs.panel === "idle" && (() => {
+                      const isPasswordStrong = passwordRequirements.every(reqRule => reqRule.test(cs.draftPassword));
+                      return (
+                        <div className="p-5 space-y-4">
+                          <p className="text-[10px] font-black uppercase tracking-widest text-white/30 flex items-center gap-2">
+                            <Key size={11} /> Step 1 — Set a temporary password
+                          </p>
 
-                        {/* Password input row */}
-                        <div className="flex items-center gap-2">
-                          <div className="relative flex-1">
-                            <input
-                              type="text"
-                              value={cs.draftPassword}
-                              onChange={e => update(req.id, {
-                                draftPassword: e.target.value,
-                                isManual: true,
-                                emailBody: buildEmailBody(req.fullName, e.target.value),
-                              })}
-                              className="w-full bg-white/5 border border-white/10 rounded-xl h-10 px-3
-                                         text-white font-mono text-sm tracking-widest outline-none
-                                         focus:border-[#00d2ff]/50 transition-all"
-                              placeholder="Auto-generated password..."
-                            />
+                          {/* Password input row */}
+                          <div className="flex items-center gap-2">
+                            <div className="relative flex-1">
+                              <input
+                                type="text"
+                                value={cs.draftPassword}
+                                onChange={e => update(req.id, {
+                                  draftPassword: e.target.value,
+                                  isManual: true,
+                                  emailBody: buildEmailBody(req.fullName, e.target.value),
+                                })}
+                                className="w-full bg-white/5 border border-white/10 rounded-xl h-10 px-3
+                                           text-white font-mono text-sm tracking-widest outline-none
+                                           focus:border-[#00d2ff]/50 transition-all"
+                                placeholder="Auto-generated password..."
+                              />
+                            </div>
+                            {/* Regenerate */}
+                            <button
+                              title="Regenerate password"
+                              onClick={() => {
+                                const p = genPreview();
+                                update(req.id, {
+                                  draftPassword: p,
+                                  isManual: false,
+                                  emailBody: buildEmailBody(req.fullName, p),
+                                });
+                              }}
+                              className="p-2.5 rounded-xl bg-white/5 border border-white/10 text-white/40
+                                         hover:text-white hover:border-white/30 transition-all"
+                            >
+                              <RefreshCw size={14} />
+                            </button>
+                            {/* Copy */}
+                            <button
+                              title="Copy password"
+                              onClick={() => copyToClipboard(cs.draftPassword, "Password")}
+                              className="p-2.5 rounded-xl bg-white/5 border border-white/10 text-white/40
+                                         hover:text-white hover:border-white/30 transition-all"
+                            >
+                              <Copy size={14} />
+                            </button>
                           </div>
-                          {/* Regenerate */}
-                          <button
-                            title="Regenerate password"
-                            onClick={() => {
-                              const p = genPreview();
-                              update(req.id, {
-                                draftPassword: p,
-                                isManual: false,
-                                emailBody: buildEmailBody(req.fullName, p),
-                              });
-                            }}
-                            className="p-2.5 rounded-xl bg-white/5 border border-white/10 text-white/40
-                                       hover:text-white hover:border-white/30 transition-all"
-                          >
-                            <RefreshCw size={14} />
-                          </button>
-                          {/* Copy */}
-                          <button
-                            title="Copy password"
-                            onClick={() => copyToClipboard(cs.draftPassword, "Password")}
-                            className="p-2.5 rounded-xl bg-white/5 border border-white/10 text-white/40
-                                       hover:text-white hover:border-white/30 transition-all"
-                          >
-                            <Copy size={14} />
-                          </button>
-                        </div>
 
-                        <div className="flex gap-2">
-                          {/* Set Password button */}
-                          <button
-                            onClick={() => handleSetPassword(req)}
-                            disabled={cs.loading || !cs.draftPassword.trim()}
-                            className="flex items-center gap-2 px-5 py-2 rounded-xl text-[10px] font-black
-                                       uppercase tracking-widest border transition-all disabled:opacity-40
-                                       bg-[#00d2ff]/10 border-[#00d2ff]/20 text-[#00d2ff]
-                                       hover:bg-[#00d2ff]/20"
-                          >
-                            {cs.loading ? <RefreshCw size={12} className="animate-spin" /> : <Key size={12} />}
-                            {cs.loading ? "Setting..." : "Set Password & Continue"}
-                          </button>
-                          {/* Reject */}
-                          <button
-                            onClick={() => handleReject(req)}
-                            disabled={cs.loading}
-                            className="flex items-center gap-2 px-5 py-2 rounded-xl text-[10px] font-black
-                                       uppercase tracking-widest border transition-all disabled:opacity-40
-                                       bg-red-500/10 border-red-500/20 text-red-400
-                                       hover:bg-red-500/20"
-                          >
-                            <X size={12} /> Reject
-                          </button>
+                          {/* Password rules indicator */}
+                          {cs.draftPassword && (
+                            <div className="grid grid-cols-2 gap-2 p-4 bg-white/[0.02] border border-white/[0.05] rounded-2xl">
+                              {passwordRequirements.map((reqRule, i) => {
+                                const passed = reqRule.test(cs.draftPassword);
+                                return (
+                                  <div key={i} className="flex items-center gap-2">
+                                    {passed ? (
+                                      <Check size={10} className="text-[#00d2ff]" />
+                                    ) : (
+                                      <div className="w-1.5 h-1.5 rounded-full bg-white/10 ml-1"></div>
+                                    )}
+                                    <span className={`text-[9px] font-black uppercase tracking-tighter ${passed ? 'text-white/60' : 'text-white/20'}`}>
+                                      {reqRule.label}
+                                    </span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+
+                          <div className="flex gap-2">
+                            {/* Set Password button */}
+                            <button
+                              onClick={() => handleSetPassword(req)}
+                              disabled={cs.loading || !isPasswordStrong}
+                              className="flex items-center gap-2 px-5 py-2 rounded-xl text-[10px] font-black
+                                         uppercase tracking-widest border transition-all disabled:opacity-40
+                                         bg-[#00d2ff]/10 border-[#00d2ff]/20 text-[#00d2ff]
+                                         hover:bg-[#00d2ff]/20"
+                            >
+                              {cs.loading ? <RefreshCw size={12} className="animate-spin" /> : <Key size={12} />}
+                              {cs.loading ? "Setting..." : "Set Password & Continue"}
+                            </button>
+                            {/* Reject */}
+                            <button
+                              onClick={() => handleReject(req)}
+                              disabled={cs.loading}
+                              className="flex items-center gap-2 px-5 py-2 rounded-xl text-[10px] font-black
+                                         uppercase tracking-widest border transition-all disabled:opacity-40
+                                         bg-red-500/10 border-red-500/20 text-red-400
+                                         hover:bg-red-500/20"
+                            >
+                              <X size={12} /> Reject
+                            </button>
+                          </div>
                         </div>
-                      </div>
-                    )}
+                      );
+                    })()}
+
 
                     {/* Step 2: Email composer panel */}
                     {cs.panel === "send_email" && (

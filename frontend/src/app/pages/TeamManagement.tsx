@@ -379,8 +379,7 @@ export function TeamManagement() {
                             {[
                               { field: "allowMemberDirectory", label: "Member Directory", desc: "Members can see the group member list" },
                               { field: "allowMemberInvite", label: "Member Invitations", desc: "Group admins can invite new members" },
-                              { field: "allowExternalSharing", label: "External Sharing", desc: "Files can be shared outside the group" },
-                              { field: "allowGroupTransfers", label: "Group File Access", desc: "All members can see group-scoped files" },
+                              { field: "allowExternalSharing", label: "External Sharing", desc: "Files can be shared outside the group with non-members" },
                             ].map(({ field, label, desc }) => (
                               <div key={field} className="flex items-center justify-between p-3 rounded-lg"
                                 style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)" }}>

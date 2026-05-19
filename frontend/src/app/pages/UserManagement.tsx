@@ -1,11 +1,11 @@
 import { useState, useEffect, useCallback } from "react"
 import { useAuth } from "../hooks/useAuth"
 import { toast } from "sonner"
-import { Users, Trash2, Loader2, ShieldCheck, ShieldOff, UserCheck, UserX, Crown, UserPlus, ChevronDown, Key } from "lucide-react"
+import { Users, Trash2, Loader2, ShieldCheck, ShieldOff, UserCheck, UserX, Crown, UserPlus, ChevronDown, Key, Check, Copy, Mail, AlertTriangle, Send, RefreshCw } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "../components/ui/dialog"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "../components/ui/alert-dialog"
 import { apiRequest } from "../api/client"
-import { apiInviteMember, apiAdminSetPassword } from "../api/team"
+import { apiInviteMember, apiAdminSetPassword, apiAdminSendPasswordEmail } from "../api/team"
 
 interface Member {
   id: string
@@ -19,7 +19,36 @@ interface Member {
   isRoot: boolean
 }
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL
+function buildEmailBody(name: string, password: string): string {
+  return `Hello ${name},
+
+An administrator has reset your account password.
+
+Your temporary password is:
+
+    ${password}
+
+Please sign in immediately and change your password — this temporary password is valid for one session only.
+
+If you did not request this, please contact your administrator.
+
+— TFS Security Team`;
+}
+
+function genPreview(): string {
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%";
+  const buf = new Uint8Array(16);
+  crypto.getRandomValues(buf);
+  let pw = Array.from(buf).map(b => chars[b % chars.length]).join("");
+  while (
+    !/[A-Z]/.test(pw) || !/[a-z]/.test(pw) ||
+    !/\d/.test(pw)    || !/[!@#$%]/.test(pw)
+  ) {
+    crypto.getRandomValues(buf);
+    pw = Array.from(buf).map(b => chars[b % chars.length]).join("");
+  }
+  return pw;
+}
 
 export function UserManagement() {
   const { user: self, isAppAdmin, isRootAdmin, isInitializing } = useAuth()
@@ -46,8 +75,14 @@ export function UserManagement() {
   
   // Set password dialog
   const [passwordTarget, setPasswordTarget] = useState<Member | null>(null)
-  const [newPassword, setNewPassword] = useState("")
+  const [pwPanel, setPwPanel] = useState<"idle" | "send_email">("idle")
+  const [draftPassword, setDraftPassword] = useState("")
+  const [appliedPassword, setAppliedPassword] = useState("")
+  const [emailTo, setEmailTo] = useState("")
+  const [emailSubject, setEmailSubject] = useState("")
+  const [emailBody, setEmailBody] = useState("")
   const [isSettingPassword, setIsSettingPassword] = useState(false)
+  const [isSendingEmail, setIsSendingEmail] = useState(false)
 
   const loadMembers = useCallback(async () => {
     setIsLoading(true)
@@ -163,21 +198,45 @@ export function UserManagement() {
   }
 
   async function handleSetPassword() {
-    if (!passwordTarget || !newPassword.trim()) return
-    if (newPassword.length < 8) {
+    if (!passwordTarget || !draftPassword.trim()) return
+    if (draftPassword.length < 8) {
       toast.error("Password must be at least 8 characters.")
       return
     }
     setIsSettingPassword(true)
-    const result = await apiAdminSetPassword(passwordTarget.id, newPassword.trim())
+    const result = await apiAdminSetPassword(passwordTarget.id, draftPassword.trim())
     if (result.ok) {
       toast.success(`Password for ${passwordTarget.name} has been updated.`)
-      setPasswordTarget(null)
-      setNewPassword("")
+      setAppliedPassword(draftPassword.trim())
+      setPwPanel("send_email")
     } else {
       toast.error("Failed to update password.")
     }
     setIsSettingPassword(false)
+  }
+
+  async function handleSendEmail() {
+    if (!passwordTarget || !emailTo.trim() || !emailSubject.trim() || !emailBody.trim()) {
+      toast.error("All email fields are required.")
+      return
+    }
+    setIsSendingEmail(true)
+    const result = await apiAdminSendPasswordEmail(passwordTarget.id, {
+      to: emailTo.trim(),
+      subject: emailSubject.trim(),
+      body: emailBody.trim(),
+    })
+    if (result.ok) {
+      if (result.emailSent) {
+        toast.success("Notification email sent successfully.")
+      } else {
+        toast.warning("Password set but notification email could not be sent. Check SMTP configuration.")
+      }
+      setPasswordTarget(null)
+    } else {
+      toast.error(result.error ?? "Failed to send email.")
+    }
+    setIsSendingEmail(false)
   }
 
   const admins = members.filter(m => m.role === "admin")
@@ -289,7 +348,16 @@ export function UserManagement() {
 
                     {/* Set Password */}
                     <button
-                      onClick={() => { setPasswordTarget(member); setNewPassword("") }}
+                      onClick={() => {
+                        const preview = genPreview();
+                        setPasswordTarget(member);
+                        setPwPanel("idle");
+                        setDraftPassword(preview);
+                        setAppliedPassword("");
+                        setEmailTo(member.email);
+                        setEmailSubject("[TFS Security] Your Temporary Password");
+                        setEmailBody(buildEmailBody(member.name, preview));
+                      }}
                       title="Set user password"
                       className="p-1.5 rounded-lg hover:bg-amber-500/10 transition-colors"
                       style={{ color: "#f59e0b" }}>
@@ -497,38 +565,176 @@ export function UserManagement() {
 
       {/* Set Password Dialog */}
       <Dialog open={!!passwordTarget} onOpenChange={v => { if (!v) setPasswordTarget(null) }}>
-        <DialogContent style={{ background: "linear-gradient(180deg, #0d1228 0%, #0b0f20 100%)", border: "1px solid rgba(255,255,255,0.1)" }}>
-          <DialogHeader><DialogTitle className="text-white text-xl">Set User Password</DialogTitle></DialogHeader>
-          <div className="space-y-4">
-            <p style={{ color: "#6b7fa8", fontSize: "13px" }}>
-              Update the password for <span className="text-white font-medium">{passwordTarget?.name}</span>.
-            </p>
-            <div>
-              <label style={{ color: "#4a5578", fontSize: "12px", fontWeight: 600, letterSpacing: "0.05em" }}>NEW PASSWORD</label>
-              <input
-                type="password"
-                placeholder="••••••••"
-                value={newPassword}
-                onChange={e => setNewPassword(e.target.value)}
-                onKeyDown={e => { if (e.key === "Enter" && !isSettingPassword) handleSetPassword() }}
-                className="w-full mt-1 px-4 py-2.5 rounded-lg text-white placeholder:text-slate-500 outline-none"
-                style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", fontSize: "14px" }}
-              />
+        <DialogContent style={{ background: "linear-gradient(180deg, #0d1228 0%, #0b0f20 100%)", border: "1px solid rgba(255,255,255,0.1)", maxWidth: "500px" }}>
+          <DialogHeader>
+            <DialogTitle className="text-white text-xl flex items-center gap-2">
+              <Key className="text-[#f59e0b]" size={20} />
+              Set Password — {passwordTarget?.name}
+            </DialogTitle>
+          </DialogHeader>
+
+          {pwPanel === "idle" ? (
+            <div className="space-y-4 py-2">
+              <p style={{ color: "#6b7fa8", fontSize: "13px" }}>
+                Enter a manual password or generate a secure temporary password below for <span className="text-white font-medium">{passwordTarget?.name}</span>.
+              </p>
+              
+              <div>
+                <label style={{ color: "#4a5578", fontSize: "12px", fontWeight: 600, letterSpacing: "0.05em" }}>NEW PASSWORD</label>
+                <div className="flex items-center gap-2 mt-1">
+                  <input
+                    type="text"
+                    placeholder="Type or generate password..."
+                    value={draftPassword}
+                    onChange={e => {
+                      setDraftPassword(e.target.value);
+                      setEmailBody(buildEmailBody(passwordTarget?.name ?? "", e.target.value));
+                    }}
+                    onKeyDown={e => { if (e.key === "Enter" && !isSettingPassword && draftPassword.trim()) handleSetPassword() }}
+                    className="flex-1 px-4 py-2.5 rounded-lg text-white font-mono text-sm tracking-widest placeholder:text-slate-500 outline-none"
+                    style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}
+                  />
+                  {/* Regenerate */}
+                  <button
+                    type="button"
+                    title="Regenerate password"
+                    onClick={() => {
+                      const p = genPreview();
+                      setDraftPassword(p);
+                      setEmailBody(buildEmailBody(passwordTarget?.name ?? "", p));
+                    }}
+                    className="p-3 rounded-lg bg-white/5 border border-white/10 text-white/40 hover:text-white hover:border-white/30 transition-all"
+                  >
+                    <RefreshCw size={14} />
+                  </button>
+                  {/* Copy */}
+                  <button
+                    type="button"
+                    title="Copy password"
+                    onClick={() => {
+                      navigator.clipboard.writeText(draftPassword);
+                      toast.success("Password copied to clipboard.");
+                    }}
+                    className="p-3 rounded-lg bg-white/5 border border-white/10 text-white/40 hover:text-white hover:border-white/30 transition-all"
+                  >
+                    <Copy size={14} />
+                  </button>
+                </div>
+              </div>
+
+              <DialogFooter className="mt-6">
+                <button onClick={() => setPasswordTarget(null)}
+                  className="px-4 py-2 rounded-lg"
+                  style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "#e2e8f0" }}>
+                  Cancel
+                </button>
+                <button onClick={handleSetPassword} disabled={isSettingPassword || !draftPassword.trim()}
+                  className="px-4 py-2 rounded-lg flex items-center gap-2 disabled:opacity-50"
+                  style={{ background: "linear-gradient(135deg, #0B7FFF 0%, #0960D9 100%)", color: "white" }}>
+                  {isSettingPassword ? <Loader2 size={16} className="animate-spin" /> : <Key size={16} />}
+                  Set Password & Continue
+                </button>
+              </DialogFooter>
             </div>
-          </div>
-          <DialogFooter className="mt-6">
-            <button onClick={() => setPasswordTarget(null)}
-              className="px-4 py-2 rounded-lg"
-              style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "#e2e8f0" }}>
-              Cancel
-            </button>
-            <button onClick={handleSetPassword} disabled={isSettingPassword}
-              className="px-4 py-2 rounded-lg flex items-center gap-2 disabled:opacity-50"
-              style={{ background: "linear-gradient(135deg, #f59e0b 0%, #d97706 100%)", color: "white" }}>
-              {isSettingPassword && <Loader2 size={16} className="animate-spin" />}
-              Update Password
-            </button>
-          </DialogFooter>
+          ) : (
+            <div className="space-y-4 py-2">
+              {/* Success Banner */}
+              <div className="flex items-center gap-3 p-3 rounded-xl bg-green-500/5 border border-green-500/15">
+                <Check size={16} className="text-green-400 shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-green-400 text-[10px] font-black uppercase tracking-widest">
+                    Password set successfully
+                  </p>
+                  <div className="flex items-center gap-2 mt-1">
+                    <code className="text-white/60 font-mono text-xs tracking-widest truncate">
+                      {appliedPassword}
+                    </code>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(appliedPassword);
+                        toast.success("Password copied to clipboard.");
+                      }}
+                      className="text-white/30 hover:text-white transition-colors shrink-0"
+                    >
+                      <Copy size={11} />
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Email composer */}
+              <p className="text-[10px] font-black uppercase tracking-widest text-white/30 flex items-center gap-2">
+                <Mail size={11} /> Compose & send the notification email
+              </p>
+
+              <div className="space-y-3">
+                {/* To */}
+                <div>
+                  <label className="text-[9px] font-black uppercase tracking-widest text-white/30">To</label>
+                  <input
+                    type="email"
+                    value={emailTo}
+                    onChange={e => setEmailTo(e.target.value)}
+                    className="w-full mt-1 bg-white/5 border border-white/10 rounded-lg h-9 px-3 text-white text-sm outline-none focus:border-[#00d2ff]/50 transition-all animate-none"
+                    style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}
+                  />
+                </div>
+                {/* Subject */}
+                <div>
+                  <label className="text-[9px] font-black uppercase tracking-widest text-white/30">Subject</label>
+                  <input
+                    type="text"
+                    value={emailSubject}
+                    onChange={e => setEmailSubject(e.target.value)}
+                    className="w-full mt-1 bg-white/5 border border-white/10 rounded-lg h-9 px-3 text-white text-sm outline-none focus:border-[#00d2ff]/50 transition-all animate-none"
+                    style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}
+                  />
+                </div>
+                {/* Body */}
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-[9px] font-black uppercase tracking-widest text-white/30">Body</label>
+                    <button
+                      type="button"
+                      onClick={() => setEmailBody(buildEmailBody(passwordTarget?.name ?? "", appliedPassword))}
+                      className="text-[9px] font-black uppercase tracking-widest text-white/20 hover:text-[#00d2ff] transition-colors flex items-center gap-1"
+                    >
+                      <RefreshCw size={9} /> Reset template
+                    </button>
+                  </div>
+                  <textarea
+                    value={emailBody}
+                    onChange={e => setEmailBody(e.target.value)}
+                    rows={6}
+                    className="w-full bg-white/5 border border-white/10 rounded-lg p-3 text-white/80 text-xs font-mono outline-none resize-y focus:border-[#00d2ff]/50 transition-all"
+                  />
+                </div>
+              </div>
+
+              {/* SMTP Warning banner */}
+              <div className="flex items-start gap-2 p-3 rounded-lg bg-yellow-400/5 border border-yellow-400/15">
+                <AlertTriangle size={12} className="text-yellow-400 shrink-0 mt-0.5" />
+                <p className="text-yellow-400/70 text-[9px] leading-relaxed">
+                  Make sure SMTP is configured in the backend. If not, the password remains updated but no email notification will be dispatched.
+                </p>
+              </div>
+
+              <DialogFooter className="mt-6">
+                <button onClick={() => setPasswordTarget(null)}
+                  className="px-4 py-2 rounded-lg"
+                  style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "#e2e8f0" }}>
+                  Close
+                </button>
+                <button onClick={handleSendEmail} disabled={isSendingEmail}
+                  className="px-4 py-2 rounded-lg flex items-center gap-2 disabled:opacity-50"
+                  style={{ background: "linear-gradient(135deg, #0B7FFF 0%, #0960D9 100%)", color: "white" }}>
+                  {isSendingEmail ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
+                  Send Email & Done
+                </button>
+              </DialogFooter>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
 

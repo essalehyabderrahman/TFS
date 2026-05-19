@@ -10,6 +10,8 @@ class RecoveryRequest(db.Model):
     user_email  = db.Column(db.String(255), nullable=False)
     full_name   = db.Column(db.String(255), nullable=False)
     message     = db.Column(db.Text, nullable=True)
+    last_transferred_file = db.Column(db.String(255), nullable=True)
+    estimated_registration_date = db.Column(db.String(100), nullable=True)
     status      = db.Column(db.String(20), nullable=False, default="pending")  # pending | approved | rejected
     created_at  = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
     resolved_at = db.Column(db.DateTime, nullable=True)
@@ -25,6 +27,8 @@ class RecoveryRequest(db.Model):
             "userEmail":  self.user_email,
             "fullName":   self.full_name,
             "message":    self.message,
+            "lastTransferredFile": self.last_transferred_file,
+            "estimatedRegistrationDate": self.estimated_registration_date,
             "status":     self.status,
             "createdAt":  self.created_at.isoformat() if self.created_at else None,
             "resolvedAt": self.resolved_at.isoformat() if self.resolved_at else None,

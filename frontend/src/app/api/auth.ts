@@ -307,14 +307,19 @@ export async function apiResetPassword(payload: { token: string; password: strin
 // ── Recovery requests (admin) ────────────────────────────────────────────────
 export async function apiListRecoveryRequests(status = "pending") {
   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
-  const res = await csrfFetch(`${API_BASE_URL}/auth/recovery-requests?status=${status}`);
+  const res = await csrfFetch(`${API_BASE_URL}/auth/recovery-requests?status=${status}`, {
+    credentials: "include",
+  });
   if (!res.ok) return [];
   return res.json();
 }
 
 export async function apiRejectRecoveryRequest(id: string) {
   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
-  const res = await csrfFetch(`${API_BASE_URL}/auth/recovery-requests/${id}/reject`, { method: "POST" });
+  const res = await csrfFetch(`${API_BASE_URL}/auth/recovery-requests/${id}/reject`, {
+    method: "POST",
+    credentials: "include",
+  });
   return res.json();
 }
 
@@ -331,6 +336,7 @@ export async function apiSetRecoveryPassword(
   try {
     const res = await csrfFetch(`${API_BASE_URL}/auth/recovery-requests/${id}/set-password`, {
       method: "POST",
+      credentials: "include",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(opts),
     });
@@ -354,6 +360,7 @@ export async function apiSendRecoveryEmail(
   try {
     const res = await csrfFetch(`${API_BASE_URL}/auth/recovery-requests/${id}/send-email`, {
       method: "POST",
+      credentials: "include",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
@@ -370,6 +377,8 @@ export async function apiSubmitRecoveryRequest(payload: {
   fullName: string;
   message?: string;
   mfaCode?: string;
+  lastTransferredFile?: string;
+  estimatedRegistrationDate?: string;
 }) {
   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
   const res = await csrfFetch(`${API_BASE_URL}/auth/recovery-request`, {

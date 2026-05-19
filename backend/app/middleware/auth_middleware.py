@@ -32,8 +32,9 @@ def jwt_required_custom(fn):
             return jsonify({"error": "MFA_REQUIRED"}), 403
 
         # [Security] Block any token that requires a password reset
-        # Allow ONLY the change-password endpoint to proceed
-        if claims.get("password_reset_required") and request.endpoint != "account.change_password":
+        # Allow only the change-password, get-account, and signout endpoints to proceed
+        allowed_endpoints = ("account.change_password", "account.get_account", "auth.signout")
+        if claims.get("password_reset_required") and request.endpoint not in allowed_endpoints:
             return jsonify({"error": "PASSWORD_RESET_REQUIRED", "message": "You must change your password before continuing."}), 403
 
         # [Session] Enforce 8-hour absolute max session lifetime

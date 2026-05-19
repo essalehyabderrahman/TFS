@@ -6,7 +6,7 @@ import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { apiSubmitRecoveryRequest } from "../api/auth";
 import { BackgroundParticles } from "../components/ui/BackgroundParticles";
-import { ShieldAlert, ShieldCheck, CheckCircle2 } from "lucide-react";
+import { ShieldAlert, CheckCircle2 } from "lucide-react";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import Lenis from "lenis";
@@ -24,6 +24,8 @@ export function ForgotPassword() {
   const [fullName, setFullName]   = useState("");
   const [message, setMessage]     = useState("");
   const [mfaCode, setMfaCode]     = useState("");
+  const [lastTransferredFile, setLastTransferredFile] = useState("");
+  const [estimatedRegistrationDate, setEstimatedRegistrationDate] = useState("");
   const [loading, setLoading]     = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -59,12 +61,18 @@ export function ForgotPassword() {
       email, fullName,
       message: message.trim() || undefined,
       mfaCode: (code ?? mfaCode) || undefined,
+      lastTransferredFile: lastTransferredFile.trim() || undefined,
+      estimatedRegistrationDate: estimatedRegistrationDate.trim() || undefined,
     });
     setLoading(false);
 
     if (res.error === "MFA_REQUIRED" || res.mfaRequired) {
       setStep("mfa");
       toast.info("Your account requires MFA verification.");
+      return;
+    }
+    if (res.error === "RECOVERY_FIELDS_REQUIRED") {
+      setFormError("MFA is not enabled on this account. You must provide the last transferred file and estimated registration date to verify your identity.");
       return;
     }
     if (res.error === "INVALID_CODE") {
@@ -258,6 +266,37 @@ export function ForgotPassword() {
                     />
                   </div>
 
+                  {/* Last Transferred File */}
+                  <div className="space-y-2">
+                    <Label htmlFor="last-transferred-file" className="text-white/40 text-[10px] uppercase font-black tracking-widest pl-1">
+                      Last Transferred File{" "}
+                      <span className="text-white/20 normal-case font-normal">(optional if MFA active)</span>
+                    </Label>
+                    <Input
+                      id="last-transferred-file"
+                      type="text"
+                      value={lastTransferredFile}
+                      onChange={e => setLastTransferredFile(e.target.value)}
+                      placeholder="e.g. project_presentation.pdf"
+                      className="bg-white/5 border-white/10 text-white placeholder:text-white/10 rounded-2xl h-14 focus:border-[#00d2ff]/50 focus:ring-0 transition-all"
+                    />
+                  </div>
+
+                  {/* Estimated Registration Date */}
+                  <div className="space-y-2">
+                    <Label htmlFor="estimated-registration-date" className="text-white/40 text-[10px] uppercase font-black tracking-widest pl-1">
+                      Estimated Registration Date{" "}
+                      <span className="text-white/20 normal-case font-normal">(optional if MFA active)</span>
+                    </Label>
+                    <Input
+                      id="estimated-registration-date"
+                      type="date"
+                      value={estimatedRegistrationDate}
+                      onChange={e => setEstimatedRegistrationDate(e.target.value)}
+                      className="bg-white/5 border-white/10 text-white rounded-2xl h-14 focus:border-[#00d2ff]/50 focus:ring-0 transition-all"
+                    />
+                  </div>
+
                   {/* Message */}
                   <div className="space-y-2">
                     <Label className="text-white/40 text-[10px] uppercase font-black tracking-widest pl-1">
@@ -273,14 +312,6 @@ export function ForgotPassword() {
                                  rounded-2xl p-4 text-sm focus:border-[#00d2ff]/50 focus:outline-none
                                  resize-none transition-all"
                     />
-                  </div>
-
-                  {/* MFA info */}
-                  <div className="flex items-start gap-3 p-4 rounded-2xl bg-white/[0.02] border border-white/[0.05]">
-                    <ShieldCheck size={13} className="text-[#00d2ff] shrink-0 mt-0.5" />
-                    <p className="text-white/30 text-[10px] leading-relaxed uppercase tracking-wide font-bold">
-                      If your account has MFA enabled, you will be prompted to verify before the request is submitted.
-                    </p>
                   </div>
 
                   {formError && (

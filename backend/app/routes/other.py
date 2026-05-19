@@ -244,6 +244,88 @@ def admin_set_password(user_id):
     return jsonify({"ok": True}), 200
 
 
+# ── POST /team/<user_id>/send-password-email ──────────────────────────────────
+@team_bp.post("/<user_id>/send-password-email")
+@csrf_protect
+@require_role("admin")
+@limiter.limit("10 per hour")
+def admin_send_password_email(user_id):
+    """
+    Allows an admin to send the temporary password notification email to a user.
+    """
+    import os, smtplib
+    from email.mime.text import MIMEText
+    from email.mime.multipart import MIMEMultipart
+
+    actor = current_user()
+    target = db.session.get(User, user_id)
+    if not target:
+        return jsonify({"error": "USER_NOT_FOUND"}), 404
+
+    # [Security] Admin cannot send password email to other admins unless they are root
+    if target.role == "admin" and not actor.is_root:
+        return jsonify({"error": "FORBIDDEN"}), 403
+
+    data = request.get_json(silent=True) or {}
+    to_addr = (data.get("to") or "").strip()
+    subject = (data.get("subject") or "").strip()
+    body = (data.get("body") or "").strip()
+
+    if not to_addr or not subject or not body:
+        return jsonify({"error": "MISSING_FIELDS"}), 400
+
+    smtp_sender   = os.environ.get("SMTP_SENDER_EMAIL")
+    smtp_password = os.environ.get("SMTP_APP_PASSWORD")
+    smtp_host     = os.environ.get("SMTP_HOST", "smtp.gmail.com")
+    smtp_port     = int(os.environ.get("SMTP_PORT", 587))
+
+    email_sent = False
+    if smtp_sender and smtp_password:
+        msg = MIMEMultipart()
+        msg["From"]    = f"TFS Security <{smtp_sender}>"
+        msg["To"]      = to_addr
+        msg["Subject"] = subject
+        msg.attach(MIMEText(body, "plain", "utf-8"))
+        try:
+            if smtp_port == 465:
+                with smtplib.SMTP_SSL(smtp_host, smtp_port, timeout=10) as srv:
+                    srv.login(smtp_sender, smtp_password)
+                    srv.sendmail(smtp_sender, to_addr, msg.as_string())
+            else:
+                with smtplib.SMTP(smtp_host, smtp_port, timeout=10) as srv:
+                    srv.ehlo(); srv.starttls(); srv.ehlo()
+                    srv.login(smtp_sender, smtp_password)
+                    srv.sendmail(smtp_sender, to_addr, msg.as_string())
+            email_sent = True
+        except Exception as e:
+            db.session.add(AuditLog(
+                id=str(uuid.uuid4()),
+                user_id=actor.id,
+                user_email=actor.email,
+                action="MEMBER_PASSWORD_EMAIL_FAILED",
+                resource=target.email,
+                ip_address=request.remote_addr,
+                status="error",
+                details=f"SMTP error sending password email to {target.email}: {e}"
+            ))
+            db.session.commit()
+            return jsonify({"error": f"SMTP error: {e}"}), 500
+
+    db.session.add(AuditLog(
+        id=str(uuid.uuid4()),
+        user_id=actor.id,
+        user_email=actor.email,
+        action="MEMBER_PASSWORD_EMAIL_SENT",
+        resource=target.email,
+        ip_address=request.remote_addr,
+        status="info",
+        details=f"Password email sent to {target.email} by admin {actor.email}."
+    ))
+    db.session.commit()
+
+    return jsonify({"ok": True, "emailSent": email_sent}), 200
+
+
 # ── GET /team/settings ────────────────────────────────────────────────────────
 @team_bp.get("/settings")
 @require_role("admin")

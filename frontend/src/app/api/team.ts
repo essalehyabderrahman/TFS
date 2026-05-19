@@ -89,3 +89,15 @@ export async function apiAdminSetPassword(userId: string, password: string) {
     return { ok: false, error: err?.message ?? "UNKNOWN_ERROR" }
   }
 }
+
+export async function apiAdminSendPasswordEmail(userId: string, emailData: { to: string; subject: string; body: string }) {
+  try {
+    const data = await apiRequest<{ ok: boolean; emailSent: boolean }>(`/team/${userId}/send-password-email`, {
+      method: "POST",
+      body: emailData
+    })
+    return { ok: true, emailSent: data.emailSent }
+  } catch (err: any) {
+    return { ok: false, error: err?.message ?? "UNKNOWN_ERROR" }
+  }
+}
