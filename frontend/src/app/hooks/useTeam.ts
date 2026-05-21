@@ -41,10 +41,11 @@ export function useTeam(): UseTeamReturn {
       email,
       role,
       status: "pending",
-      joinedAt: new Date(),
-      lastActive: new Date(),
+      joinedAt: new Date().toISOString(),
+      lastActive: new Date().toISOString(),
       transfersCount: 0,
       avatar: email.slice(0, 2).toUpperCase(),
+      isRoot: false,
     }
     setMembers((prev) => [...prev, newMember])
   }, [])
