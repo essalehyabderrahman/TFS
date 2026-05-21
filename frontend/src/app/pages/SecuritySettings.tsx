@@ -254,7 +254,7 @@ export function SecuritySettings() {
               {
                 icon: <Globe size={18} style={{ color: "#f59e0b" }} />,
                 label: "Allow External File Sharing",
-                desc: "Permit files to be shared with users outside the platform. Can be further restricted per group.",
+                desc: "Permit files to be shared with users outside the groups. Can be further restricted per group.",
                 checked: allowExternalSharing,
                 onChange: (v: boolean) => handlePolicyToggle("allowExternalSharing", v, setAllowExternalSharing, allowExternalSharing),
               },

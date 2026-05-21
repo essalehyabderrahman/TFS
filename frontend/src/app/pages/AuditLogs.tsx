@@ -402,15 +402,8 @@ export function AuditLogs() {
         >
           {selectedLog && (
             <>
-              <DialogHeader className="flex flex-row items-center justify-between pr-0">
+              <DialogHeader>
                 <DialogTitle className="text-white text-lg sm:text-xl">Audit Log Details</DialogTitle>
-                <button
-                  onClick={() => setSelectedLog(null)}
-                  className="ml-auto flex items-center justify-center w-8 h-8 rounded-lg hover:bg-white/10 transition-colors shrink-0"
-                  aria-label="Close"
-                >
-                  <span style={{ color: "#6b7fa8", fontSize: "20px", lineHeight: 1 }}>✕</span>
-                </button>
               </DialogHeader>
               <div className="space-y-4">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

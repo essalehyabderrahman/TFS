@@ -37,7 +37,7 @@ function formatBytes(bytes: number): string {
 }
 
 export function AccountManagement() {
-  const { signOut, signIn, isRootAdmin, isPasswordResetRequired } = useAuth();
+  const { signOut, signIn, isRootAdmin, isPasswordResetRequired, clearPasswordResetRequired } = useAuth();
   const navigate = useNavigate();
 
   const [account, setAccount] = useState<AccountData | null>(null);
@@ -142,6 +142,12 @@ export function AccountManagement() {
       toast.success("Password changed. All other sessions have been invalidated.");
       setShowPasswordDialog(false);
       setCurrentPassword(""); setNewPassword(""); setConfirmPassword("");
+      // [Fix] If this was a mandatory reset, unlock the full app layout.
+      // The backend already issued a fresh cookie with password_reset_required=false,
+      // so we just need to update the local auth state to match.
+      if (isPasswordResetRequired) {
+        clearPasswordResetRequired();
+      }
     } else {
       const messages: Record<string, string> = {
         WRONG_PASSWORD: "Current password is incorrect.",

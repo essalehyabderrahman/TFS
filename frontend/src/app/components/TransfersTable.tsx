@@ -984,7 +984,7 @@ export function TransfersTable({ refreshKey }: TransfersTableProps = {}) {
           {detailsTransfer && (
             <>
               <DialogHeader
-                className="px-6 lg:px-8 py-5 lg:py-6 flex flex-row items-center justify-between"
+                className="px-6 lg:px-8 py-5 lg:py-6"
                 style={{
                   background: "rgba(255,255,255,0.02)",
                   borderBottom: "1px solid var(--border)",
@@ -996,14 +996,6 @@ export function TransfersTable({ refreshKey }: TransfersTableProps = {}) {
                 >
                   Transfer Details
                 </DialogTitle>
-                <button
-                  onClick={() => setDetailsTransfer(null)}
-                  className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-accent transition-colors shrink-0 m-0"
-                  style={{ marginTop: 0 }}
-                  aria-label="Close"
-                >
-                  <span style={{ color: "var(--muted-foreground)", fontSize: "20px", lineHeight: 1 }}>✕</span>
-                </button>
               </DialogHeader>
               <div className="px-6 lg:px-8 py-5 lg:py-6 space-y-5 lg:space-y-6">
                 {/* File Info */}

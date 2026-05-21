@@ -22,6 +22,9 @@ interface AuthContextValue {
   signOut: () => void
   expireSession: (reason: SessionExpiredReason) => void
   dismissExpiredSession: () => void
+  // [Security] Called after a successful forced-password-change so the restricted
+  // layout is unlocked without requiring a full page reload or re-login.
+  clearPasswordResetRequired: () => void
 }
 
 // Module-level refs so apiRequest interceptor can trigger signout / session expiry
@@ -93,6 +96,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // [Session] Track user activity to proactively refresh the token
   const lastActivityRef = useRef<number>(Date.now())
+
+  // [Fix] Guard against race condition: in-flight requests returning 401
+  // after an intentional sign-out would trigger expireSession and show the
+  // "session expired" modal even though the user already signed out.
+  const isSigningOutRef = useRef(false)
   useEffect(() => {
     const updateActivity = () => { lastActivityRef.current = Date.now() }
     window.addEventListener("mousemove", updateActivity, { passive: true })
@@ -149,10 +157,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const signOut = useCallback(async () => {
-    await apiSignOut()
-    setUser(null)
-    setIsMfaPending(false)
-    setSessionExpiredReason(null)
+    // [Fix] Set guard BEFORE the async call so any 401s from in-flight
+    // background requests that resolve during sign-out don't trigger expireSession.
+    isSigningOutRef.current = true
+    try {
+      await apiSignOut()
+    } catch {
+      // Ignore — cookie may already be invalid if the token expired at the
+      // exact moment the user clicked sign-out. The session is being terminated
+      // intentionally regardless.
+    } finally {
+      setUser(null)
+      setIsMfaPending(false)
+      setIsGroupAdmin(false)
+      setSessionExpiredReason(null)
+      isSigningOutRef.current = false
+    }
   }, [])
 
   // [Security] expireSession: clears the server-side HttpOnly cookie immediately,
@@ -160,6 +180,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // The cookie is destroyed before the modal renders — the user has no valid session
   // during the modal window regardless of how they interact with it.
   const expireSession = useCallback(async (reason: SessionExpiredReason) => {
+    // [Fix] Suppress modal if an intentional sign-out is already in progress.
+    // This prevents in-flight 401 responses from background requests showing
+    // a spurious "session terminated" popup after the user has already signed out.
+    if (isSigningOutRef.current) return
     await apiSignOut()          // nuke HttpOnly cookie server-side first
     setUser(null)
     setIsMfaPending(false)
@@ -169,6 +193,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const dismissExpiredSession = useCallback(() => {
     setSessionExpiredReason(null)
+  }, [])
+
+  const clearPasswordResetRequired = useCallback(() => {
+    setIsPasswordResetRequired(false)
   }, [])
 
   // Keep module-level refs in sync so apiRequest interceptor can call them
@@ -200,6 +228,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         clearSession,
         expireSession,
         dismissExpiredSession,
+        clearPasswordResetRequired,
       }}
     >
       {children}

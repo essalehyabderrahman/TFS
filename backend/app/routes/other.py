@@ -122,6 +122,12 @@ def invite_member():
     if User.query.filter_by(email=email).first():
         return jsonify({"error": "EMAIL_TAKEN"}), 409
 
+    if password:
+        from app.services.auth_service import _validate_password
+        pw_error = _validate_password(password)
+        if pw_error:
+            return jsonify({"error": pw_error}), 400
+
     member = User(
         id=str(uuid.uuid4()),
         name=name,
@@ -273,8 +279,13 @@ def admin_set_password(user_id):
 
     data = request.get_json(silent=True) or {}
     new_password = data.get("password")
-    if not new_password or len(new_password) < 8:
+    if not new_password:
         return jsonify({"error": "INVALID_PASSWORD"}), 400
+
+    from app.services.auth_service import _validate_password
+    pw_error = _validate_password(new_password)
+    if pw_error:
+        return jsonify({"error": pw_error}), 400
 
     target.set_password(new_password)
     target.password_reset_required = True

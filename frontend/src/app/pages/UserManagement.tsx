@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react"
 import { useAuth } from "../hooks/useAuth"
 import { toast } from "sonner"
-import { Users, Trash2, Loader2, ShieldCheck, ShieldOff, UserCheck, UserX, Crown, UserPlus, ChevronDown, Key, HardDrive } from "lucide-react"
+import { Users, Trash2, Loader2, ShieldCheck, ShieldOff, UserCheck, UserX, Crown, UserPlus, ChevronDown, Key, HardDrive, Check, X } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "../components/ui/dialog"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "../components/ui/alert-dialog"
 import { apiRequest } from "../api/client"
@@ -49,6 +49,15 @@ export function UserManagement() {
   const [passwordTarget, setPasswordTarget] = useState<Member | null>(null)
   const [newPassword, setNewPassword] = useState("")
   const [isSettingPassword, setIsSettingPassword] = useState(false)
+
+  const passwordRequirements = [
+    { label: "At least 12 characters", test: (p: string) => p.length >= 12 },
+    { label: "Contains a number",       test: (p: string) => /\d/.test(p) },
+    { label: "Lowercase & Uppercase",   test: (p: string) => /[a-z]/.test(p) && /[A-Z]/.test(p) },
+    { label: "Special character",       test: (p: string) => /[!@#$%^&*(),.?":{}|<>_\-+=\[\]\\;'/`~]/.test(p) },
+  ]
+  const isNewPasswordStrong = passwordRequirements.every(req => req.test(newPassword))
+  const isInvitePasswordStrong = !invitePassword || passwordRequirements.every(req => req.test(invitePassword))
 
   // Configure quota dialog
   const [quotaTarget, setQuotaTarget] = useState<Member | null>(null)
@@ -127,6 +136,10 @@ export function UserManagement() {
       toast.error("Name and email are required.")
       return
     }
+    if (invitePassword.trim() && !isInvitePasswordStrong) {
+      toast.error("Invite password does not meet complexity requirements.")
+      return
+    }
     setIsInviting(true)
     const result = await apiInviteMember(inviteName.trim(), inviteEmail.trim(), inviteRole, invitePassword.trim())
     if (!result.ok) {
@@ -135,6 +148,11 @@ export function UserManagement() {
         MISSING_FIELDS: "Name and email are required.",
         FORBIDDEN:     "You do not have permission to invite users.",
         INVALID_ROLE:  "Invalid role selected.",
+        PASSWORD_TOO_SHORT: "Password must be at least 12 characters.",
+        PASSWORD_NO_UPPERCASE: "Password must contain an uppercase letter.",
+        PASSWORD_NO_LOWERCASE: "Password must contain a lowercase letter.",
+        PASSWORD_NO_DIGIT: "Password must contain a number.",
+        PASSWORD_NO_SYMBOL: "Password must contain a special character.",
       }
       toast.error(messages[result.error ?? ""] ?? "Failed to create user.")
     } else {
@@ -172,8 +190,8 @@ export function UserManagement() {
 
   async function handleSetPassword() {
     if (!passwordTarget || !newPassword.trim()) return
-    if (newPassword.length < 8) {
-      toast.error("Password must be at least 8 characters.")
+    if (!isNewPasswordStrong) {
+      toast.error("Password does not meet complexity requirements.")
       return
     }
     setIsSettingPassword(true)
@@ -183,7 +201,14 @@ export function UserManagement() {
       setPasswordTarget(null)
       setNewPassword("")
     } else {
-      toast.error("Failed to update password.")
+      const messages: Record<string, string> = {
+        PASSWORD_TOO_SHORT: "Password must be at least 12 characters.",
+        PASSWORD_NO_UPPERCASE: "Password must contain an uppercase letter.",
+        PASSWORD_NO_LOWERCASE: "Password must contain a lowercase letter.",
+        PASSWORD_NO_DIGIT: "Password must contain a number.",
+        PASSWORD_NO_SYMBOL: "Password must contain a special character.",
+      }
+      toast.error(messages[result.error ?? ""] ?? "Failed to update password.")
     }
     setIsSettingPassword(false)
   }
@@ -478,10 +503,26 @@ export function UserManagement() {
                 placeholder="••••••••"
                 value={invitePassword}
                 onChange={e => setInvitePassword(e.target.value)}
-                onKeyDown={e => { if (e.key === "Enter" && !isInviting) handleInvite() }}
+                onKeyDown={e => { if (e.key === "Enter" && !isInviting && isInvitePasswordStrong) handleInvite() }}
                 className="w-full mt-1 px-4 py-2.5 rounded-lg text-white placeholder:text-slate-500 outline-none"
                 style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", fontSize: "14px" }}
               />
+              {invitePassword && (
+                <div className="grid grid-cols-2 gap-2 mt-3 p-3 rounded-xl animate-fadeIn"
+                  style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.08)" }}>
+                  {passwordRequirements.map((req, i) => (
+                    <div key={i} className="flex items-center gap-2">
+                      {req.test(invitePassword)
+                        ? <Check size={10} style={{ color: "#00d2ff" }} />
+                        : <div className="w-1.5 h-1.5 rounded-full ml-0.5" style={{ background: "rgba(255,255,255,0.1)" }} />}
+                      <span style={{
+                        fontSize: "9px", fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase",
+                        color: req.test(invitePassword) ? "rgba(255,255,255,0.6)" : "rgba(255,255,255,0.2)"
+                      }}>{req.label}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
             <div>
               <label style={{ color: "#4a5578", fontSize: "12px", fontWeight: 600, letterSpacing: "0.05em" }}>ROLE</label>
@@ -532,7 +573,7 @@ export function UserManagement() {
               style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "#e2e8f0" }}>
               Cancel
             </button>
-            <button onClick={handleInvite} disabled={isInviting}
+            <button onClick={handleInvite} disabled={isInviting || !isInvitePasswordStrong}
               className="px-4 py-2 rounded-lg flex items-center gap-2 disabled:opacity-50"
               style={{ background: "linear-gradient(135deg, #0B7FFF 0%, #0960D9 100%)", color: "white" }}>
               {isInviting && <Loader2 size={16} className="animate-spin" />}
@@ -584,10 +625,26 @@ export function UserManagement() {
                 placeholder="••••••••"
                 value={newPassword}
                 onChange={e => setNewPassword(e.target.value)}
-                onKeyDown={e => { if (e.key === "Enter" && !isSettingPassword) handleSetPassword() }}
+                onKeyDown={e => { if (e.key === "Enter" && !isSettingPassword && isNewPasswordStrong) handleSetPassword() }}
                 className="w-full mt-1 px-4 py-2.5 rounded-lg text-white placeholder:text-slate-500 outline-none"
                 style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", fontSize: "14px" }}
               />
+              {newPassword && (
+                <div className="grid grid-cols-2 gap-2 mt-3 p-3 rounded-xl animate-fadeIn"
+                  style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.08)" }}>
+                  {passwordRequirements.map((req, i) => (
+                    <div key={i} className="flex items-center gap-2">
+                      {req.test(newPassword)
+                        ? <Check size={10} style={{ color: "#00d2ff" }} />
+                        : <div className="w-1.5 h-1.5 rounded-full ml-0.5" style={{ background: "rgba(255,255,255,0.1)" }} />}
+                      <span style={{
+                        fontSize: "9px", fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase",
+                        color: req.test(newPassword) ? "rgba(255,255,255,0.6)" : "rgba(255,255,255,0.2)"
+                      }}>{req.label}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
           <DialogFooter className="mt-6">
@@ -596,7 +653,7 @@ export function UserManagement() {
               style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "#e2e8f0" }}>
               Cancel
             </button>
-            <button onClick={handleSetPassword} disabled={isSettingPassword}
+            <button onClick={handleSetPassword} disabled={isSettingPassword || !isNewPasswordStrong}
               className="px-4 py-2 rounded-lg flex items-center gap-2 disabled:opacity-50"
               style={{ background: "linear-gradient(135deg, #f59e0b 0%, #d97706 100%)", color: "white" }}>
               {isSettingPassword && <Loader2 size={16} className="animate-spin" />}
