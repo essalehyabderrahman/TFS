@@ -2,6 +2,7 @@ import { useState } from "react";
 import { UploadZone } from "../components/UploadZone";
 import { TransfersTable } from "../components/TransfersTable";
 import { StatsBar } from "../components/StatsBar";
+import { QuotaBar } from "../components/QuotaBar";
 
 export function ActiveTransfers() {
   const [refreshKey, setRefreshKey] = useState(0);
@@ -10,6 +11,9 @@ export function ActiveTransfers() {
     <div className="flex flex-col gap-4 sm:gap-6">
       {/* Stats */}
       <StatsBar />
+
+      {/* Quota */}
+      <QuotaBar refreshKey={refreshKey} />
 
       {/* Upload Zone */}
       <section>

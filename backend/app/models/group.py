@@ -11,6 +11,9 @@ class Group(db.Model):
     created_by_id = db.Column(db.String(36), db.ForeignKey("users.id"), nullable=True)
     created_at    = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
+    # Storage Quota (V2 merge)
+    storage_quota_bytes = db.Column(db.BigInteger, nullable=True)  # None = unlimited
+
     # Relationships
     created_by    = db.relationship("User", foreign_keys=[created_by_id])
     members       = db.relationship("GroupMember", back_populates="group",
@@ -28,6 +31,7 @@ class Group(db.Model):
             "createdBy":   self.created_by.email if self.created_by else "system",
             "createdAt":   self.created_at.isoformat(),
             "memberCount": len(self.members),
+            "storageQuotaBytes": self.storage_quota_bytes,
         }
 
     def __init__(self, **kwargs):
@@ -77,6 +81,7 @@ class GroupSettings(db.Model):
     allow_member_directory = db.Column(db.Boolean, nullable=False, default=False)
     allow_member_invite    = db.Column(db.Boolean, nullable=False, default=False)
     allow_external_sharing = db.Column(db.Boolean, nullable=False, default=False)
+    allow_group_transfers  = db.Column(db.Boolean, nullable=False, default=False)
     updated_by_id          = db.Column(db.String(36), db.ForeignKey("users.id"), nullable=True)
     updated_at             = db.Column(db.DateTime,
                                        default=lambda: datetime.now(timezone.utc),
@@ -92,6 +97,7 @@ class GroupSettings(db.Model):
             "allowMemberDirectory": self.allow_member_directory,
             "allowMemberInvite":    self.allow_member_invite,
             "allowExternalSharing": self.allow_external_sharing,
+            "allowGroupTransfers":  self.allow_group_transfers,
             "updatedAt":            self.updated_at.isoformat() if self.updated_at else None,
             "updatedBy":            self.updated_by.email if self.updated_by else None,
         }

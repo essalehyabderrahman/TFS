@@ -3,48 +3,48 @@
 
 :root {
   --font-size: 16px;
-  --background: #ffffff;
-  --foreground: oklch(0.145 0 0);
-  --card: #ffffff;
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: #030213;
-  --primary-foreground: oklch(1 0 0);
-  --secondary: oklch(0.95 0.0058 264.53);
-  --secondary-foreground: #030213;
-  --muted: #ececf0;
-  --muted-foreground: #717182;
-  --accent: #e9ebef;
-  --accent-foreground: #030213;
-  --destructive: #d4183d;
+  --background: #0a0e1a;
+  --foreground: #e8eaf0;
+  --card: rgba(255, 255, 255, 0.04);
+  --card-foreground: #e8eaf0;
+  --popover: #0f1420;
+  --popover-foreground: #e8eaf0;
+  --primary: #00d2ff;
+  --primary-foreground: #000000;
+  --secondary: rgba(255, 255, 255, 0.06);
+  --secondary-foreground: #e8eaf0;
+  --muted: rgba(255, 255, 255, 0.08);
+  --muted-foreground: rgba(255, 255, 255, 0.5);
+  --accent: rgba(0, 210, 255, 0.12);
+  --accent-foreground: #00d2ff;
+  --destructive: #ff4d4d;
   --destructive-foreground: #ffffff;
-  --border: rgba(0, 0, 0, 0.1);
-  --input: transparent;
-  --input-background: #f3f3f5;
-  --switch-background: #cbced4;
+  --border: rgba(255, 255, 255, 0.08);
+  --input: rgba(255, 255, 255, 0.04);
+  --input-background: rgba(255, 255, 255, 0.04);
+  --switch-background: rgba(255, 255, 255, 0.15);
   --font-weight-medium: 500;
   --font-weight-normal: 400;
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.646 0.222 41.116);
-  --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
+  --ring: #00d2ff;
+  --chart-1: #00d2ff;
+  --chart-2: #7c3aed;
+  --chart-3: #ec4899;
+  --chart-4: #10b981;
+  --chart-5: #f59e0b;
   --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: #030213;
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --sidebar: #0a0e1a;
+  --sidebar-foreground: #e8eaf0;
+  --sidebar-primary: #00d2ff;
+  --sidebar-primary-foreground: #000000;
+  --sidebar-accent: rgba(255, 255, 255, 0.06);
+  --sidebar-accent-foreground: #e8eaf0;
+  --sidebar-border: rgba(255, 255, 255, 0.08);
+  --sidebar-ring: #00d2ff;
 
   /* Glassmorphism tokens */
-  --glass-bg: rgba(255, 255, 255, 0.7);
-  --glass-border: rgba(255, 255, 255, 0.3);
-  --glass-blur: 12px;
+  --glass-bg: rgba(10, 14, 26, 0.75);
+  --glass-border: rgba(255, 255, 255, 0.1);
+  --glass-blur: 16px;
 }
 
 .dark {
@@ -288,10 +288,4 @@
     transition-duration: 0s !important;
     transition-delay: 0s !important;
   }
-}
-
-/* Date input calendar picker indicator in dark mode */
-.dark input[type="date"]::-webkit-calendar-picker-indicator {
-  filter: invert(1);
-  cursor: pointer;
 }

@@ -123,6 +123,7 @@ export interface AclEntry {
   canWrite: boolean;
   canDelete: boolean;
   canShare: boolean;
+  canDownload: boolean;
   grantedAt: string;
 }
 
@@ -133,6 +134,7 @@ export interface AclPayload {
   canWrite: boolean;
   canDelete: boolean;
   canShare: boolean;
+  canDownload: boolean;
 }
 
 export async function fetchAcl(

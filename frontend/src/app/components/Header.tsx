@@ -56,7 +56,7 @@ export function Header({ onMenuClick }: HeaderProps) {
     if (path === "/dashboard/security") return "Security Settings";
     if (path === "/dashboard/account") return "Account Management";
     if (path === "/dashboard/users") return "User Directory";
-    if (path === "/dashboard/groups") return "Group Workspace";
+    if (path === "/dashboard/groups") return "Team Workspace";
     if (path === "/dashboard/contacts") return "Contacts";
     return "TFS Dashboard";
   };

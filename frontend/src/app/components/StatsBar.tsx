@@ -70,7 +70,7 @@ export function StatsBar() {
       {isLoading ? (
         Array(4).fill(0).map((_, i) => (
           <div key={i} className="rounded-xl px-5 py-6 flex items-center justify-center bg-white/5 border border-white/10 animate-pulse">
-            <Loader2 className="animate-spin text-slate-700" size={24} />
+            <Loader2 className="animate-spin" style={{ color: "var(--muted-foreground)" }} size={24} />
           </div>
         ))
       ) : (
@@ -81,8 +81,8 @@ export function StatsBar() {
               key={stat.label}
               className="rounded-xl px-4 sm:px-5 py-3 sm:py-4 flex items-center gap-3 sm:gap-4"
               style={{
-                background: "rgba(255,255,255,0.025)",
-                border: "1px solid rgba(255,255,255,0.06)",
+                background: "var(--card)",
+                border: "1px solid var(--border)",
               }}
             >
               <div
@@ -92,10 +92,10 @@ export function StatsBar() {
                 <Icon size={18} style={{ color: stat.color }} strokeWidth={1.8} />
               </div>
               <div className="min-w-0">
-                <p style={{ fontSize: "18px", color: "#f1f5f9", fontWeight: 700, lineHeight: 1.2 }} className="sm:text-xl">
+                <p style={{ fontSize: "18px", color: "var(--foreground)", fontWeight: 700, lineHeight: 1.2 }} className="sm:text-xl">
                   {stat.value}
                 </p>
-                <p style={{ fontSize: "11px", color: "#475569", marginTop: "2px" }} className="sm:text-xs truncate">
+                <p style={{ fontSize: "11px", color: "var(--muted-foreground)", marginTop: "2px" }} className="sm:text-xs truncate">
                   {stat.label}
                 </p>
                 <p

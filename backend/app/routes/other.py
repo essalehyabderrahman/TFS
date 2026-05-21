@@ -32,6 +32,46 @@ def _get_settings() -> TeamSettings:
 
 
 
+@team_bp.get("/search")
+@jwt_required_custom
+def search_users():
+    """
+    Email prefix search for invite autocomplete.
+    [Security] Admin-only. Returns at most 5 non-suspended, non-root users.
+    Requires at least 2 characters to prevent full-directory enumeration.
+    """
+    actor = current_user()
+    if actor.role != "admin":
+        return jsonify({"error": "FORBIDDEN"}), 403
+
+    q = request.args.get("q", "").strip().lower()
+    if len(q) < 2:
+        return jsonify([]), 200
+
+    users = (
+        User.query
+        .filter(
+            User.email.ilike(f"%{q}%"),
+            User.status != "suspended",
+            User.is_root == False,          # noqa: E712 — SQLAlchemy requires ==
+            User.id != actor.id,
+        )
+        .order_by(User.email)
+        .limit(5)
+        .all()
+    )
+
+    return jsonify([
+        {
+            "id":     u.id,
+            "email":  u.email,
+            "name":   u.name,
+            "avatar": u.avatar or u._initials(),
+        }
+        for u in users
+    ]), 200
+
+
 @team_bp.get("")
 @jwt_required_custom
 def list_team():
@@ -150,6 +190,17 @@ def update_member(member_id):
             member.token_version = (member.token_version or 0) + 1
     if "name" in data:
         member.name = data["name"].strip()
+
+    # Quota management (admin only)
+    if "storageQuota" in data:
+        quota_val = data["storageQuota"]
+        if quota_val is None:
+            member.storage_quota_bytes = None  # Remove quota (unlimited)
+        else:
+            try:
+                member.storage_quota_bytes = max(0, int(quota_val))
+            except (ValueError, TypeError):
+                return jsonify({"error": "INVALID_QUOTA_VALUE"}), 400
 
     db.session.commit()
 
@@ -446,11 +497,22 @@ def get_account():
     ).filter_by(uploaded_by_id=user.id, is_deleted=False).scalar() or 0
 
     settings = _get_settings()
+
+    # Quota info
+    from app.services.quota_service import get_quota_info
+    quota = get_quota_info(user)
+
+    # Pending quota request
+    from app.models.quota_request import QuotaRequest
+    pending_qr = QuotaRequest.query.filter_by(user_id=user.id, status="pending").first()
+
     result = {
         **user.to_dict(),
         "transfersCount": transfers_count,
         "storageUsedBytes": total_bytes,
         "requireMfa": settings.require_mfa,
+        "quotaInfo": quota,
+        "pendingQuotaRequest": pending_qr.to_dict() if pending_qr else None,
     }
 
     # Group membership counts — scoped by role

@@ -7,7 +7,7 @@ import {
   Plus, ArrowLeft, Folder, LayoutGrid, List,
   Unlock, Trash2, History, RotateCcw, Pencil, X, Check,
   MoveRight, FileQuestion, ChevronRight, MoreHorizontal, Home, ArrowUpDown, ArrowUp, ArrowDown,
-  SquarePen, Shield
+  SquarePen, Shield, HardDrive, Infinity, Settings
 } from "lucide-react"
 
 const isEditableText = (name: string, fileType: string | null) => {
@@ -19,14 +19,24 @@ import { format } from "date-fns"
 import {
   fetchGroups, fetchGroupMembers, fetchGroupTransfers, uploadGroupTransfer,
   createGroupFolder, renameGroupItem, moveGroupItem, lockGroupItem, unlockGroupItem,
-  fetchItemVersions, restoreItemVersion, uploadGroupVersion,
-  type Group, type GroupMember, type FileVersion
+  fetchItemVersions, restoreItemVersion, uploadGroupVersion, fetchGroupQuota, updateGroupSettings,
+  type Group, type GroupMember, type FileVersion, type GroupQuotaInfo
 } from "../api/groups"
 import { EncryptionChoiceModal } from "../components/EncryptionChoiceModal"
 import { FileViewer } from "../components/ui/FileViewer"
 import { AclModal } from "../components/ui/AclModal"
 
 type Tab = "files" | "members"
+
+interface FilePermissions {
+  canRead: boolean
+  canWrite: boolean
+  canDelete: boolean
+  canShare: boolean
+  canDownload: boolean
+  isOwner: boolean
+  isAdmin: boolean
+}
 
 interface GT {
   id: string
@@ -51,6 +61,7 @@ interface GT {
   sentAt: string | null
   parentId: string | null
   itemType: "file" | "folder"
+  permissions?: FilePermissions
 }
 
 function splitName(filename: string): { name: string; ext: string } {
@@ -137,6 +148,14 @@ export function GroupWorkspace() {
   const [previewEditMode, setPreviewEditMode] = useState(false)
   const [aclItem, setAclItem] = useState<GT | null>(null)
 
+  // Group quota state
+  const [groupQuota, setGroupQuota] = useState<GroupQuotaInfo | null>(null)
+  const [showQuotaDialog, setShowQuotaDialog] = useState(false)
+  const [quotaInput, setQuotaInput] = useState("")
+  const [quotaUnit, setQuotaUnit] = useState<"MB" | "GB">("GB")
+  const [quotaUnlimited, setQuotaUnlimited] = useState(false)
+  const [isSavingQuota, setIsSavingQuota] = useState(false)
+
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Load groups on mount
@@ -190,6 +209,69 @@ export function GroupWorkspace() {
     })
   }, [selectedGroup, tab])
 
+  // Load group quota when group changes
+  useEffect(() => {
+    if (!selectedGroup) { setGroupQuota(null); return }
+    fetchGroupQuota(selectedGroup.id).then(res => {
+      if (!res.error && res.data) setGroupQuota(res.data)
+      else setGroupQuota(null)
+    })
+  }, [selectedGroup])
+
+  function openQuotaDialog() {
+    if (selectedGroup?.storageQuotaBytes == null) {
+      setQuotaUnlimited(true)
+      setQuotaInput("")
+    } else {
+      setQuotaUnlimited(false)
+      const gb = selectedGroup.storageQuotaBytes / 1073741824
+      if (gb >= 1) {
+        setQuotaInput(String(parseFloat(gb.toFixed(1))))
+        setQuotaUnit("GB")
+      } else {
+        setQuotaInput(String(Math.round(selectedGroup.storageQuotaBytes / 1048576)))
+        setQuotaUnit("MB")
+      }
+    }
+    setShowQuotaDialog(true)
+  }
+
+  async function handleSaveQuota() {
+    if (!selectedGroup) return
+    setIsSavingQuota(true)
+    const quotaVal = quotaUnlimited
+      ? null
+      : Math.round(parseFloat(quotaInput) * (quotaUnit === "GB" ? 1073741824 : 1048576))
+    const res = await updateGroupSettings(selectedGroup.id, { storageQuotaBytes: quotaVal })
+    if (!res.error) {
+      toast.success("Group quota updated.")
+      setSelected({ ...selectedGroup, storageQuotaBytes: quotaVal })
+      // Reload quota info
+      const qRes = await fetchGroupQuota(selectedGroup.id)
+      if (!qRes.error && qRes.data) setGroupQuota(qRes.data)
+      setShowQuotaDialog(false)
+    } else {
+      toast.error(res.error ?? "Failed to update quota.")
+    }
+    setIsSavingQuota(false)
+  }
+
+  function fmtBytes(bytes: number): string {
+    if (bytes === 0) return "0 B"
+    const k = 1024
+    const sizes = ["B", "KB", "MB", "GB", "TB"]
+    const i = Math.floor(Math.log(bytes) / Math.log(k))
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i]
+  }
+
+  function getQuotaColor(percent: number) {
+    if (percent < 60) return { gradient: "linear-gradient(90deg, #00E5A0 0%, #00d2ff 100%)", glow: "rgba(0,229,160,0.3)", text: "#00E5A0" }
+    if (percent < 85) return { gradient: "linear-gradient(90deg, #FBBF24 0%, #F59E0B 100%)", glow: "rgba(251,191,36,0.3)", text: "#FBBF24" }
+    return { gradient: "linear-gradient(90deg, #F87171 0%, #EF4444 100%)", glow: "rgba(248,113,113,0.3)", text: "#F87171" }
+  }
+
+  const isGroupAdmin = selectedGroup?.myRole === "admin" || user?.role === "admin"
+
   // Breadcrumbs calculation
   const getBreadcrumbs = () => {
     const crumbs: { id: string | null; name: string }[] = [{ id: null, name: "Root Workspace" }]
@@ -213,16 +295,77 @@ export function GroupWorkspace() {
     }
   }, [renamingId])
 
+  // ── Permission helpers (must be defined before filteredTransfers) ────────────
+  const canManageAcl = (item: GT): boolean => {
+    if (!user) return false
+    // Use backend permissions if available
+    if (item.permissions) return item.permissions.canShare || item.permissions.isAdmin || item.permissions.isOwner
+    if (user.role === "admin") return true
+    const myMember = members.find(m => m.userId === user.id)
+    if (myMember?.role === "admin") return true
+    if (item.uploadedBy === user.email) return true
+    return false
+  }
+
+  const canRead = (item: GT): boolean => {
+    // If backend sent permissions, use them STRICTLY
+    if (item.permissions) {
+      return item.permissions.canRead
+    }
+    // Fallback only if no permissions object (shouldn't happen for group files)
+    // Admins, owners, group admins can always read
+    if (user?.role === "admin") return true
+    if (item.uploadedBy === user?.email) return true
+    const myMember = members.find(m => m.userId === user?.id)
+    if (myMember?.role === "admin") return true
+    // For group files without explicit permissions, deny by default for security
+    return false
+  }
+
+  const canWrite = (item: GT): boolean => {
+    // If backend sent permissions, use them
+    if (item.permissions) return item.permissions.canWrite
+    return !!(user?.role === "admin" ||
+    item.uploadedBy === user?.email ||
+    members.find(m => m.userId === user?.id)?.role === "admin")
+  }
+
+  const canDelete = (item: GT): boolean => {
+    if (item.permissions) return item.permissions.canDelete
+    return canWrite(item)
+  }
+
+  const canDownload = (item: GT): boolean => {
+    if (item.permissions) return item.permissions.canDownload
+    // Fallback: same as canRead (admins, owners, group admins, members)
+    return canRead(item)
+  }
+
+  const canUploadHere = (): boolean => {
+    if (!user || transfersDisabled) return false
+    if (user.role === "admin") return true
+    const myMember = members.find(m => m.userId === user.id)
+    if (myMember?.role === "admin") return true
+    if (!currentFolderId) return true
+    const folder = transfers.find(t => t.id === currentFolderId)
+    if (!folder) return true
+    return folder.uploadedBy === user.email
+  }
+
   // ── Helper state & styling ───────────────────────────────────────────────────
   const visible = transfers.filter(t => t.parentId === currentFolderId)
 
   const filteredTransfers = transfers.filter(t => {
     const matchesSearch = t.fileName.toLowerCase().includes(searchTerm.toLowerCase()) ||
                           t.uploadedBy.toLowerCase().includes(searchTerm.toLowerCase())
+    
+    // Filter by read permission - only show files the user can read
+    const hasReadAccess = canRead(t)
+    
     if (searchTerm) {
-      return matchesSearch
+      return matchesSearch && hasReadAccess
     }
-    return t.parentId === currentFolderId && matchesSearch
+    return t.parentId === currentFolderId && matchesSearch && hasReadAccess
   }).sort((a, b) => {
     if (a.itemType !== b.itemType) return a.itemType === "folder" ? -1 : 1;
     let av: any, bv: any;
@@ -255,41 +398,12 @@ export function GroupWorkspace() {
     if (ext === "pdf") return <FileCheck size={size} style={{ color: "#ef4444" }} />
     if (ext === "zip") return <FileCheck size={size} style={{ color: "#a855f7" }} />
     if (ext === "img") return <FileCheck size={size} style={{ color: "#10b981" }} />
-    return <FileCheck size={size} style={{ color: "#64748b" }} />
+    return <FileCheck size={size} style={{ color: "var(--muted-foreground)" }} />
   }
 
   const isBlockedByLock = (item: GT) => {
     return item.isLocked && item.lockedByEmail !== user?.email
   }
-
-  const canManageAcl = (item: GT): boolean => {
-    if (!user) return false
-    if (user.role === "admin") return true
-    const myMember = members.find(m => m.userId === user.id)
-    if (myMember?.role === "admin") return true
-    if (item.uploadedBy === user.email) return true
-    return true
-  }
-
-  const canWrite = (item: GT) =>
-    user?.role === "admin" ||
-    item.uploadedBy === user?.email ||
-    members.find(m => m.userId === user?.id)?.role === "admin"
-
-  const canDelete = (item: GT) => canWrite(item)
-
-  const canUploadHere = (): boolean => {
-    if (!user || transfersDisabled) return false
-    if (user.role === "admin") return true
-    const myMember = members.find(m => m.userId === user.id)
-    if (myMember?.role === "admin") return true
-    if (!currentFolderId) return true
-    const folder = transfers.find(t => t.id === currentFolderId)
-    if (!folder) return true
-    return folder.uploadedBy === user.email
-  }
-
-
 
   // Circular check
   const _isInsideFolder = (targetId: string, folderId: string): boolean => {
@@ -499,7 +613,7 @@ export function GroupWorkspace() {
               <span style={{ fontSize: "13px", color: isSelected ? "#e2e8f0" : "#94a3b8" }} className="truncate">
                 {f.fileName}
               </span>
-              {isCurrent && <span style={{ fontSize: "10px", color: "#475569", marginLeft: "auto" }}>current</span>}
+              {isCurrent && <span style={{ fontSize: "10px", color: "var(--muted-foreground)", marginLeft: "auto" }}>current</span>}
             </button>
             {isExpanded && renderTree(f.id, depth + 1)}
           </div>
@@ -514,14 +628,14 @@ export function GroupWorkspace() {
           className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-[90vw] max-w-[420px] rounded-2xl overflow-hidden"
           style={{
             background: "linear-gradient(180deg, #0d1321 0%, #0b0f20 100%)",
-            border: "1px solid rgba(255,255,255,0.1)",
+            border: "1px solid var(--border)",
             boxShadow: "0 24px 64px rgba(0,0,0,0.7)",
           }}
         >
           {/* Header */}
           <div
             className="flex items-center justify-between px-5 py-4"
-            style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}
+            style={{ borderBottom: "1px solid var(--border)" }}
           >
             <div className="flex items-center gap-2.5">
               <div
@@ -531,12 +645,12 @@ export function GroupWorkspace() {
                 <MoveRight size={15} style={{ color: "#0B7FFF" }} />
               </div>
               <div>
-                <p style={{ fontSize: "14px", color: "#e2e8f0", fontWeight: 600 }}>Move to…</p>
-                <p style={{ fontSize: "11px", color: "#475569" }} className="truncate max-w-[220px]">{moveItem.fileName}</p>
+                <p style={{ fontSize: "14px", color: "var(--foreground)", fontWeight: 600 }}>Move to…</p>
+                <p style={{ fontSize: "11px", color: "var(--muted-foreground)" }} className="truncate max-w-[220px]">{moveItem.fileName}</p>
               </div>
             </div>
-            <button onClick={onClose} className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-white/10 transition-colors">
-              <X size={15} style={{ color: "#6b7fa8" }} />
+            <button onClick={onClose} className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-accent transition-colors">
+              <X size={15} style={{ color: "var(--muted-foreground)" }} />
             </button>
           </div>
 
@@ -554,23 +668,23 @@ export function GroupWorkspace() {
             >
               <Home size={14} style={{ color: "#60A5FA", flexShrink: 0 }} />
               <span style={{ fontSize: "13px", color: selected === "__root__" ? "#e2e8f0" : "#94a3b8" }}>Root Workspace</span>
-              {currentFolderId === null && <span style={{ fontSize: "10px", color: "#475569", marginLeft: "auto" }}>current</span>}
+              {currentFolderId === null && <span style={{ fontSize: "10px", color: "var(--muted-foreground)", marginLeft: "auto" }}>current</span>}
             </button>
             {renderTree(null)}
             {folders.length === 0 && (
-              <p className="text-center py-4" style={{ fontSize: "12px", color: "#475569" }}>No folders available</p>
+              <p className="text-center py-4" style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>No folders available</p>
             )}
           </div>
 
           {/* Footer */}
           <div
             className="flex items-center justify-end gap-2 px-5 py-4"
-            style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}
+            style={{ borderTop: "1px solid var(--border)" }}
           >
             <button
               onClick={onClose}
-              className="px-4 py-2 rounded-xl text-[13px] transition-colors hover:bg-white/5"
-              style={{ color: "#94a3b8", border: "1px solid rgba(255,255,255,0.1)" }}
+              className="px-4 py-2 rounded-xl text-[13px] transition-colors hover:bg-accent"
+              style={{ color: "var(--muted-foreground)", border: "1px solid var(--border)" }}
             >
               Cancel
             </button>
@@ -591,7 +705,7 @@ export function GroupWorkspace() {
                   className="px-4 py-2 rounded-xl text-[13px] font-semibold transition-all hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed"
                   style={{
                     background: "linear-gradient(135deg, #0B7FFF 0%, #0960CC 100%)",
-                    color: "#ffffff",
+                    color: "var(--foreground)",
                     boxShadow: !isInvalidMove ? "0 4px 16px rgba(11,127,255,0.25)" : "none",
                   }}
                 >
@@ -802,26 +916,26 @@ export function GroupWorkspace() {
           style={{
             top: isAbsolute ? "2rem" : undefined,
             right: isAbsolute ? "0" : undefined,
-            background: "#131929",
-            border: "1px solid rgba(255,255,255,0.1)",
+            background: "var(--popover)",
+            border: "1px solid var(--border)",
             boxShadow: "0 16px 40px rgba(0,0,0,0.6)",
           }}
           onClick={(e) => e.stopPropagation()}
         >
           <div className="py-1">
-            {item.itemType === "file" && (
+            {item.itemType === "file" && canRead(item) && (
               <>
                 <button
                   onClick={() => { setPreviewFile(item); setPreviewEditMode(false); onClose(); }}
-                  className="w-full flex items-center gap-2 px-3 py-2 text-[13px] hover:bg-white/5 transition-colors"
-                  style={{ color: "#94a3b8" }}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-[13px] hover:bg-accent transition-colors"
+                  style={{ color: "var(--muted-foreground)" }}
                 >
                   <Eye size={14} /> Preview
                 </button>
-                {isEditableText(item.fileName, item.fileType) && (
+                {isEditableText(item.fileName, item.fileType) && canWrite(item) && (
                   <button
                     onClick={() => { setPreviewFile(item); setPreviewEditMode(true); onClose(); }}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-[13px] hover:bg-white/5 transition-colors"
+                    className="w-full flex items-center gap-2 px-3 py-2 text-[13px] hover:bg-accent transition-colors"
                     style={{ color: "#34D399" }}
                   >
                     <SquarePen size={14} /> Edit Content
@@ -829,17 +943,19 @@ export function GroupWorkspace() {
                 )}
               </>
             )}
-            <button
-              onClick={() => { handleDownload(item); onClose(); }}
-              className="w-full flex items-center gap-2 px-3 py-2 text-[13px] hover:bg-white/5 transition-colors"
-              style={{ color: "#94a3b8" }}
-            >
-              <Download size={14} /> Download
-            </button>
+            {canDownload(item) && (
+              <button
+                onClick={() => { handleDownload(item); onClose(); }}
+                className="w-full flex items-center gap-2 px-3 py-2 text-[13px] hover:bg-accent transition-colors"
+                style={{ color: "var(--muted-foreground)" }}
+              >
+                <Download size={14} /> Download
+              </button>
+            )}
             <button
               onClick={() => { setDetailsFile(item); onClose(); }}
-              className="w-full flex items-center gap-2 px-3 py-2 text-[13px] hover:bg-white/5 transition-colors"
-              style={{ color: "#94a3b8" }}
+              className="w-full flex items-center gap-2 px-3 py-2 text-[13px] hover:bg-accent transition-colors"
+              style={{ color: "var(--muted-foreground)" }}
             >
               <FileQuestion size={14} /> Details & Versions
             </button>
@@ -847,15 +963,15 @@ export function GroupWorkspace() {
               <>
                 <button
                   onClick={() => { setRenamingId(item.id); setRenameVal(item.fileName); onClose(); }}
-                  className="w-full flex items-center gap-2 px-3 py-2 text-[13px] hover:bg-white/5 transition-colors"
-                  style={{ color: "#94a3b8" }}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-[13px] hover:bg-accent transition-colors"
+                  style={{ color: "var(--muted-foreground)" }}
                 >
                   <Pencil size={14} /> Rename
                 </button>
                 <button
                   onClick={() => { setMoveItem(item); onClose(); }}
-                  className="w-full flex items-center gap-2 px-3 py-2 text-[13px] hover:bg-white/5 transition-colors"
-                  style={{ color: "#94a3b8" }}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-[13px] hover:bg-accent transition-colors"
+                  style={{ color: "var(--muted-foreground)" }}
                 >
                   <MoveRight size={14} /> Move to…
                 </button>
@@ -864,7 +980,7 @@ export function GroupWorkspace() {
             {!isBlocked && canDelete(item) && (
               <button
                 onClick={() => { setDeleteId(item.id); onClose(); }}
-                className="w-full flex items-center gap-2 px-3 py-2 text-[13px] hover:bg-white/5 transition-colors"
+                className="w-full flex items-center gap-2 px-3 py-2 text-[13px] hover:bg-accent transition-colors"
                 style={{ color: "#F87171" }}
               >
                 <Trash2 size={14} /> Delete
@@ -873,7 +989,7 @@ export function GroupWorkspace() {
             {canManageAcl(item) && (
               <button
                 onClick={() => { setAclItem(item); onClose(); }}
-                className="w-full flex items-center gap-2 px-3 py-2 text-[13px] hover:bg-white/5 transition-colors"
+                className="w-full flex items-center gap-2 px-3 py-2 text-[13px] hover:bg-accent transition-colors"
                 style={{ color: "#a855f7" }}
               >
                 <Shield size={14} /> Permissions
@@ -901,7 +1017,7 @@ export function GroupWorkspace() {
         onDrop={isFolder ? (e) => onFolderDrop(e, item.id) : undefined}
         className="group relative flex flex-col items-center gap-2 p-4 rounded-2xl cursor-pointer transition-all duration-200 hover:bg-white/[0.04]"
         style={{
-          border: isDropTarget ? `1px solid ${fileColor(item)}66` : "1px solid rgba(255,255,255,0.05)",
+          border: isDropTarget ? `1px solid ${fileColor(item)}66` : "1px solid var(--border)",
           background: isDragging ? "rgba(11,127,255,0.07)" : isDropTarget ? `${fileColor(item)}0d` : "rgba(255,255,255,0.015)",
           opacity: isDragging ? 0.5 : 1,
         }}
@@ -928,7 +1044,7 @@ export function GroupWorkspace() {
             onBlur={confirmRename}
             onClick={e => e.stopPropagation()}
             className="w-full text-center text-[12px] rounded px-1 py-0.5 outline-none"
-            style={{ background: "rgba(11,127,255,0.15)", border: "1px solid rgba(11,127,255,0.4)", color: "#e2e8f0" }}
+            style={{ background: "rgba(11,127,255,0.15)", border: "1px solid rgba(11,127,255,0.4)", color: "var(--foreground)" }}
           />
         ) : (
           <p className="text-center text-[12px] font-semibold truncate w-full px-1 text-white">
@@ -936,17 +1052,17 @@ export function GroupWorkspace() {
           </p>
         )}
 
-        <p className="text-[10px]" style={{ color: "#64748b" }}>
+        <p className="text-[10px]" style={{ color: "var(--muted-foreground)" }}>
           {item.size ?? "—"}
         </p>
 
 
 
         <button
-          className="absolute top-2 right-2 w-6 h-6 flex items-center justify-center rounded-lg opacity-0 group-hover:opacity-100 transition-all hover:bg-white/10"
+          className="absolute top-2 right-2 w-6 h-6 flex items-center justify-center rounded-lg opacity-0 group-hover:opacity-100 transition-all hover:bg-accent"
           onClick={(e) => { e.stopPropagation(); setOpenMenu(openMenu === item.id ? null : item.id); }}
         >
-          <MoreHorizontal size={13} style={{ color: "#64748b" }} />
+          <MoreHorizontal size={13} style={{ color: "var(--muted-foreground)" }} />
         </button>
 
         {openMenu === item.id && <ItemMenu item={item} onClose={() => setOpenMenu(null)} isAbsolute />}
@@ -972,7 +1088,7 @@ export function GroupWorkspace() {
         onDrop={isFolder ? (e) => onFolderDrop(e, item.id) : undefined}
         className="group grid grid-cols-[1fr_80px] sm:grid-cols-[1fr_90px_120px_80px] items-center px-5 py-3.5 transition-all duration-150 hover:bg-white/[0.025] relative cursor-pointer"
         style={{
-          borderBottom: "1px solid rgba(255,255,255,0.04)",
+          borderBottom: "1px solid var(--border)",
           background: isDragging ? "rgba(11,127,255,0.06)" : isDropTarget ? `${fileColor(item)}0a` : "transparent",
           opacity: isDragging ? 0.5 : 1,
           outline: isDropTarget ? `1px dashed ${fileColor(item)}66` : "none",
@@ -1003,7 +1119,7 @@ export function GroupWorkspace() {
                 onBlur={confirmRename}
                 onClick={e => e.stopPropagation()}
                 className="w-full text-[13px] rounded-lg px-2 py-1 outline-none"
-                style={{ background: "rgba(11,127,255,0.15)", border: "1px solid rgba(11,127,255,0.4)", color: "#e2e8f0" }}
+                style={{ background: "rgba(11,127,255,0.15)", border: "1px solid rgba(11,127,255,0.4)", color: "var(--foreground)" }}
               />
             ) : (
               <p className="text-[13px] font-medium truncate text-white">{item.fileName}</p>
@@ -1014,11 +1130,11 @@ export function GroupWorkspace() {
         </div>
 
         <div className="hidden sm:block">
-          <p style={{ fontSize: "12px", color: "#64748b" }}>{item.size}</p>
+          <p style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>{item.size}</p>
         </div>
 
         <div className="hidden sm:block">
-          <p style={{ fontSize: "12px", color: "#64748b" }}>{item.date}</p>
+          <p style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>{item.date}</p>
         </div>
 
         <div onClick={e => e.stopPropagation()}>
@@ -1033,21 +1149,23 @@ export function GroupWorkspace() {
               </button>
               <button
                 onClick={() => setDeleteId(null)}
-                className="w-6 h-6 flex items-center justify-center rounded-lg hover:bg-white/10"
+                className="w-6 h-6 flex items-center justify-center rounded-lg hover:bg-accent"
               >
-                <X size={13} style={{ color: "#64748b" }} />
+                <X size={13} style={{ color: "var(--muted-foreground)" }} />
               </button>
             </div>
           ) : (
             <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity justify-end">
-              <button
-                onClick={() => handleDownload(item)}
-                className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-blue-500/10 transition-colors"
-                title="Download"
-              >
-                <Download size={13} style={{ color: "#0B7FFF" }} />
-              </button>
-              {!isFolder && isEditableText(item.fileName, item.fileType) && (
+              {canDownload(item) && (
+                <button
+                  onClick={() => handleDownload(item)}
+                  className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-blue-500/10 transition-colors"
+                  title="Download"
+                >
+                  <Download size={13} style={{ color: "#0B7FFF" }} />
+                </button>
+              )}
+              {!isFolder && isEditableText(item.fileName, item.fileType) && canWrite(item) && (
                 <button
                   onClick={() => { setPreviewFile(item); setPreviewEditMode(true); }}
                   className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-emerald-500/10 transition-colors"
@@ -1059,10 +1177,10 @@ export function GroupWorkspace() {
 
               <button
                 onClick={() => setDetailsFile(item)}
-                className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-white/10 transition-colors"
+                className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-accent transition-colors"
                 title="View details"
               >
-                <Eye size={13} style={{ color: "#6b7fa8" }} />
+                <Eye size={13} style={{ color: "var(--muted-foreground)" }} />
               </button>
 
               {canManageAcl(item) && (
@@ -1082,19 +1200,19 @@ export function GroupWorkspace() {
                       setRenamingId(item.id)
                       setRenameVal(item.fileName)
                     }}
-                    className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-white/10 transition-colors"
+                    className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-accent transition-colors"
                     title="Rename"
                   >
-                    <Pencil size={13} style={{ color: "#6b7fa8" }} />
+                    <Pencil size={13} style={{ color: "var(--muted-foreground)" }} />
                   </button>
                   <button
                     onClick={() => {
                       setMoveItem(item)
                     }}
-                    className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-white/10 transition-colors"
+                    className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-accent transition-colors"
                     title="Move"
                   >
-                    <MoveRight size={13} style={{ color: "#6b7fa8" }} />
+                    <MoveRight size={13} style={{ color: "var(--muted-foreground)" }} />
                   </button>
                   <button
                     onClick={() => setDeleteId(item.id)}
@@ -1122,7 +1240,7 @@ export function GroupWorkspace() {
 
   const SortIcon = ({ field }: { field: SortField }) =>
     sortField !== field
-      ? <ArrowUpDown size={11} style={{ color: "#475569" }} />
+      ? <ArrowUpDown size={11} style={{ color: "var(--muted-foreground)" }} />
       : sortDir === "asc"
         ? <ArrowUp size={11} style={{ color: "#0B7FFF" }} />
         : <ArrowDown size={11} style={{ color: "#0B7FFF" }} />;
@@ -1139,12 +1257,12 @@ export function GroupWorkspace() {
   if (groups.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-[60vh] gap-4">
-        <FolderOpen size={48} style={{ color: "#3d4f6e" }} />
-        <p style={{ color: "#6b7fa8", fontSize: "15px" }}>
+        <FolderOpen size={48} style={{ color: "var(--muted-foreground)" }} />
+        <p style={{ color: "var(--muted-foreground)", fontSize: "15px" }}>
           You are not a member of any group yet.
         </p>
         {isAppAdmin && (
-          <p style={{ color: "#4a5578", fontSize: "13px" }}>
+          <p style={{ color: "var(--muted-foreground)", fontSize: "13px" }}>
             Create a group in Team Management and add members.
           </p>
         )}
@@ -1158,8 +1276,8 @@ export function GroupWorkspace() {
       {/* Header & Group Selector */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-white text-2xl font-bold mb-1">Group Workspace</h1>
-          <p style={{ color: "#6b7fa8", fontSize: "14px" }}>
+          <h1 className="text-foreground text-2xl font-bold mb-1">Team Workspace</h1>
+          <p style={{ color: "var(--muted-foreground)", fontSize: "14px" }}>
             Pessimistic Locking & Document Explorer
           </p>
         </div>
@@ -1171,7 +1289,7 @@ export function GroupWorkspace() {
             style={{
               background: "rgba(11,127,255,0.1)",
               border: "1px solid rgba(11,127,255,0.25)",
-              color: "#e2e8f0",
+              color: "var(--foreground)",
               fontSize: "14px",
               fontWeight: 600,
               minWidth: "200px",
@@ -1181,14 +1299,14 @@ export function GroupWorkspace() {
             <span className="flex-1 text-left truncate">
               {selectedGroup ? selectedGroup.name : "Select a group"}
             </span>
-            <ChevronDown size={14} style={{ color: "#6b7fa8", flexShrink: 0 }} />
+            <ChevronDown size={14} style={{ color: "var(--muted-foreground)", flexShrink: 0 }} />
           </button>
           {showGroupPicker && (
             <div
               className="absolute right-0 mt-2 rounded-xl overflow-hidden z-20"
               style={{
-                background: "#0d1228",
-                border: "1px solid rgba(255,255,255,0.1)",
+                background: "var(--popover)",
+                border: "1px solid var(--border)",
                 boxShadow: "0 10px 40px rgba(0,0,0,0.6)",
                 minWidth: "220px",
               }}
@@ -1202,13 +1320,13 @@ export function GroupWorkspace() {
                     setSearchTerm("")
                     setTab("files")
                   }}
-                  className="w-full flex items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-white/5"
+                  className="w-full flex items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-accent"
                   style={{ color: selectedGroup?.id === g.id ? "#0B7FFF" : "#e2e8f0", fontSize: "14px" }}
                 >
                   <Users size={14} style={{ color: selectedGroup?.id === g.id ? "#0B7FFF" : "#4a5578", flexShrink: 0 }} />
                   <div className="min-w-0">
                     <p className="truncate font-medium">{g.name}</p>
-                    <p style={{ color: "#4a5578", fontSize: "11px" }}>
+                    <p style={{ color: "var(--muted-foreground)", fontSize: "11px" }}>
                       {g.memberCount} member{g.memberCount !== 1 ? "s" : ""} · {g.myRole ?? "member"}
                     </p>
                   </div>
@@ -1222,16 +1340,16 @@ export function GroupWorkspace() {
       {!selectedGroup ? (
         <div
           className="flex flex-col items-center justify-center py-24 rounded-xl"
-          style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)" }}
+          style={{ background: "var(--card)", border: "1px solid var(--border)" }}
         >
-          <FolderOpen size={48} style={{ color: "#3d4f6e", marginBottom: "16px" }} />
-          <p style={{ color: "#6b7fa8", fontSize: "15px" }}>Select a group to get started</p>
+          <FolderOpen size={48} style={{ color: "var(--muted-foreground)", marginBottom: "16px" }} />
+          <p style={{ color: "var(--muted-foreground)", fontSize: "15px" }}>Select a group to get started</p>
         </div>
       ) : (
         <>
           {/* Tab Selection */}
           <div className="flex gap-1 p-1 rounded-xl w-fit"
-            style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
+            style={{ background: "var(--input-background)", border: "1px solid var(--border)" }}>
             {([
               { id: "files",   label: "Explorer", icon: <FolderOpen size={14} /> },
               { id: "members", label: "Members",  icon: <Users size={14} /> },
@@ -1251,6 +1369,87 @@ export function GroupWorkspace() {
             ))}
           </div>
 
+          {/* Group Quota Bar */}
+          {groupQuota && (
+            <div
+              className="rounded-xl px-5 py-4 flex flex-col gap-3"
+              style={{
+                background: "var(--card)",
+                border: "1px solid var(--border)",
+              }}
+            >
+              <div className="flex items-center gap-3">
+                <div
+                  className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
+                  style={{ background: "rgba(0,210,255,0.1)" }}
+                >
+                  {groupQuota.hasQuota
+                    ? <HardDrive size={18} style={{ color: "#00d2ff" }} strokeWidth={1.8} />
+                    : <Infinity size={18} style={{ color: "#00d2ff" }} strokeWidth={1.8} />}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p style={{ fontSize: "13px", color: "var(--foreground)", fontWeight: 600 }}>
+                    Group Storage
+                  </p>
+                  <p style={{ fontSize: "11px", color: "var(--muted-foreground)", marginTop: "1px" }}>
+                    {groupQuota.hasQuota
+                      ? `${fmtBytes(groupQuota.usedBytes)} / ${fmtBytes(groupQuota.quotaBytes!)} used`
+                      : `${fmtBytes(groupQuota.usedBytes)} used — Unlimited`}
+                  </p>
+                </div>
+
+                {groupQuota.hasQuota && (
+                  <div className="text-right shrink-0">
+                    <p style={{ fontSize: "20px", fontWeight: 700, color: getQuotaColor(groupQuota.usagePercent ?? 0).text, lineHeight: 1.1 }}>
+                      {(groupQuota.usagePercent ?? 0).toFixed(1)}%
+                    </p>
+                    <p style={{ fontSize: "10px", color: "var(--muted-foreground)", marginTop: "2px" }}>
+                      {fmtBytes(groupQuota.remainingBytes!)} remaining
+                    </p>
+                  </div>
+                )}
+
+                {isGroupAdmin && (
+                  <button
+                    onClick={openQuotaDialog}
+                    title="Manage group quota"
+                    className="p-2 rounded-lg hover:bg-accent transition-colors shrink-0 cursor-pointer"
+                    style={{ color: "var(--muted-foreground)" }}
+                  >
+                    <Settings size={16} />
+                  </button>
+                )}
+              </div>
+
+              {groupQuota.hasQuota && (() => {
+                const percent = groupQuota.usagePercent ?? 0
+                const colors = getQuotaColor(percent)
+                return (
+                  <>
+                    <div className="relative w-full overflow-hidden" style={{ height: "6px", borderRadius: "3px", background: "rgba(255,255,255,0.06)" }}>
+                      <div
+                        className="absolute inset-y-0 left-0 transition-all duration-700 ease-out"
+                        style={{
+                          width: `${Math.min(percent, 100)}%`,
+                          background: colors.gradient,
+                          borderRadius: "3px",
+                          boxShadow: `0 0 8px ${colors.glow}`,
+                        }}
+                      />
+                    </div>
+                    {percent >= 85 && (
+                      <p style={{ fontSize: "11px", fontWeight: 600, color: percent >= 95 ? "#EF4444" : "#FBBF24" }}>
+                        {percent >= 95
+                          ? "⚠️ Critical: Group storage is almost full."
+                          : "⚠️ Warning: Group storage is running low."}
+                      </p>
+                    )}
+                  </>
+                )
+              })()}
+            </div>
+          )}
+
           {/* Search, Breadcrumbs, Views Toolbar (files only) */}
           {tab === "files" && (
             <div className="flex flex-col gap-3">
@@ -1260,7 +1459,7 @@ export function GroupWorkspace() {
                 <nav className="flex items-center gap-1 flex-wrap" aria-label="breadcrumb">
                   <button
                     onClick={() => setCurrentFolderId(null)}
-                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg transition-colors hover:bg-white/5"
+                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg transition-colors hover:bg-accent"
                     style={{ fontSize: "12px", color: currentFolderId === null ? "#e2e8f0" : "#64748b" }}
                   >
                     <Home size={13} />
@@ -1271,7 +1470,7 @@ export function GroupWorkspace() {
                       <ChevronRight size={12} style={{ color: "#2a3550" }} />
                       <button
                         onClick={() => setCurrentFolderId(crumb.id)}
-                        className="px-2.5 py-1 rounded-lg transition-colors hover:bg-white/5 truncate max-w-[140px]"
+                        className="px-2.5 py-1 rounded-lg transition-colors hover:bg-accent truncate max-w-[140px]"
                         style={{
                           fontSize: "12px",
                           color: idx === arr.length - 1 ? "#e2e8f0" : "#64748b",
@@ -1289,7 +1488,7 @@ export function GroupWorkspace() {
                   <div className="relative">
                     <button
                       onClick={() => setShowSortMenu(!showSortMenu)}
-                      className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-white/10 hover:bg-white/5 transition-all text-xs font-semibold text-[#cbd5e1]"
+                      className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-white/10 hover:bg-accent transition-all text-xs font-semibold text-[#cbd5e1]"
                     >
                       Sort
                       {sortDir === "asc" ? <ArrowUp size={12} className="text-[#0B7FFF]" /> : <ArrowDown size={12} className="text-[#0B7FFF]" />}
@@ -1298,14 +1497,14 @@ export function GroupWorkspace() {
                       <>
                         <div className="fixed inset-0 z-40" onClick={() => setShowSortMenu(false)} />
                         <div className="absolute right-0 top-full mt-1 z-50 rounded-xl overflow-hidden min-w-[130px] p-1 shadow-2xl"
-                          style={{ background: "#131929", border: "1px solid rgba(255,255,255,0.1)" }}>
-                          <button onClick={() => handleSort("name")} className="w-full flex items-center justify-between px-3 py-2 rounded-lg text-[13px] hover:bg-white/5 text-[#94a3b8] transition-colors">
+                          style={{ background: "var(--popover)", border: "1px solid var(--border)" }}>
+                          <button onClick={() => handleSort("name")} className="w-full flex items-center justify-between px-3 py-2 rounded-lg text-[13px] hover:bg-accent text-[#94a3b8] transition-colors">
                             Name <SortIcon field="name" />
                           </button>
-                          <button onClick={() => handleSort("date")} className="w-full flex items-center justify-between px-3 py-2 rounded-lg text-[13px] hover:bg-white/5 text-[#94a3b8] transition-colors">
+                          <button onClick={() => handleSort("date")} className="w-full flex items-center justify-between px-3 py-2 rounded-lg text-[13px] hover:bg-accent text-[#94a3b8] transition-colors">
                             Date <SortIcon field="date" />
                           </button>
-                          <button onClick={() => handleSort("size")} className="w-full flex items-center justify-between px-3 py-2 rounded-lg text-[13px] hover:bg-white/5 text-[#94a3b8] transition-colors">
+                          <button onClick={() => handleSort("size")} className="w-full flex items-center justify-between px-3 py-2 rounded-lg text-[13px] hover:bg-accent text-[#94a3b8] transition-colors">
                             Size <SortIcon field="size" />
                           </button>
                         </div>
@@ -1316,14 +1515,14 @@ export function GroupWorkspace() {
                   <div className="flex items-center gap-1 p-0.5 rounded-lg bg-white/5 border border-white/10">
                   <button
                     onClick={() => setViewMode("list")}
-                    className="p-1.5 rounded-md hover:bg-white/5 text-[#64748b] transition-colors"
+                    className="p-1.5 rounded-md hover:bg-accent text-[#64748b] transition-colors"
                     style={{ color: viewMode === "list" ? "#0B7FFF" : "#64748b" }}
                   >
                     <List size={13} />
                   </button>
                   <button
                     onClick={() => setViewMode("grid")}
-                    className="p-1.5 rounded-md hover:bg-white/5 text-[#64748b] transition-colors"
+                    className="p-1.5 rounded-md hover:bg-accent text-[#64748b] transition-colors"
                     style={{ color: viewMode === "grid" ? "#0B7FFF" : "#64748b" }}
                   >
                     <LayoutGrid size={13} />
@@ -1335,14 +1534,14 @@ export function GroupWorkspace() {
               {/* Action Toolbar */}
               <div className="flex gap-2 sm:gap-3">
                 <div className="flex-1 relative">
-                  <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: "#6b7fa8" }} />
+                  <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: "var(--muted-foreground)" }} />
                   <input
                     type="text"
                     placeholder="Search files and folders..."
                     value={searchTerm}
                     onChange={e => setSearchTerm(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2.5 rounded-lg text-white placeholder:text-slate-500 outline-none"
-                    style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", fontSize: "14px" }}
+                    className="w-full pl-10 pr-4 py-2.5 rounded-lg text-foreground placeholder:text-muted-foreground outline-none"
+                    style={{ background: "var(--input-background)", border: "1px solid var(--border)", fontSize: "14px" }}
                   />
                 </div>
 
@@ -1350,7 +1549,7 @@ export function GroupWorkspace() {
                 {currentFolderId && !searchTerm && (
                   <button
                     onClick={navigateUp}
-                    className="flex items-center justify-center w-10 h-10 rounded-lg hover:bg-white/5 border border-white/10 transition-all text-[#cbd5e1]"
+                    className="flex items-center justify-center w-10 h-10 rounded-lg hover:bg-accent border border-white/10 transition-all text-[#cbd5e1]"
                     title="Up one folder"
                   >
                     <ArrowLeft size={16} />
@@ -1360,7 +1559,7 @@ export function GroupWorkspace() {
                 <button
                   disabled={transfersDisabled}
                   onClick={() => setIsCreatingFolder(true)}
-                  className="flex items-center gap-1.5 px-3 py-2.5 rounded-lg border border-white/10 hover:bg-white/5 transition-all text-[13px] font-bold text-[#e2e8f0]"
+                  className="flex items-center gap-1.5 px-3 py-2.5 rounded-lg border border-white/10 hover:bg-accent transition-all text-[13px] font-bold text-[#e2e8f0]"
                 >
                   <Plus size={14} />
                   <span className="hidden sm:inline">Folder</span>
@@ -1385,14 +1584,14 @@ export function GroupWorkspace() {
           {/* Search bar (members tab only) */}
           {tab === "members" && (
             <div className="relative">
-              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: "#6b7fa8" }} />
+              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: "var(--muted-foreground)" }} />
               <input
                 type="text"
                 placeholder="Search members..."
                 value={searchTerm}
                 onChange={e => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2.5 rounded-lg text-white placeholder:text-slate-500 outline-none"
-                style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", fontSize: "14px" }}
+                className="w-full pl-10 pr-4 py-2.5 rounded-lg text-foreground placeholder:text-muted-foreground outline-none"
+                style={{ background: "var(--input-background)", border: "1px solid var(--border)", fontSize: "14px" }}
               />
             </div>
           )}
@@ -1413,21 +1612,21 @@ export function GroupWorkspace() {
             >
               {isLoadingFiles ? (
                 <div className="flex flex-col items-center justify-center py-24 rounded-xl text-white/40"
-                  style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)" }}>
+                  style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
                   <Loader2 size={40} className="animate-spin text-[#0B7FFF] mb-4" />
                   <p className="text-[10px] font-black uppercase tracking-[0.4em]">Loading Files...</p>
                 </div>
               ) : transfersDisabled ? (
                 <div className="flex flex-col items-center justify-center py-24 rounded-xl gap-3"
-                  style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)" }}>
-                  <Lock size={40} style={{ color: "#4a5578" }} />
-                  <p style={{ color: "#6b7fa8", fontSize: "14px" }}>Group workspace is locked by admin settings.</p>
+                  style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
+                  <Lock size={40} style={{ color: "var(--muted-foreground)" }} />
+                  <p style={{ color: "var(--muted-foreground)", fontSize: "14px" }}>Team workspace is locked by admin settings.</p>
                 </div>
               ) : filteredTransfers.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-24 rounded-xl border border-dashed border-white/10"
                   style={{ background: "rgba(255,255,255,0.01)" }}>
-                  <FolderOpen size={40} style={{ color: "#3d4f6e", marginBottom: "16px" }} />
-                  <p style={{ color: "#6b7fa8", fontSize: "14px" }}>
+                  <FolderOpen size={40} style={{ color: "var(--muted-foreground)", marginBottom: "16px" }} />
+                  <p style={{ color: "var(--muted-foreground)", fontSize: "14px" }}>
                     {searchTerm ? "No files match your search." : "This directory is empty. Add a folder or drop files here."}
                   </p>
                 </div>
@@ -1452,21 +1651,21 @@ export function GroupWorkspace() {
             <div className="flex flex-col gap-3">
               {isLoadingMembers ? (
                 <div className="flex flex-col items-center justify-center py-24 rounded-xl text-white/40"
-                  style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)" }}>
+                  style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
                   <Loader2 size={40} className="animate-spin text-[#0B7FFF] mb-4" />
                   <p className="text-[10px] font-black uppercase tracking-[0.4em]">Loading Members...</p>
                 </div>
               ) : membersDisabled ? (
                 <div className="flex flex-col items-center justify-center py-24 rounded-xl gap-3"
-                  style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)" }}>
-                  <Lock size={40} style={{ color: "#4a5578" }} />
-                  <p style={{ color: "#6b7fa8", fontSize: "14px" }}>The member directory is disabled for this group.</p>
+                  style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
+                  <Lock size={40} style={{ color: "var(--muted-foreground)" }} />
+                  <p style={{ color: "var(--muted-foreground)", fontSize: "14px" }}>The member directory is disabled for this group.</p>
                 </div>
               ) : filteredMembers.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-24 rounded-xl"
-                  style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)" }}>
-                  <Users size={48} style={{ color: "#3d4f6e", marginBottom: "16px" }} />
-                  <p style={{ color: "#6b7fa8", fontSize: "15px" }}>
+                  style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
+                  <Users size={48} style={{ color: "var(--muted-foreground)", marginBottom: "16px" }} />
+                  <p style={{ color: "var(--muted-foreground)", fontSize: "15px" }}>
                     {searchTerm ? "No members match your search." : "No members yet."}
                   </p>
                 </div>
@@ -1475,7 +1674,7 @@ export function GroupWorkspace() {
                   {filteredMembers.map(member => (
                     <div key={member.id}
                       className="flex items-center gap-3 p-4 rounded-xl"
-                      style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)" }}
+                      style={{ background: "var(--card)", border: "1px solid var(--border)" }}
                     >
                       <div className="w-10 h-10 rounded-full flex items-center justify-center shrink-0 text-sm font-bold text-white animate-pulse"
                         style={{ background: "linear-gradient(135deg, #0B7FFF 0%, #0960D9 100%)" }}>
@@ -1483,20 +1682,20 @@ export function GroupWorkspace() {
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
-                          <p className="text-white text-sm font-semibold truncate">{member.userName}</p>
+                          <p className="text-foreground text-sm font-semibold truncate">{member.userName}</p>
                           {member.userId === user?.id && (
                             <span style={{ fontSize: "9px", fontWeight: 700, color: "#00d2ff", background: "rgba(0,210,255,0.1)", padding: "1px 6px", borderRadius: "4px" }}>
                               YOU
                             </span>
                           )}
                         </div>
-                        <p style={{ color: "#6b7fa8", fontSize: "12px" }}>{member.userEmail}</p>
+                        <p style={{ color: "var(--muted-foreground)", fontSize: "12px" }}>{member.userEmail}</p>
                       </div>
                       <span
                         className="px-2 py-1 rounded text-xs capitalize shrink-0 font-semibold"
                         style={{
                           color: member.role === "admin" ? "#0B7FFF" : "#6b7fa8",
-                          background: member.role === "admin" ? "rgba(11,127,255,0.1)" : "rgba(255,255,255,0.04)",
+                          background: member.role === "admin" ? "rgba(11,127,255,0.1)" : "var(--input-background)",
                           border: `1px solid ${member.role === "admin" ? "rgba(11,127,255,0.2)" : "rgba(255,255,255,0.08)"}`,
                         }}
                       >
@@ -1513,11 +1712,11 @@ export function GroupWorkspace() {
 
       {/* Item Details Side Dialog */}
       <Dialog open={!!detailsFile} onOpenChange={() => setDetailsFile(null)}>
-        <DialogContent style={{ background: "linear-gradient(180deg, #0d1228 0%, #0b0f20 100%)", border: "1px solid rgba(255,255,255,0.1)", maxWidth: "500px" }}>
+        <DialogContent style={{ background: "linear-gradient(180deg, #0d1228 0%, #0b0f20 100%)", border: "1px solid var(--border)", maxWidth: "500px" }}>
           {detailsFile && (
             <>
               <DialogHeader>
-                <DialogTitle className="text-white text-xl flex items-center gap-2">
+                <DialogTitle className="text-foreground text-xl flex items-center gap-2">
                   <FileIcon item={detailsFile} size={18} />
                   <span>Item Details</span>
                 </DialogTitle>
@@ -1533,17 +1732,17 @@ export function GroupWorkspace() {
                   { label: "VERSION",     value: detailsFile.itemType === "folder" ? "—" : `v${detailsFile.currentVersion}` },
                 ].map(({ label, value }) => (
                   <div key={label}>
-                    <p style={{ color: "#4a5578", fontSize: "11px", fontWeight: 600, letterSpacing: "0.05em" }}>{label}</p>
-                    <p className="text-white mt-1 text-sm truncate">{value}</p>
+                    <p style={{ color: "var(--muted-foreground)", fontSize: "11px", fontWeight: 600, letterSpacing: "0.05em" }}>{label}</p>
+                    <p className="text-foreground mt-1 text-sm truncate">{value}</p>
                   </div>
                 ))}
               </div>
 
               {/* Version History (files only) */}
               {detailsFile.itemType === "file" && (
-                <div className="mt-6 pt-5" style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+                <div className="mt-6 pt-5" style={{ borderTop: "1px solid var(--border)" }}>
                   <div className="flex items-center justify-between mb-3">
-                    <p className="flex items-center gap-1.5 font-bold" style={{ color: "#e2e8f0", fontSize: "12px", letterSpacing: "0.05em" }}>
+                    <p className="flex items-center gap-1.5 font-bold" style={{ color: "var(--foreground)", fontSize: "12px", letterSpacing: "0.05em" }}>
                       <History size={14} style={{ color: "#0B7FFF" }} />
                       <span>VERSION HISTORY</span>
                     </p>
@@ -1555,7 +1754,7 @@ export function GroupWorkspace() {
                         <button
                           disabled={isUploadingVersion}
                           onClick={() => versionInputRef.current?.click()}
-                          className="px-2 py-1 rounded border border-white/10 hover:bg-white/5 text-[10px] font-bold text-white flex items-center gap-1 transition-all disabled:opacity-40"
+                          className="px-2 py-1 rounded border border-white/10 hover:bg-accent text-[10px] font-bold text-white flex items-center gap-1 transition-all disabled:opacity-40"
                         >
                           {isUploadingVersion ? <Loader2 size={10} className="animate-spin" /> : <Upload size={10} />}
                           <span>Upload Version</span>
@@ -1569,7 +1768,7 @@ export function GroupWorkspace() {
                       <Loader2 size={20} className="animate-spin text-[#0B7FFF]" />
                     </div>
                   ) : versions.length === 0 ? (
-                    <p style={{ fontSize: "12px", color: "#475569" }}>No version history available.</p>
+                    <p style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>No version history available.</p>
                   ) : (
                     <div className="flex flex-col gap-2 max-h-[160px] overflow-y-auto pr-1" style={{ scrollbarWidth: "thin" }}>
                       {versions.map(v => (
@@ -1579,13 +1778,13 @@ export function GroupWorkspace() {
                           style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.04)" }}
                         >
                           <div className="min-w-0">
-                            <p style={{ fontSize: "12.5px", color: "#e2e8f0", fontWeight: 600 }}>
+                            <p style={{ fontSize: "12.5px", color: "var(--foreground)", fontWeight: 600 }}>
                               Version {v.versionNum}
                               {v.versionNum === detailsFile.currentVersion && (
                                 <span className="ml-2 text-[9px] text-[#00E5A0] bg-[#00E5A0]/10 px-1.5 py-0.5 rounded-md font-bold">current</span>
                               )}
                             </p>
-                            <p style={{ fontSize: "10.5px", color: "#64748b", marginTop: "1px" }} className="truncate">
+                            <p style={{ fontSize: "10.5px", color: "var(--muted-foreground)", marginTop: "1px" }} className="truncate">
                               By {v.author} · {format(new Date(v.createdAt), "MMM d, yyyy")}
                             </p>
                           </div>
@@ -1595,7 +1794,7 @@ export function GroupWorkspace() {
                             <button
                               disabled={restoringVer === v.versionNum || isBlockedByLock(detailsFile)}
                               onClick={() => handleRestore(v.versionNum)}
-                              className="px-2.5 py-1 rounded-md text-[11px] font-semibold flex items-center gap-1 transition-colors hover:bg-white/5 disabled:opacity-40 disabled:hover:bg-transparent"
+                              className="px-2.5 py-1 rounded-md text-[11px] font-semibold flex items-center gap-1 transition-colors hover:bg-accent disabled:opacity-40 disabled:hover:bg-transparent"
                               style={{ color: "#0B7FFF", border: "1px solid rgba(11,127,255,0.2)" }}
                             >
                               {restoringVer === v.versionNum ? (
@@ -1614,7 +1813,7 @@ export function GroupWorkspace() {
               )}
 
                <div className="flex gap-3 mt-5">
-                {detailsFile.itemType === "file" && (
+                {detailsFile.itemType === "file" && canRead(detailsFile) && (
                   <button
                     onClick={() => { setPreviewFile(detailsFile); setPreviewEditMode(false); setDetailsFile(null) }}
                     className="flex-1 h-10 rounded-xl font-bold text-sm transition-all hover:brightness-110 flex items-center justify-center gap-2 text-white"
@@ -1624,14 +1823,16 @@ export function GroupWorkspace() {
                     <span>Preview</span>
                   </button>
                 )}
-                <button
-                  onClick={() => { handleDownload(detailsFile); setDetailsFile(null) }}
-                  className="flex-1 h-10 rounded-xl font-bold text-sm transition-all hover:opacity-90 flex items-center justify-center gap-2 text-white"
-                  style={{ background: "linear-gradient(135deg, #0B7FFF 0%, #0960D9 100%)" }}
-                >
-                  <Download size={14} />
-                  <span>Download</span>
-                </button>
+                {canDownload(detailsFile) && (
+                  <button
+                    onClick={() => { handleDownload(detailsFile); setDetailsFile(null) }}
+                    className="flex-1 h-10 rounded-xl font-bold text-sm transition-all hover:opacity-90 flex items-center justify-center gap-2 text-white"
+                    style={{ background: "linear-gradient(135deg, #0B7FFF 0%, #0960D9 100%)" }}
+                  >
+                    <Download size={14} />
+                    <span>Download</span>
+                  </button>
+                )}
               </div>
             </>
           )}
@@ -1640,9 +1841,9 @@ export function GroupWorkspace() {
 
       {/* Create Folder Modal */}
       <Dialog open={isCreatingFolder} onOpenChange={() => setIsCreatingFolder(false)}>
-        <DialogContent style={{ background: "linear-gradient(180deg, #0d1228 0%, #0b0f20 100%)", border: "1px solid rgba(255,255,255,0.1)", maxWidth: "400px" }}>
+        <DialogContent style={{ background: "linear-gradient(180deg, #0d1228 0%, #0b0f20 100%)", border: "1px solid var(--border)", maxWidth: "400px" }}>
           <DialogHeader>
-            <DialogTitle className="text-white text-lg flex items-center gap-2">
+            <DialogTitle className="text-foreground text-lg flex items-center gap-2">
               <Folder size={18} style={{ color: "#3b82f6" }} />
               <span>Create Virtual Folder</span>
             </DialogTitle>
@@ -1654,14 +1855,14 @@ export function GroupWorkspace() {
             value={newFolderName}
             onChange={e => setNewFolderName(e.target.value)}
             onKeyDown={e => { if (e.key === "Enter") handleCreateFolder() }}
-            className="w-full mt-2 px-3 py-2.5 rounded-lg text-white outline-none"
-            style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", fontSize: "14px" }}
+            className="w-full mt-2 px-3 py-2.5 rounded-lg text-foreground outline-none"
+            style={{ background: "var(--input-background)", border: "1px solid var(--border)", fontSize: "14px" }}
           />
 
           <DialogFooter className="mt-4 gap-2">
             <button
               onClick={() => { setIsCreatingFolder(false); setNewFolderName("") }}
-              className="px-4 py-2 rounded-lg text-xs font-bold text-[#64748b] hover:bg-white/5 transition-all"
+              className="px-4 py-2 rounded-lg text-xs font-bold text-[#64748b] hover:bg-accent transition-all"
             >
               Cancel
             </button>
@@ -1683,9 +1884,9 @@ export function GroupWorkspace() {
 
       {/* Duplicate / Version Selection Modal (Option B Choice) */}
       <Dialog open={!!conflict} onOpenChange={() => setConflict(null)}>
-        <DialogContent style={{ background: "linear-gradient(180deg, #0d1228 0%, #0b0f20 100%)", border: "1px solid rgba(255,255,255,0.1)", maxWidth: "420px" }}>
+        <DialogContent style={{ background: "linear-gradient(180deg, #0d1228 0%, #0b0f20 100%)", border: "1px solid var(--border)", maxWidth: "420px" }}>
           <DialogHeader>
-            <DialogTitle className="text-white text-lg flex items-center gap-2">
+            <DialogTitle className="text-foreground text-lg flex items-center gap-2">
               <FileQuestion size={18} className="text-[#f59e0b]" />
               <span>Duplicate File Conflict</span>
             </DialogTitle>
@@ -1703,7 +1904,7 @@ export function GroupWorkspace() {
           <div className="flex flex-col gap-2 mt-2">
             <button
               onClick={handleNewVersion}
-              className="flex flex-col items-start gap-1 p-3 rounded-xl text-left border border-white/5 bg-white/2 hover:bg-white/5 transition-all"
+              className="flex flex-col items-start gap-1 p-3 rounded-xl text-left border border-white/5 bg-white/2 hover:bg-accent transition-all"
             >
               <span className="text-xs font-bold text-[#00E5A0]">Upload as a New Version</span>
               <span className="text-[10px] text-[#64748b]">Increments version counter on the existing record, keeping file history.</span>
@@ -1711,7 +1912,7 @@ export function GroupWorkspace() {
 
             <button
               onClick={handleKeepBoth}
-              className="flex flex-col items-start gap-1 p-3 rounded-xl text-left border border-white/5 bg-white/2 hover:bg-white/5 transition-all"
+              className="flex flex-col items-start gap-1 p-3 rounded-xl text-left border border-white/5 bg-white/2 hover:bg-accent transition-all"
             >
               <span className="text-xs font-bold text-[#0B7FFF]">Keep Both (Rename)</span>
               <span className="text-[10px] text-[#64748b]">Uploads as a new copy, auto-renaming the file suffix.</span>
@@ -1721,7 +1922,7 @@ export function GroupWorkspace() {
           <DialogFooter className="mt-3">
             <button
               onClick={() => setConflict(null)}
-              className="w-full py-2 rounded-lg text-xs font-bold text-[#64748b] hover:bg-white/5 transition-all"
+              className="w-full py-2 rounded-lg text-xs font-bold text-[#64748b] hover:bg-accent transition-all"
             >
               Cancel Upload
             </button>
@@ -1748,10 +1949,10 @@ export function GroupWorkspace() {
           groupId={previewFile.groupId || selectedGroup?.id}
           initialEditMode={previewEditMode}
           onClose={() => setPreviewFile(null)}
-          onDownload={() => {
+          onDownload={canDownload(previewFile) ? () => {
             handleDownload(previewFile);
             setPreviewFile(null);
-          }}
+          } : undefined}
         />
       )}
 
@@ -1764,6 +1965,96 @@ export function GroupWorkspace() {
           onClose={() => setAclItem(null)}
         />
       )}
+
+      {/* Group Quota Management Dialog */}
+      <Dialog open={showQuotaDialog} onOpenChange={setShowQuotaDialog}>
+        <DialogContent style={{ background: "linear-gradient(180deg, #0d1228 0%, #0b0f20 100%)", border: "1px solid var(--border)" }}>
+          <DialogHeader>
+            <DialogTitle className="text-foreground text-xl flex items-center gap-2">
+              <HardDrive size={20} style={{ color: "#00d2ff" }} />
+              Group Storage Quota
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p style={{ color: "var(--muted-foreground)", fontSize: "13px" }}>
+              Configure storage limit for <span className="text-foreground font-medium">{selectedGroup?.name}</span>.
+            </p>
+
+            <label className="flex items-center gap-3 p-3 rounded-xl cursor-pointer"
+              style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
+              <input
+                type="checkbox"
+                checked={quotaUnlimited}
+                onChange={e => setQuotaUnlimited(e.target.checked)}
+                className="w-4 h-4 rounded accent-cyan-500"
+              />
+              <span style={{ color: quotaUnlimited ? "#00d2ff" : "#94a3b8", fontSize: "14px", fontWeight: 600 }}>
+                Unlimited storage
+              </span>
+            </label>
+
+            {!quotaUnlimited && (
+              <div>
+                <label style={{ color: "var(--muted-foreground)", fontSize: "12px", fontWeight: 600, letterSpacing: "0.05em" }}>
+                  STORAGE LIMIT
+                </label>
+                <div className="flex gap-2 mt-1">
+                  <input
+                    type="number"
+                    placeholder="e.g. 5"
+                    value={quotaInput}
+                    onChange={e => setQuotaInput(e.target.value)}
+                    min="1"
+                    step="1"
+                    className="flex-1 px-4 py-2.5 rounded-lg text-foreground placeholder:text-muted-foreground outline-none"
+                    style={{ background: "var(--input-background)", border: "1px solid var(--border)", fontSize: "14px" }}
+                  />
+                  <div className="flex rounded-lg overflow-hidden" style={{ border: "1px solid var(--border)" }}>
+                    {(["MB", "GB"] as const).map(u => (
+                      <button
+                        key={u}
+                        type="button"
+                        onClick={() => setQuotaUnit(u)}
+                        className="px-3 py-2.5 text-sm font-semibold transition-colors cursor-pointer"
+                        style={{
+                          background: quotaUnit === u ? "rgba(0,210,255,0.15)" : "var(--input-background)",
+                          color: quotaUnit === u ? "#00d2ff" : "#6b7fa8",
+                        }}>
+                        {u}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {groupQuota && (
+              <div className="p-3 rounded-xl" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
+                <p style={{ color: "var(--muted-foreground)", fontSize: "10px", fontWeight: 600, letterSpacing: "0.05em" }}>CURRENT USAGE</p>
+                <p style={{ color: "var(--foreground)", fontSize: "14px", fontWeight: 600, marginTop: "2px" }}>
+                  {fmtBytes(groupQuota.usedBytes)}
+                  {groupQuota.hasQuota && ` / ${fmtBytes(groupQuota.quotaBytes!)}`}
+                </p>
+              </div>
+            )}
+          </div>
+          <DialogFooter className="mt-4">
+            <button onClick={() => setShowQuotaDialog(false)}
+              className="px-4 py-2 rounded-lg cursor-pointer"
+              style={{ background: "var(--input-background)", border: "1px solid var(--border)", color: "var(--foreground)" }}>
+              Cancel
+            </button>
+            <button
+              onClick={handleSaveQuota}
+              disabled={isSavingQuota || (!quotaUnlimited && (!quotaInput || parseFloat(quotaInput) <= 0))}
+              className="px-4 py-2 rounded-lg flex items-center gap-2 disabled:opacity-40 cursor-pointer"
+              style={{ background: "linear-gradient(135deg, #00d2ff 0%, #0B7FFF 100%)", color: "white", fontWeight: 600 }}>
+              {isSavingQuota && <Loader2 size={16} className="animate-spin" />}
+              Save Quota
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
     </div>
   )

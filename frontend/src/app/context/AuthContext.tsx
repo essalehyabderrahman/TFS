@@ -28,16 +28,12 @@ interface AuthContextValue {
 // without needing to be inside the React tree
 let _signOutRef: (() => void) | null = null
 let _expireSessionRef: ((reason: SessionExpiredReason) => void) | null = null
-let _isAuthenticated = false
 
 export function getSignOut(): (() => void) | null {
   return _signOutRef
 }
 export function getExpireSession(): ((reason: SessionExpiredReason) => void) | null {
   return _expireSessionRef
-}
-export function getIsAuthenticated(): boolean {
-  return _isAuthenticated
 }
 
 export const AuthContext = createContext<AuthContextValue | null>(null)
@@ -179,13 +175,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     _signOutRef = signOut
     _expireSessionRef = expireSession
-    _isAuthenticated = user !== null
     return () => {
       _signOutRef = null
       _expireSessionRef = null
-      _isAuthenticated = false
     }
-  }, [signOut, expireSession, user])
+  }, [signOut, expireSession])
 
   return (
     <AuthContext.Provider

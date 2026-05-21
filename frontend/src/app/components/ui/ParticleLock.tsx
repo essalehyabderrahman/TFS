@@ -21,8 +21,6 @@ export const ParticleLock = () => {
         renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
         renderer.setSize(width, height);
         renderer.setClearColor(0x000000, 0);
-        renderer.domElement.style.outline = 'none';
-        renderer.domElement.style.border = 'none';
         container.appendChild(renderer.domElement);
 
         // --- Create Particles ---

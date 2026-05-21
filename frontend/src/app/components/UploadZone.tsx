@@ -167,12 +167,12 @@ export function UploadZone({ onUploaded }: UploadZoneProps) {
             }}
             onFocus={() => setShowSuggestions(true)}
             onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
-            className="w-full h-9 pl-3 pr-8 rounded-lg text-white placeholder:text-slate-600 outline-none text-sm transition-colors"
+            className="w-full h-9 pl-3 pr-8 rounded-lg text-foreground placeholder:text-slate-600 outline-none text-sm transition-colors"
             style={{
-              background: "rgba(255,255,255,0.04)",
+              background: "var(--input-background)",
               border: emailError
                 ? "1px solid rgba(248,113,113,0.7)"
-                : "1px solid rgba(255,255,255,0.08)",
+                : "1px solid var(--border)",
               boxShadow: emailError ? "0 0 0 3px rgba(248,113,113,0.12)" : "none",
             }}
           />
@@ -186,15 +186,15 @@ export function UploadZone({ onUploaded }: UploadZoneProps) {
               onClick={() => { setRecipientEmail(""); setShowSuggestions(false); }}
               className="absolute right-2 top-1/2 -translate-y-1/2 opacity-60 hover:opacity-100"
             >
-              <X size={14} style={{ color: "#94a3b8" }} />
+              <X size={14} style={{ color: "var(--muted-foreground)" }} />
             </button>
           )}
           {showSuggestions && filteredContacts.length > 0 && (
             <div
               className="absolute left-0 right-0 top-10 rounded-lg overflow-hidden z-30"
               style={{
-                background: "#0d1228",
-                border: "1px solid rgba(255,255,255,0.1)",
+                background: "var(--popover)",
+                border: "1px solid var(--border)",
                 boxShadow: "0 10px 40px rgba(0,0,0,0.6)",
               }}
             >
@@ -207,7 +207,7 @@ export function UploadZone({ onUploaded }: UploadZoneProps) {
                     setShowSuggestions(false);
                     if (emailError) setEmailError(false);
                   }}
-                  className="w-full flex items-center gap-3 px-3 py-2 text-left transition-colors hover:bg-white/5"
+                  className="w-full flex items-center gap-3 px-3 py-2 text-left transition-colors hover:bg-accent"
                 >
                   <div
                     className="w-7 h-7 rounded-full flex items-center justify-center shrink-0 text-xs font-bold text-white"
@@ -216,8 +216,8 @@ export function UploadZone({ onUploaded }: UploadZoneProps) {
                     {c.displayName.slice(0, 2).toUpperCase()}
                   </div>
                   <div className="min-w-0">
-                    <p style={{ color: "#e2e8f0", fontSize: "13px", fontWeight: 500 }} className="truncate">{c.displayName}</p>
-                    <p style={{ color: "#6b7fa8", fontSize: "11px" }} className="truncate">{c.email}</p>
+                    <p style={{ color: "var(--foreground)", fontSize: "13px", fontWeight: 500 }} className="truncate">{c.displayName}</p>
+                    <p style={{ color: "var(--muted-foreground)", fontSize: "11px" }} className="truncate">{c.email}</p>
                   </div>
                   {c.isFavorite && <span style={{ color: "#f59e0b", fontSize: "11px", marginLeft: "auto" }}>★</span>}
                 </button>
@@ -232,16 +232,16 @@ export function UploadZone({ onUploaded }: UploadZoneProps) {
           className="h-9 px-3 rounded-lg text-white outline-none text-sm"
           style={{
             background: "#121725",
-            border: "1px solid rgba(255,255,255,0.1)",
+            border: "1px solid var(--border)",
             minWidth: "140px",
-            color: "#e2e8f0",
+            color: "var(--foreground)",
           }}
         >
-          <option value={1} style={{ background: "#0d1228" }}>Expires in 1 day</option>
-          <option value={3} style={{ background: "#0d1228" }}>Expires in 3 days</option>
-          <option value={7} style={{ background: "#0d1228" }}>Expires in 7 days</option>
-          <option value={30} style={{ background: "#0d1228" }}>Expires in 30 days</option>
-          <option value={0} style={{ background: "#0d1228" }}>Never expires</option>
+          <option value={1} style={{ background: "var(--popover)" }}>Expires in 1 day</option>
+          <option value={3} style={{ background: "var(--popover)" }}>Expires in 3 days</option>
+          <option value={7} style={{ background: "var(--popover)" }}>Expires in 7 days</option>
+          <option value={30} style={{ background: "var(--popover)" }}>Expires in 30 days</option>
+          <option value={0} style={{ background: "var(--popover)" }}>Never expires</option>
         </select>
       </div>
 
@@ -287,9 +287,9 @@ export function UploadZone({ onUploaded }: UploadZoneProps) {
 
           <div className="text-center">
             {uploading ? (
-              <p className="text-sm sm:text-[15px]" style={{ color: "#cbd5e1", fontWeight: 600 }}>Uploading…</p>
+              <p className="text-sm sm:text-[15px]" style={{ color: "var(--foreground)", fontWeight: 600 }}>Uploading…</p>
             ) : (
-              <p className="text-sm sm:text-[15px]" style={{ color: "#cbd5e1", fontWeight: 600 }}>
+              <p className="text-sm sm:text-[15px]" style={{ color: "var(--foreground)", fontWeight: 600 }}>
                 <span className="hidden sm:inline">Drag &amp; drop files here, or </span>
                 <span style={{ color: "#00d2ff" }} className="hover:underline cursor-pointer">
                   <span className="sm:hidden">Tap to </span>
@@ -297,14 +297,14 @@ export function UploadZone({ onUploaded }: UploadZoneProps) {
                 </span>
               </p>
             )}
-            <p className="text-[11px] sm:text-[12.5px] mt-1" style={{ color: "#475569" }}>
-              Max size: <span style={{ color: "#64748b", fontWeight: 500 }}>100 MB per file</span>
+            <p className="text-[11px] sm:text-[12.5px] mt-1" style={{ color: "var(--muted-foreground)" }}>
+              Max size: <span style={{ color: "var(--muted-foreground)", fontWeight: 500 }}>100 MB per file</span>
             </p>
           </div>
 
           <div className="flex items-center justify-center gap-1.5 mt-1">
             <ShieldCheck size={11} style={{ color: "#00E5A0" }} />
-            <span className="text-[10px] sm:text-[11px]" style={{ color: "#475569", fontWeight: 500 }}>
+            <span className="text-[10px] sm:text-[11px]" style={{ color: "var(--muted-foreground)", fontWeight: 500 }}>
               You'll choose encryption after selecting a file
             </span>
           </div>

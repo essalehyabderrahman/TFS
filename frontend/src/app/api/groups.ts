@@ -1,6 +1,14 @@
 import { apiRequest } from "./client"
 import type { Transfer } from "@/types"
 
+export interface GroupQuotaInfo {
+  hasQuota: boolean
+  quotaBytes: number | null
+  usedBytes: number
+  remainingBytes: number | null
+  usagePercent: number | null
+}
+
 export interface Group {
   id: string
   name: string
@@ -9,6 +17,8 @@ export interface Group {
   createdAt: string
   memberCount: number
   myRole: "admin" | "member" | null
+  storageQuotaBytes: number | null
+  quotaInfo?: GroupQuotaInfo
 }
 
 export interface GroupMember {
@@ -28,6 +38,8 @@ export interface GroupSettings {
   allowMemberDirectory: boolean
   allowMemberInvite: boolean
   allowExternalSharing: boolean
+  allowGroupTransfers: boolean
+  storageQuotaBytes: number | null
   updatedAt: string | null
   updatedBy: string | null
 }
@@ -333,5 +345,14 @@ export async function updateGroupFileContent(
       error: err?.message ?? "UNKNOWN_ERROR",
       lockedBy: err?.lockedBy,
     }
+  }
+}
+
+export async function fetchGroupQuota(groupId: string): Promise<{ data: GroupQuotaInfo | null; error: string | null }> {
+  try {
+    const data = await apiRequest<GroupQuotaInfo>(`/groups/${groupId}/quota`)
+    return { data, error: null }
+  } catch (err: any) {
+    return { data: null, error: err?.message ?? String(err) }
   }
 }

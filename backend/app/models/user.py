@@ -40,6 +40,9 @@ class User(db.Model):
     encryption_level    = db.Column(db.String(20), default="AES-256-GCM")
     login_notifications = db.Column(db.Boolean, default=True)
 
+    # Storage Quota (V2 merge)
+    storage_quota_bytes = db.Column(db.BigInteger, nullable=True)  # None = unlimited
+
     # Timestamps
     created_at   = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
     last_active  = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
@@ -101,6 +104,7 @@ class User(db.Model):
             "joinedAt":   self.created_at.isoformat(),
             "lastActive": self.last_active.isoformat(),
             "passwordResetRequired": self.password_reset_required,
+            "storageQuotaBytes": self.storage_quota_bytes,
         }
 
     def to_public_dict(self) -> dict:

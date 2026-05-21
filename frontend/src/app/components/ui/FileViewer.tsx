@@ -30,6 +30,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import mammoth from "mammoth";
 import {
   X,
   Download,
@@ -59,7 +60,7 @@ import { updateExplorerFileContent } from "@/app/api/explorer";
 
 type FileKind = "pdf" | "img" | "zip" | "video" | "doc" | "other";
 
-type PreviewCategory = "image" | "pdf" | "text" | "video" | "unsupported";
+type PreviewCategory = "image" | "pdf" | "text" | "video" | "docx" | "unsupported";
 
 interface FileViewerProps {
   fileId: string;
@@ -93,8 +94,9 @@ function categoryFromFileType(fileType: FileKind, fileName: string): PreviewCate
     return "pdf";
   if (fileType === "video" || ["mp4", "webm", "ogv", "mov"].includes(ext))
     return "video";
+  if (ext === "docx")
+    return "docx";
   if (
-    fileType === "doc" ||
     ["txt", "md", "csv", "json", "xml", "yaml", "yml", "toml", "ini",
      "log", "sh", "py", "js", "ts", "tsx", "jsx", "html", "css"].includes(ext)
   )
@@ -130,6 +132,7 @@ export function FileViewer({
   // ── Fetch state ────────────────────────────────────────────────────────────
   const [blobUrl, setBlobUrl]         = useState<string | null>(null);
   const [textContent, setTextContent] = useState<string | null>(null);
+  const [docxHtml, setDocxHtml]       = useState<string | null>(null);
   const [loading, setLoading]         = useState(true);
   const [error, setError]             = useState<string | null>(null);
 
@@ -225,6 +228,14 @@ export function FileViewer({
         if (category === "text") {
           const text = await res.text();
           setTextContent(text);
+        } else if (category === "docx") {
+          const arrayBuffer = await res.arrayBuffer();
+          try {
+            const result = await mammoth.convertToHtml({ arrayBuffer });
+            setDocxHtml(result.value);
+          } catch {
+            setError("DOCX_PARSE_ERROR");
+          }
         } else {
           const blob = await res.blob();
           objectUrl = URL.createObjectURL(blob);
@@ -375,7 +386,7 @@ export function FileViewer({
               {fileName}
             </p>
             <p style={{ fontSize: "11px", color: "#3d4f6e", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-              {isEditing ? "editing" : category === "unsupported" ? "No preview available" : category}
+              {isEditing ? "editing" : category === "unsupported" ? "No preview available" : category === "docx" ? "document" : category}
             </p>
           </div>
 
@@ -484,6 +495,11 @@ export function FileViewer({
               fileName={fileName}
               onChange={setEditContent}
             />
+          )}
+
+          {/* DOCX */}
+          {!loading && !error && category === "docx" && docxHtml !== null && (
+            <DocxPreview html={docxHtml} />
           )}
 
           {/* Unsupported */}
@@ -604,11 +620,12 @@ function LoadingState({ fileName }: { fileName: string }) {
 // ── Error ─────────────────────────────────────────────────────────────────────
 
 const errorMessages: Record<string, string> = {
-  FORBIDDEN:      "You don't have permission to view this file.",
-  EXPIRED:        "This transfer has expired.",
-  DECRYPT_ERROR:  "The file could not be decrypted.",
-  NOT_FOUND:      "File not found.",
-  NETWORK_ERROR:  "Network error — check your connection.",
+  FORBIDDEN:        "You don't have permission to view this file.",
+  EXPIRED:          "This transfer has expired.",
+  DECRYPT_ERROR:    "The file could not be decrypted.",
+  NOT_FOUND:        "File not found.",
+  NETWORK_ERROR:    "Network error — check your connection.",
+  DOCX_PARSE_ERROR: "Could not parse this document. Try downloading it instead.",
 };
 
 function ErrorState({
@@ -924,6 +941,50 @@ function EditableTextArea({
             caretColor: "#0B7FFF",
             overflowY: "auto",
           }}
+        />
+      </div>
+    </div>
+  );
+}
+
+// ── DOCX Preview (rendered via mammoth.js) ────────────────────────────────────
+
+function DocxPreview({ html }: { html: string }) {
+  return (
+    <div
+      className="absolute inset-0 overflow-auto"
+      style={{ scrollbarWidth: "thin", scrollbarColor: "rgba(11,127,255,0.2) transparent" }}
+    >
+      <div
+        className="max-w-3xl mx-auto my-8 p-8 sm:p-12 rounded-xl"
+        style={{
+          background: "#fff",
+          color: "#1a1a1a",
+          fontSize: "14px",
+          lineHeight: "1.8",
+          fontFamily: '"Inter", "Segoe UI", sans-serif',
+          boxShadow: "0 4px 24px rgba(0,0,0,0.4)",
+          minHeight: "60vh",
+        }}
+      >
+        <style>{`
+          .docx-content h1 { font-size: 1.8em; font-weight: 700; margin: 0.8em 0 0.4em; color: #111; }
+          .docx-content h2 { font-size: 1.4em; font-weight: 600; margin: 0.7em 0 0.3em; color: #222; }
+          .docx-content h3 { font-size: 1.2em; font-weight: 600; margin: 0.6em 0 0.3em; color: #333; }
+          .docx-content p { margin: 0.5em 0; }
+          .docx-content ul, .docx-content ol { margin: 0.5em 0; padding-left: 1.8em; }
+          .docx-content li { margin: 0.25em 0; }
+          .docx-content table { border-collapse: collapse; width: 100%; margin: 1em 0; }
+          .docx-content td, .docx-content th { border: 1px solid #ddd; padding: 8px 12px; text-align: left; }
+          .docx-content th { background: #f5f5f5; font-weight: 600; }
+          .docx-content strong { font-weight: 700; }
+          .docx-content em { font-style: italic; }
+          .docx-content a { color: #0B7FFF; text-decoration: underline; }
+          .docx-content img { max-width: 100%; height: auto; border-radius: 4px; margin: 0.5em 0; }
+        `}</style>
+        <div
+          className="docx-content"
+          dangerouslySetInnerHTML={{ __html: html }}
         />
       </div>
     </div>

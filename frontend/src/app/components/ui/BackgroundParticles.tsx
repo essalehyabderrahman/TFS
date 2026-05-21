@@ -19,35 +19,19 @@ export const BackgroundParticles = () => {
         renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
         renderer.setSize(width, height);
         renderer.setClearColor(0x000000, 0);
-        renderer.domElement.style.outline = 'none';
-        renderer.domElement.style.border = 'none';
         container.appendChild(renderer.domElement);
 
         // --- Create Ambient Particles ---
         const isMobileOrTablet = window.innerWidth < 1024;
-        const count = isMobileOrTablet ? 2500 : 5000;
+        const count = isMobileOrTablet ? 5000 : 15000;
         const positions = new Float32Array(count * 3);
         const velocities = new Float32Array(count * 3);
-
-        const getRandomZ = () => {
-            const r = Math.random();
-            if (r < 0.10) {
-                // Far/high boundary of this range (10% probability): Z between 4.4 and 4.7
-                return 4.4 + Math.random() * 0.3;
-            } else if (r < 0.30) {
-                // Medium boundary of this range (20% probability): Z between 4 and 4.4
-                return 4 + Math.random() * 0.4;
-            } else {
-                // Remaining range (70% probability): Z between 3 and 4
-                return 3.7 + Math.random() * 1.0;
-            }
-        };
 
         for (let i = 0; i < count; i++) {
             // Distribute across a large 3D area to cover full viewport
             positions[i * 3] = (Math.random() - 0.5) * 35;
             positions[i * 3 + 1] = (Math.random() - 0.5) * 20;
-            positions[i * 3 + 2] = getRandomZ();
+            positions[i * 3 + 2] = (Math.random() - 0.5) * 15;
 
             // Subtle random velocities
             velocities[i * 3] = (Math.random() - 0.5) * 0.012;
@@ -97,27 +81,16 @@ export const BackgroundParticles = () => {
                 posArray[i3+1] += velocities[i3+1] + Math.cos(time * 0.0005 + i) * 0.001;
                 posArray[i3+2] += velocities[i3+2];
 
-                // Boundary recycling for depth (Z)
-                // If particles go out of the active depth field, recycle them at a new random position
-                if (posArray[i3+2] < 3 || posArray[i3+2] > 4.7) {
-                    posArray[i3] = (Math.random() - 0.5) * 35;
-                    posArray[i3+1] = (Math.random() - 0.5) * 20;
-                    posArray[i3+2] = getRandomZ();
-                    
-                    // Re-randomize velocity so it behaves differently
-                    velocities[i3] = (Math.random() - 0.5) * 0.012;
-                    velocities[i3+1] = (Math.random() - 0.5) * 0.012;
-                    velocities[i3+2] = (Math.random() - 0.5) * 0.01;
-                }
-
-                // Boundary wrapping for horizontal and vertical space (X & Y)
-                if (posArray[i3] > 17.5) posArray[i3] = -17.5;
-                if (posArray[i3] < -17.5) posArray[i3] = 17.5;
-                if (posArray[i3+1] > 10) posArray[i3+1] = -10;
-                if (posArray[i3+1] < -10) posArray[i3+1] = 10;
+                // Boundary wrapping (X)
+                if (posArray[i3] > 10) posArray[i3] = -10;
+                if (posArray[i3] < -10) posArray[i3] = 10;
+                // Boundary wrapping (Y)
+                if (posArray[i3+1] > 6) posArray[i3+1] = -6;
+                if (posArray[i3+1] < -6) posArray[i3+1] = 6;
             }
             posAttr.needsUpdate = true;
 
+            points.rotation.y += 0.0005; // Extremely slow overall rotation
             renderer.render(scene, camera);
         };
         animate(0);

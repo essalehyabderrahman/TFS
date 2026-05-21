@@ -100,7 +100,7 @@ export function SessionExpiredModal({ reason, onClose }: Props) {
           >
             {title}
           </h2>
-          <p style={{ color: "#6b7fa8", fontSize: "14px", lineHeight: "1.6" }}>{body}</p>
+          <p style={{ color: "var(--muted-foreground)", fontSize: "14px", lineHeight: "1.6" }}>{body}</p>
         </div>
 
         {/* CTA */}

@@ -21,6 +21,7 @@ import { MfaSetup } from "./pages/MfaSetup";
 import { ForgotPassword } from "./pages/ForgotPassword";
 import { FileExplorer } from "./pages/FileExplorer";
 import { RecoveryManagement } from "./pages/RecoveryManagement";
+import { QuotaRequests } from "./pages/QuotaRequests";
 
 
 function RootLayout() {
@@ -124,6 +125,14 @@ export const router = createBrowserRouter([
               { path: "contacts", Component: Contacts },
               { path: "explorer", Component: FileExplorer },
               { path: "recovery-management", Component: RecoveryManagement },
+              {
+                path: "quota-requests",
+                element: (
+                  <AdminOrGroupAdminRoute>
+                    <QuotaRequests />
+                  </AdminOrGroupAdminRoute>
+                ),
+              },
             ],
           },
         ],

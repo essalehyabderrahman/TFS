@@ -86,7 +86,7 @@ function Breadcrumbs({
     <nav className="flex items-center gap-1 flex-wrap" aria-label="breadcrumb">
       <button
         onClick={() => onNavigate(null)}
-        className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg transition-colors hover:bg-white/5"
+        className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg transition-colors hover:bg-accent"
         style={{ fontSize: "12px", color: path.length === 0 ? "#e2e8f0" : "#64748b" }}
       >
         <Home size={13} />
@@ -97,7 +97,7 @@ function Breadcrumbs({
           <ChevronRight size={12} style={{ color: "#2a3550" }} />
           <button
             onClick={() => onNavigate(id, path.slice(0, idx + 1))}
-            className="px-2.5 py-1 rounded-lg transition-colors hover:bg-white/5 truncate max-w-[140px]"
+            className="px-2.5 py-1 rounded-lg transition-colors hover:bg-accent truncate max-w-[140px]"
             style={{
               fontSize: "12px",
               color: idx === path.length - 1 ? "#e2e8f0" : "#64748b",
@@ -168,7 +168,7 @@ function MoveModal({
             <span style={{ fontSize: "13px", color: isSelected ? "#e2e8f0" : "#94a3b8" }} className="truncate">
               {f.name}
             </span>
-            {isCurrent && <span style={{ fontSize: "10px", color: "#475569", marginLeft: "auto" }}>current</span>}
+            {isCurrent && <span style={{ fontSize: "10px", color: "var(--muted-foreground)", marginLeft: "auto" }}>current</span>}
           </button>
           {isExpanded && renderTree(f.id, depth + 1)}
         </div>
@@ -183,14 +183,14 @@ function MoveModal({
         className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-[90vw] max-w-[420px] rounded-2xl overflow-hidden"
         style={{
           background: "linear-gradient(180deg, #0d1321 0%, #0b0f20 100%)",
-          border: "1px solid rgba(255,255,255,0.1)",
+          border: "1px solid var(--border)",
           boxShadow: "0 24px 64px rgba(0,0,0,0.7)",
         }}
       >
         {/* Header */}
         <div
           className="flex items-center justify-between px-5 py-4"
-          style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}
+          style={{ borderBottom: "1px solid var(--border)" }}
         >
           <div className="flex items-center gap-2.5">
             <div
@@ -200,12 +200,12 @@ function MoveModal({
               <FolderSymlink size={15} style={{ color: "#0B7FFF" }} />
             </div>
             <div>
-              <p style={{ fontSize: "14px", color: "#e2e8f0", fontWeight: 600 }}>Move to…</p>
-              <p style={{ fontSize: "11px", color: "#475569" }} className="truncate max-w-[220px]">{item.name}</p>
+              <p style={{ fontSize: "14px", color: "var(--foreground)", fontWeight: 600 }}>Move to…</p>
+              <p style={{ fontSize: "11px", color: "var(--muted-foreground)" }} className="truncate max-w-[220px]">{item.name}</p>
             </div>
           </div>
-          <button onClick={onClose} className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-white/10 transition-colors">
-            <X size={15} style={{ color: "#6b7fa8" }} />
+          <button onClick={onClose} className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-accent transition-colors">
+            <X size={15} style={{ color: "var(--muted-foreground)" }} />
           </button>
         </div>
 
@@ -223,23 +223,23 @@ function MoveModal({
           >
             <Home size={14} style={{ color: "#60A5FA", flexShrink: 0 }} />
             <span style={{ fontSize: "13px", color: selected === "__root__" ? "#e2e8f0" : "#94a3b8" }}>My Files (root)</span>
-            {currentFolderId === null && <span style={{ fontSize: "10px", color: "#475569", marginLeft: "auto" }}>current</span>}
+            {currentFolderId === null && <span style={{ fontSize: "10px", color: "var(--muted-foreground)", marginLeft: "auto" }}>current</span>}
           </button>
           {renderTree(null)}
           {folders.length === 0 && (
-            <p className="text-center py-4" style={{ fontSize: "12px", color: "#475569" }}>No folders available</p>
+            <p className="text-center py-4" style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>No folders available</p>
           )}
         </div>
 
         {/* Footer */}
         <div
           className="flex items-center justify-end gap-2 px-5 py-4"
-          style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}
+          style={{ borderTop: "1px solid var(--border)" }}
         >
           <button
             onClick={onClose}
-            className="px-4 py-2 rounded-xl text-[13px] transition-colors hover:bg-white/5"
-            style={{ color: "#94a3b8", border: "1px solid rgba(255,255,255,0.1)" }}
+            className="px-4 py-2 rounded-xl text-[13px] transition-colors hover:bg-accent"
+            style={{ color: "var(--muted-foreground)", border: "1px solid var(--border)" }}
           >
             Cancel
           </button>
@@ -260,7 +260,7 @@ function MoveModal({
                 className="px-4 py-2 rounded-xl text-[13px] font-semibold transition-all hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed"
                 style={{
                   background: "linear-gradient(135deg, #0B7FFF 0%, #0960CC 100%)",
-                  color: "#ffffff",
+                  color: "var(--foreground)",
                   boxShadow: !isInvalidMove ? "0 4px 16px rgba(11,127,255,0.25)" : "none",
                 }}
               >
@@ -584,7 +584,7 @@ export function FileExplorer() {
 
   const SortIcon = ({ field }: { field: SortField }) =>
     sortField !== field
-      ? <ArrowUpDown size={11} style={{ color: "#475569" }} />
+      ? <ArrowUpDown size={11} style={{ color: "var(--muted-foreground)" }} />
       : sortDir === "asc"
         ? <ArrowUp size={11} style={{ color: "#0B7FFF" }} />
         : <ArrowDown size={11} style={{ color: "#0B7FFF" }} />;
@@ -615,7 +615,7 @@ export function FileExplorer() {
           onDrop={isFolder ? (e) => onFolderDrop(e, item.id) : undefined}
           className="group relative flex flex-col items-center gap-2 p-4 rounded-2xl cursor-pointer transition-all duration-200 hover:bg-white/[0.04]"
           style={{
-            border: isDropTarget ? `1px solid ${iconColor}66` : "1px solid rgba(255,255,255,0.05)",
+            border: isDropTarget ? `1px solid ${iconColor}66` : "1px solid var(--border)",
             background: isDragging ? "rgba(11,127,255,0.07)" : isDropTarget ? `${iconColor}0d` : "rgba(255,255,255,0.015)",
             opacity: isDragging ? 0.5 : 1,
           }}
@@ -645,21 +645,21 @@ export function FileExplorer() {
               onBlur={confirmRename}
               onClick={(e) => e.stopPropagation()}
               className="w-full text-center text-[12px] rounded px-1 py-0.5 outline-none"
-              style={{ background: "rgba(11,127,255,0.15)", border: "1px solid rgba(11,127,255,0.4)", color: "#e2e8f0" }}
+              style={{ background: "rgba(11,127,255,0.15)", border: "1px solid rgba(11,127,255,0.4)", color: "var(--foreground)" }}
             />
           ) : (
-            <p className="text-center text-[12px] font-medium truncate w-full px-1" style={{ color: "#cbd5e1" }}>
+            <p className="text-center text-[12px] font-medium truncate w-full px-1" style={{ color: "var(--foreground)" }}>
               {item.name}
             </p>
           )}
-          <p className="text-[10px]" style={{ color: "#3d4f6e" }}>{item.sizeLabel ?? "—"}</p>
+          <p className="text-[10px]" style={{ color: "var(--muted-foreground)" }}>{item.sizeLabel ?? "—"}</p>
 
           {/* Menu button */}
           <button
-            className="absolute top-2 right-2 w-6 h-6 flex items-center justify-center rounded-lg opacity-0 group-hover:opacity-100 transition-all hover:bg-white/10"
+            className="absolute top-2 right-2 w-6 h-6 flex items-center justify-center rounded-lg opacity-0 group-hover:opacity-100 transition-all hover:bg-accent"
             onClick={(e) => { e.stopPropagation(); setOpenMenu(openMenu === item.id ? null : item.id); }}
           >
-            <MoreHorizontal size={13} style={{ color: "#64748b" }} />
+            <MoreHorizontal size={13} style={{ color: "var(--muted-foreground)" }} />
           </button>
 
           {openMenu === item.id && <ItemMenu item={item} onClose={() => setOpenMenu(null)} isAbsolute />}
@@ -679,7 +679,7 @@ export function FileExplorer() {
         onDrop={isFolder ? (e) => onFolderDrop(e, item.id) : undefined}
         className="group grid grid-cols-[1fr_80px] sm:grid-cols-[1fr_90px_120px_80px] items-center px-5 py-3.5 transition-all duration-150 hover:bg-white/[0.025] relative cursor-pointer"
         style={{
-          borderBottom: "1px solid rgba(255,255,255,0.04)",
+          borderBottom: "1px solid var(--border)",
           background: isDragging ? "rgba(11,127,255,0.06)" : isDropTarget ? `${iconColor}0a` : "transparent",
           opacity: isDragging ? 0.5 : 1,
           outline: isDropTarget ? `1px dashed ${iconColor}66` : "none",
@@ -712,22 +712,22 @@ export function FileExplorer() {
                 onBlur={confirmRename}
                 onClick={(e) => e.stopPropagation()}
                 className="w-full text-[13px] rounded-lg px-2 py-1 outline-none"
-                style={{ background: "rgba(11,127,255,0.15)", border: "1px solid rgba(11,127,255,0.4)", color: "#e2e8f0" }}
+                style={{ background: "rgba(11,127,255,0.15)", border: "1px solid rgba(11,127,255,0.4)", color: "var(--foreground)" }}
               />
             ) : (
-              <p className="text-[13px] font-medium truncate" style={{ color: "#cbd5e1" }}>{item.name}</p>
+              <p className="text-[13px] font-medium truncate" style={{ color: "var(--foreground)" }}>{item.name}</p>
             )}
           </div>
         </div>
 
         {/* Cell 2 — size */}
         <div className="hidden sm:block">
-          <p style={{ fontSize: "12px", color: "#3d4f6e" }}>{item.sizeLabel ?? "—"}</p>
+          <p style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>{item.sizeLabel ?? "—"}</p>
         </div>
 
         {/* Cell 3 — date */}
         <div className="hidden sm:block">
-          <p style={{ fontSize: "12px", color: "#3d4f6e" }}>{item.createdAt}</p>
+          <p style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>{item.createdAt}</p>
         </div>
 
         {/* Cell 4 — actions / delete confirm */}
@@ -743,9 +743,9 @@ export function FileExplorer() {
               </button>
               <button
                 onClick={() => setDeleteConfirmId(null)}
-                className="w-6 h-6 flex items-center justify-center rounded-lg hover:bg-white/10 transition-colors"
+                className="w-6 h-6 flex items-center justify-center rounded-lg hover:bg-accent transition-colors"
               >
-                <X size={13} style={{ color: "#64748b" }} />
+                <X size={13} style={{ color: "var(--muted-foreground)" }} />
               </button>
             </div>
           ) : (
@@ -753,9 +753,9 @@ export function FileExplorer() {
               <button
                 title="Details"
                 onClick={() => setDetailsItem(item)}
-                className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-white/10 transition-colors"
+                className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-accent transition-colors"
               >
-                <Eye size={13} style={{ color: "#64748b" }} />
+                <Eye size={13} style={{ color: "var(--muted-foreground)" }} />
               </button>
               {isEditableText(item.name, item.fileKind) && (
                 <button
@@ -776,16 +776,16 @@ export function FileExplorer() {
               <button
                 title="Rename"
                 onClick={() => startRename(item)}
-                className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-white/10 transition-colors"
+                className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-accent transition-colors"
               >
-                <Pencil size={13} style={{ color: "#64748b" }} />
+                <Pencil size={13} style={{ color: "var(--muted-foreground)" }} />
               </button>
               <button
                 title="Move"
                 onClick={() => setMoveItem(item)}
-                className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-white/10 transition-colors"
+                className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-accent transition-colors"
               >
-                <MoveRight size={13} style={{ color: "#64748b" }} />
+                <MoveRight size={13} style={{ color: "var(--muted-foreground)" }} />
               </button>
               <button
                 title="Delete"
@@ -810,24 +810,24 @@ export function FileExplorer() {
         style={{
           top: isAbsolute ? "2rem" : undefined,
           right: isAbsolute ? "0" : undefined,
-          background: "#131929",
-          border: "1px solid rgba(255,255,255,0.1)",
+          background: "var(--popover)",
+          border: "1px solid var(--border)",
           boxShadow: "0 16px 40px rgba(0,0,0,0.6)",
         }}
         onClick={(e) => e.stopPropagation()}
       >
         {[
           ...(item.type === "file" && isEditableText(item.name, item.fileKind) ? [{ icon: SquarePen, label: "Edit Content", color: "#34D399", action: () => { setPreviewItem(item); setPreviewEditMode(true); onClose(); } }] : []),
-          { icon: Download, label: "Download", color: "#94a3b8", action: () => { handleExplorerDownload(item); onClose(); } },
-          { icon: Eye, label: "Details", color: "#94a3b8", action: () => { setDetailsItem(item); onClose(); } },
-          { icon: Pencil, label: "Rename", color: "#94a3b8", action: () => startRename(item) },
-          { icon: MoveRight, label: "Move to…", color: "#94a3b8", action: () => { setMoveItem(item); onClose(); } },
+          { icon: Download, label: "Download", color: "var(--muted-foreground)", action: () => { handleExplorerDownload(item); onClose(); } },
+          { icon: Eye, label: "Details", color: "var(--muted-foreground)", action: () => { setDetailsItem(item); onClose(); } },
+          { icon: Pencil, label: "Rename", color: "var(--muted-foreground)", action: () => startRename(item) },
+          { icon: MoveRight, label: "Move to…", color: "var(--muted-foreground)", action: () => { setMoveItem(item); onClose(); } },
           { icon: Trash2, label: "Delete", color: "#F87171", action: () => { setDeleteConfirmId(item.id); onClose(); } },
         ].map(({ icon: Icon, label, color, action }) => (
           <button
             key={label}
             onClick={() => { action(); onClose(); }}
-            className="w-full text-left px-4 py-2.5 transition-colors hover:bg-white/5 flex items-center gap-2"
+            className="w-full text-left px-4 py-2.5 transition-colors hover:bg-accent flex items-center gap-2"
             style={{ fontSize: "13px", color }}
           >
             <Icon size={14} />
@@ -845,10 +845,10 @@ export function FileExplorer() {
       {/* ── Page Header ─────────────────────────────────────────────────── */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h1 style={{ fontSize: "20px", color: "#e2e8f0", fontWeight: 700, letterSpacing: "-0.01em" }}>
+          <h1 style={{ fontSize: "20px", color: "var(--foreground)", fontWeight: 700, letterSpacing: "-0.01em" }}>
             File Explorer
           </h1>
-          <p style={{ fontSize: "12px", color: "#3d4f6e", marginTop: "2px" }}>
+          <p style={{ fontSize: "12px", color: "var(--muted-foreground)", marginTop: "2px" }}>
             {folderCount} folder{folderCount !== 1 ? "s" : ""} · {fileCount} file{fileCount !== 1 ? "s" : ""}
           </p>
         </div>
@@ -873,8 +873,8 @@ export function FileExplorer() {
           {/* New Folder button */}
           <button
             onClick={() => setCreatingFolder(true)}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl text-[13px] font-semibold transition-colors hover:bg-white/5"
-            style={{ color: "#94a3b8", border: "1px solid rgba(255,255,255,0.1)" }}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl text-[13px] font-semibold transition-colors hover:bg-accent"
+            style={{ color: "var(--muted-foreground)", border: "1px solid var(--border)" }}
           >
             <FolderPlus size={14} />
             New Folder
@@ -885,24 +885,24 @@ export function FileExplorer() {
       {/* ── Breadcrumbs + Toolbar ─────────────────────────────────────── */}
       <div
         className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 px-4 py-3 rounded-xl"
-        style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.05)" }}
+        style={{ background: "rgba(255,255,255,0.02)", border: "1px solid var(--border)" }}
       >
         <Breadcrumbs path={folderPath} items={items} onNavigate={navigateTo} />
 
         <div className="flex items-center gap-2">
           {/* Search */}
           <div className="relative">
-            <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: "#3d4f6e" }} />
+            <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: "var(--muted-foreground)" }} />
             <input
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search…"
-              className="h-8 pl-7 pr-3 rounded-lg text-[12px] text-white placeholder:text-slate-700 outline-none transition-colors"
-              style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", width: "150px" }}
+              className="h-8 pl-7 pr-3 rounded-lg text-[12px] text-foreground placeholder:text-slate-700 outline-none transition-colors"
+              style={{ background: "var(--input-background)", border: "1px solid var(--border)", width: "150px" }}
             />
             {searchQuery && (
               <button className="absolute right-2 top-1/2 -translate-y-1/2" onClick={() => setSearchQuery("")}>
-                <X size={11} style={{ color: "#475569" }} />
+                <X size={11} style={{ color: "var(--muted-foreground)" }} />
               </button>
             )}
           </div>
@@ -911,12 +911,12 @@ export function FileExplorer() {
           <div className="relative">
             <button
               onClick={() => setShowSortMenu((v) => !v)}
-              className="flex items-center gap-1.5 h-8 px-3 rounded-lg transition-colors hover:bg-white/5"
+              className="flex items-center gap-1.5 h-8 px-3 rounded-lg transition-colors hover:bg-accent"
               style={{
                 fontSize: "12px",
-                color: "#64748b",
-                border: "1px solid rgba(255,255,255,0.07)",
-                background: showSortMenu ? "rgba(255,255,255,0.04)" : "transparent",
+                color: "var(--muted-foreground)",
+                border: "1px solid var(--border)",
+                background: showSortMenu ? "var(--input-background)" : "transparent",
               }}
             >
               <ArrowUpDown size={12} />
@@ -927,13 +927,13 @@ export function FileExplorer() {
                 <div className="fixed inset-0 z-40" onClick={() => setShowSortMenu(false)} />
                 <div
                   className="absolute right-0 top-10 rounded-xl overflow-hidden z-50 min-w-[140px]"
-                  style={{ background: "#131929", border: "1px solid rgba(255,255,255,0.1)", boxShadow: "0 16px 40px rgba(0,0,0,0.5)" }}
+                  style={{ background: "var(--popover)", border: "1px solid var(--border)", boxShadow: "0 16px 40px rgba(0,0,0,0.5)" }}
                 >
                   {(["name", "date", "size"] as SortField[]).map((f) => (
                     <button
                       key={f}
                       onClick={() => handleSort(f)}
-                      className="w-full text-left px-4 py-2.5 flex items-center justify-between gap-2 hover:bg-white/5 transition-colors"
+                      className="w-full text-left px-4 py-2.5 flex items-center justify-between gap-2 hover:bg-accent transition-colors"
                       style={{ fontSize: "13px", color: sortField === f ? "#0B7FFF" : "#94a3b8" }}
                     >
                       <span className="capitalize">{f}</span>
@@ -948,7 +948,7 @@ export function FileExplorer() {
           {/* View toggle */}
           <div
             className="flex items-center rounded-lg overflow-hidden"
-            style={{ border: "1px solid rgba(255,255,255,0.07)" }}
+            style={{ border: "1px solid var(--border)" }}
           >
             {(["list", "grid"] as ViewMode[]).map((mode) => (
               <button
@@ -1008,9 +1008,9 @@ export function FileExplorer() {
 
             <div className="text-center">
               {uploading ? (
-                <p className="text-sm sm:text-[15px]" style={{ color: "#cbd5e1", fontWeight: 600 }}>Uploading…</p>
+                <p className="text-sm sm:text-[15px]" style={{ color: "var(--foreground)", fontWeight: 600 }}>Uploading…</p>
               ) : (
-                <p className="text-sm sm:text-[15px]" style={{ color: "#cbd5e1", fontWeight: 600 }}>
+                <p className="text-sm sm:text-[15px]" style={{ color: "var(--foreground)", fontWeight: 600 }}>
                   <span className="hidden sm:inline">Drag &amp; drop files here, or </span>
                   <span style={{ color: "#00d2ff" }} className="hover:underline cursor-pointer">
                     <span className="sm:hidden">Tap to </span>
@@ -1018,14 +1018,14 @@ export function FileExplorer() {
                   </span>
                 </p>
               )}
-              <p className="text-[11px] sm:text-[12.5px] mt-1" style={{ color: "#475569" }}>
+              <p className="text-[11px] sm:text-[12.5px] mt-1" style={{ color: "var(--muted-foreground)" }}>
                 Upload files directly to the current folder
               </p>
             </div>
 
             <div className="flex items-center justify-center gap-1.5 mt-1">
               <ShieldCheck size={11} style={{ color: "#00E5A0" }} />
-              <span className="text-[10px] sm:text-[11px]" style={{ color: "#475569", fontWeight: 500 }}>
+              <span className="text-[10px] sm:text-[11px]" style={{ color: "var(--muted-foreground)", fontWeight: 500 }}>
                 You'll choose encryption after selecting a file
               </span>
             </div>
@@ -1036,7 +1036,7 @@ export function FileExplorer() {
       {/* ── Main Panel ───────────────────────────────────────────────────── */}
       <div
         className="rounded-2xl overflow-hidden relative"
-        style={{ border: "1px solid rgba(255,255,255,0.06)" }}
+        style={{ border: "1px solid var(--border)" }}
         onDragOver={onZoneDragOver}
         onDragLeave={onZoneDragLeave}
         onDrop={onZoneDrop}
@@ -1062,7 +1062,7 @@ export function FileExplorer() {
         {creatingFolder && (
           <div
             className="flex items-center gap-3 px-4 sm:px-5 py-3.5"
-            style={{ borderBottom: "1px solid rgba(255,255,255,0.06)", background: "rgba(11,127,255,0.05)" }}
+            style={{ borderBottom: "1px solid var(--border)", background: "rgba(11,127,255,0.05)" }}
           >
             <div
               className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
@@ -1080,7 +1080,7 @@ export function FileExplorer() {
                 if (e.key === "Escape") { setCreatingFolder(false); setNewFolderName(""); }
               }}
               className="flex-1 text-[13px] rounded-lg px-3 py-1.5 outline-none"
-              style={{ background: "rgba(11,127,255,0.1)", border: "1px solid rgba(11,127,255,0.3)", color: "#e2e8f0" }}
+              style={{ background: "rgba(11,127,255,0.1)", border: "1px solid rgba(11,127,255,0.3)", color: "var(--foreground)" }}
             />
             <button
               onClick={confirmCreateFolder}
@@ -1091,9 +1091,9 @@ export function FileExplorer() {
             </button>
             <button
               onClick={() => { setCreatingFolder(false); setNewFolderName(""); }}
-              className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/5 transition-colors"
+              className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-accent transition-colors"
             >
-              <X size={14} style={{ color: "#64748b" }} />
+              <X size={14} style={{ color: "var(--muted-foreground)" }} />
             </button>
           </div>
         )}
@@ -1105,7 +1105,7 @@ export function FileExplorer() {
             style={{
               gridTemplateColumns: "1fr 90px 120px 80px",
               background: "rgba(0,0,0,0.2)",
-              borderBottom: "1px solid rgba(255,255,255,0.04)",
+              borderBottom: "1px solid var(--border)",
             }}
           >
             {[
@@ -1139,11 +1139,11 @@ export function FileExplorer() {
           <div className="flex flex-col items-center justify-center py-20 gap-3">
             <div
               className="w-16 h-16 rounded-2xl flex items-center justify-center"
-              style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}
+              style={{ background: "var(--card)", border: "1px solid var(--border)" }}
             >
               <Folder size={28} style={{ color: "#2a3550" }} strokeWidth={1.2} />
             </div>
-            <p style={{ fontSize: "14px", color: "#3d4f6e", fontWeight: 600 }}>
+            <p style={{ fontSize: "14px", color: "var(--muted-foreground)", fontWeight: 600 }}>
               {searchQuery ? "No results found" : "This folder is empty"}
             </p>
             <p style={{ fontSize: "12px", color: "#2a3550" }}>
@@ -1188,19 +1188,19 @@ export function FileExplorer() {
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center">
           <div
             className="w-[90vw] max-w-[380px] rounded-2xl p-6"
-            style={{ background: "#0d1321", border: "1px solid rgba(255,255,255,0.1)", boxShadow: "0 24px 64px rgba(0,0,0,0.7)" }}
+            style={{ background: "#0d1321", border: "1px solid var(--border)", boxShadow: "0 24px 64px rgba(0,0,0,0.7)" }}
           >
             <div className="flex items-center gap-3 mb-4">
               <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: "rgba(248,113,113,0.12)", border: "1px solid rgba(248,113,113,0.2)" }}>
                 <AlertTriangle size={18} style={{ color: "#F87171" }} />
               </div>
-              <p style={{ fontSize: "15px", color: "#e2e8f0", fontWeight: 600 }}>Confirm Delete</p>
+              <p style={{ fontSize: "15px", color: "var(--foreground)", fontWeight: 600 }}>Confirm Delete</p>
             </div>
-            <p style={{ fontSize: "13px", color: "#64748b", marginBottom: "20px" }}>
+            <p style={{ fontSize: "13px", color: "var(--muted-foreground)", marginBottom: "20px" }}>
               Are you sure? This action cannot be undone.
             </p>
             <div className="flex gap-2">
-              <button onClick={() => setDeleteConfirmId(null)} className="flex-1 py-2 rounded-xl text-[13px] transition-colors hover:bg-white/5" style={{ color: "#94a3b8", border: "1px solid rgba(255,255,255,0.1)" }}>Cancel</button>
+              <button onClick={() => setDeleteConfirmId(null)} className="flex-1 py-2 rounded-xl text-[13px] transition-colors hover:bg-accent" style={{ color: "var(--muted-foreground)", border: "1px solid var(--border)" }}>Cancel</button>
               <button onClick={() => deleteItem(deleteConfirmId)} className="flex-1 py-2 rounded-xl text-[13px] font-semibold transition-all hover:brightness-110" style={{ background: "linear-gradient(135deg, #F87171 0%, #DC2626 100%)", color: "#fff" }}>Delete</button>
             </div>
           </div>
@@ -1212,7 +1212,7 @@ export function FileExplorer() {
         <DialogContent
           style={{
             background: "linear-gradient(180deg, #0d1228 0%, #0b0f20 100%)",
-            border: "1px solid rgba(255,255,255,0.1)",
+            border: "1px solid var(--border)",
             maxWidth: "420px",
             boxShadow: "0 24px 64px rgba(0,0,0,0.7)",
             borderRadius: "16px",
@@ -1221,7 +1221,7 @@ export function FileExplorer() {
           {detailsItem && (
             <>
               <DialogHeader>
-                <DialogTitle className="text-white text-lg flex items-center gap-2">
+                <DialogTitle className="text-foreground text-lg flex items-center gap-2">
                   <div
                     className="w-8 h-8 rounded-lg flex items-center justify-center"
                     style={{
@@ -1248,10 +1248,10 @@ export function FileExplorer() {
                     className="flex items-center justify-between px-3 py-2.5 rounded-lg"
                     style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.04)" }}
                   >
-                    <span style={{ fontSize: "10px", color: "#475569", fontWeight: 700, letterSpacing: "0.05em" }}>
+                    <span style={{ fontSize: "10px", color: "var(--muted-foreground)", fontWeight: 700, letterSpacing: "0.05em" }}>
                       {label}
                     </span>
-                    <span style={{ fontSize: "13px", color: "#cbd5e1", fontWeight: 500 }} className="truncate max-w-[240px]">
+                    <span style={{ fontSize: "13px", color: "var(--foreground)", fontWeight: 500 }} className="truncate max-w-[240px]">
                       {value}
                     </span>
                   </div>
@@ -1259,7 +1259,7 @@ export function FileExplorer() {
               </div>
 
               {/* Action buttons at bottom */}
-              <div className="flex gap-2 mt-4 pt-3" style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+              <div className="flex gap-2 mt-4 pt-3" style={{ borderTop: "1px solid var(--border)" }}>
                 {detailsItem.type === "file" && (
                   <button
                     onClick={() => {
@@ -1267,8 +1267,8 @@ export function FileExplorer() {
                       setPreviewEditMode(false);
                       setDetailsItem(null);
                     }}
-                    className="flex-1 py-2.5 rounded-xl text-[13px] font-semibold transition-colors hover:bg-white/5 flex items-center justify-center gap-1.5"
-                    style={{ color: "#94a3b8", border: "1px solid rgba(255,255,255,0.1)" }}
+                    className="flex-1 py-2.5 rounded-xl text-[13px] font-semibold transition-colors hover:bg-accent flex items-center justify-center gap-1.5"
+                    style={{ color: "var(--muted-foreground)", border: "1px solid var(--border)" }}
                   >
                     <Eye size={14} />
                     Preview

@@ -68,6 +68,7 @@ class ACLEntry(db.Model):
     can_write     = db.Column(db.Boolean, default=False)
     can_delete    = db.Column(db.Boolean, default=False)
     can_share     = db.Column(db.Boolean, default=False)
+    can_download  = db.Column(db.Boolean, default=True)
 
     granted_by_id = db.Column(db.String(36), db.ForeignKey("users.id"), nullable=True)
     granted_at    = db.Column(db.DateTime,   default=lambda: datetime.now(timezone.utc))
@@ -79,6 +80,8 @@ class ACLEntry(db.Model):
 
     __table_args__ = (
         db.UniqueConstraint("transfer_id", "user_id", name="uq_acl_transfer_user"),
+        db.Index("ix_acl_transfer", "transfer_id"),
+        db.Index("ix_acl_user", "user_id"),
     )
 
     def __init__(self, **kwargs):
@@ -94,13 +97,15 @@ class ACLEntry(db.Model):
             "canWrite":   self.can_write,
             "canDelete":  self.can_delete,
             "canShare":   self.can_share,
+            "canDownload":self.can_download,
             "grantedAt":  self.granted_at.isoformat(),
         }
 
     def __repr__(self):
         perms = []
-        if self.can_read:   perms.append("R")
-        if self.can_write:  perms.append("W")
-        if self.can_delete: perms.append("D")
-        if self.can_share:  perms.append("S")
+        if self.can_read:     perms.append("R")
+        if self.can_write:    perms.append("W")
+        if self.can_delete:   perms.append("D")
+        if self.can_share:    perms.append("S")
+        if self.can_download: perms.append("DL")
         return f"<ACL {self.user_id}→{self.transfer_id} [{'/'.join(perms)}]>"

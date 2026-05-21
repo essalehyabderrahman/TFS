@@ -13,18 +13,20 @@ import {
   X,
   FolderOpen,
   Key,
+  ArrowUpCircle,
 } from "lucide-react";
 
 const allNavItems = [
   { icon: ArrowUpDown,   label: "Active Transfers",        id: "active",    path: "/dashboard/active",    adminOnly: false, hideForAdmin: false },
-  { icon: Download,      label: "Received Files",          id: "received",  path: "/dashboard/received",  adminOnly: false, hideForAdmin: true  },
+  { icon: Download,      label: "Received Files",          id: "received",  path: "/dashboard/received",  adminOnly: false, hideForAdmin: false },
   { icon: Users,         label: "Contacts",                id: "contacts",  path: "/dashboard/contacts",  adminOnly: false, hideForAdmin: false },
   { icon: FolderOpen,    label: "File Manager",            id: "explorer",  path: "/dashboard/explorer",  adminOnly: false, hideForAdmin: false },
   { icon: ClipboardList, label: "Audit & Compliance Logs", id: "audit",     path: "/dashboard/audit",     adminOnly: false, hideForAdmin: false, adminOrGroupAdminOnly: true },
-  { icon: Key,           label: "Recovery Requests",       id: "recovery",  path: "/dashboard/recovery-management", adminOnly: true,  hideForAdmin: false },
+  { icon: Key,           label: "Recovery Requests",       id: "recovery-management", path: "/dashboard/recovery-management", adminOnly: true, hideForAdmin: false },
   { icon: UserCog,       label: "User Management",         id: "users",     path: "/dashboard/users",     adminOnly: true,  hideForAdmin: false },
   { icon: Users,         label: "Team Management",         id: "team",      path: "/dashboard/team",      adminOnly: true,  hideForAdmin: false },
-  { icon: FolderOpen,    label: "Group Workspace",         id: "groups",    path: "/dashboard/groups",    adminOnly: false, hideForAdmin: false },
+  { icon: FolderOpen,    label: "Team Workspace",          id: "groups",    path: "/dashboard/groups",    adminOnly: false, hideForAdmin: false },
+  { icon: ArrowUpCircle, label: "Quota Requests",          id: "quota-requests", path: "/dashboard/quota-requests", adminOnly: true, hideForAdmin: false },
   { icon: ShieldCheck,   label: "Security Settings",       id: "security",  path: "/dashboard/security",  adminOnly: false, hideForAdmin: false },
 ];
 
@@ -77,12 +79,10 @@ export function Sidebar({ isOpen, onClose, onNewTransfer }: SidebarProps) {
   return (
     <>
       <aside
-        className={`flex flex-col h-full w-64 shrink-0 fixed lg:relative z-40 transition-transform duration-300 lg:translate-x-0 overflow-y-auto ${
+        className={`flex flex-col h-full w-64 shrink-0 fixed lg:relative z-40 transition-transform duration-300 lg:translate-x-0 overflow-y-auto bg-sidebar border-r border-sidebar-border ${
           isOpen ? "translate-x-0" : "-translate-x-full"
         }`}
         style={{
-          background: "linear-gradient(180deg, #0b0f20 0%, #0d1228 100%)",
-          borderRight: "1px solid rgba(255,255,255,0.06)",
           scrollbarWidth: "thin",
           scrollbarColor: "rgba(11,127,255,0.2) transparent",
         }}

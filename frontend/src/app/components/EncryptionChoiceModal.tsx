@@ -50,7 +50,7 @@ export function EncryptionChoiceModal({ files, onChoose, onCancel }: EncryptionC
           className="relative w-[92vw] max-w-[460px] rounded-2xl overflow-hidden"
           style={{
             background: "linear-gradient(180deg, #0d1321 0%, #080c1a 100%)",
-            border: "1px solid rgba(255,255,255,0.1)",
+            border: "1px solid var(--border)",
             boxShadow: "0 32px 80px rgba(0,0,0,0.8), 0 0 0 1px rgba(255,255,255,0.04) inset",
           }}
           onClick={(e) => e.stopPropagation()}
@@ -58,7 +58,7 @@ export function EncryptionChoiceModal({ files, onChoose, onCancel }: EncryptionC
           {/* Header */}
           <div
             className="flex items-center justify-between px-5 pt-5 pb-4"
-            style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}
+            style={{ borderBottom: "1px solid var(--border)" }}
           >
             <div className="flex items-center gap-3">
               <div
@@ -68,31 +68,31 @@ export function EncryptionChoiceModal({ files, onChoose, onCancel }: EncryptionC
                 <CloudUpload size={17} style={{ color: "#00d2ff" }} strokeWidth={1.8} />
               </div>
               <div>
-                <p style={{ fontSize: "15px", fontWeight: 700, color: "#e2e8f0" }}>
+                <p style={{ fontSize: "15px", fontWeight: 700, color: "var(--foreground)" }}>
                   Upload Options
                 </p>
                 <p
                   className="truncate max-w-[240px]"
-                  style={{ fontSize: "11px", color: "#475569", marginTop: "1px" }}
+                  style={{ fontSize: "11px", color: "var(--muted-foreground)", marginTop: "1px" }}
                 >
                   {primaryName}
                   {extra > 0 && (
-                    <span style={{ color: "#64748b" }}> +{extra} more file{extra !== 1 ? "s" : ""}</span>
+                    <span style={{ color: "var(--muted-foreground)" }}> +{extra} more file{extra !== 1 ? "s" : ""}</span>
                   )}
                 </p>
               </div>
             </div>
             <button
               onClick={onCancel}
-              className="w-7 h-7 flex items-center justify-center rounded-lg transition-colors hover:bg-white/10"
+              className="w-7 h-7 flex items-center justify-center rounded-lg transition-colors hover:bg-accent"
             >
-              <X size={15} style={{ color: "#6b7fa8" }} />
+              <X size={15} style={{ color: "var(--muted-foreground)" }} />
             </button>
           </div>
 
           {/* Body */}
           <div className="px-5 py-5 flex flex-col gap-3">
-            <p style={{ fontSize: "13px", color: "#64748b", marginBottom: "4px" }}>
+            <p style={{ fontSize: "13px", color: "var(--muted-foreground)", marginBottom: "4px" }}>
               How would you like to store this file?
             </p>
 
@@ -130,7 +130,7 @@ export function EncryptionChoiceModal({ files, onChoose, onCancel }: EncryptionC
                 >
                   Upload Encrypted
                 </p>
-                <p style={{ fontSize: "11.5px", color: "#475569", marginTop: "2px" }}>
+                <p style={{ fontSize: "11.5px", color: "var(--muted-foreground)", marginTop: "2px" }}>
                   AES-256-GCM encryption at rest · Zero-knowledge · Recommended
                 </p>
               </div>
@@ -182,7 +182,7 @@ export function EncryptionChoiceModal({ files, onChoose, onCancel }: EncryptionC
                 >
                   Upload Without Encryption
                 </p>
-                <p style={{ fontSize: "11.5px", color: "#475569", marginTop: "2px" }}>
+                <p style={{ fontSize: "11.5px", color: "var(--muted-foreground)", marginTop: "2px" }}>
                   File stored as-is · Not recommended for sensitive data
                 </p>
               </div>
@@ -200,12 +200,12 @@ export function EncryptionChoiceModal({ files, onChoose, onCancel }: EncryptionC
           {/* Footer */}
           <div
             className="flex items-center justify-end px-5 py-3"
-            style={{ borderTop: "1px solid rgba(255,255,255,0.05)" }}
+            style={{ borderTop: "1px solid var(--border)" }}
           >
             <button
               onClick={onCancel}
-              className="px-4 py-2 rounded-xl text-[13px] transition-colors hover:bg-white/5"
-              style={{ color: "#64748b", border: "1px solid rgba(255,255,255,0.08)" }}
+              className="px-4 py-2 rounded-xl text-[13px] transition-colors hover:bg-accent"
+              style={{ color: "var(--muted-foreground)", border: "1px solid var(--border)" }}
             >
               Cancel
             </button>

@@ -52,11 +52,13 @@ def list_groups():
         groups = _get_user_groups(user)
 
     result = []
+    from app.services.quota_service import get_group_quota_info
     for g in groups:
         d = g.to_dict()
         # Include the calling user's role within this group
         member = next((m for m in g.members if m.user_id == user.id), None)
         d["myRole"] = member.role if member else ("admin" if user.role == "admin" else None)
+        d["quotaInfo"] = get_group_quota_info(g)
         result.append(d)
 
     return jsonify(result), 200
@@ -315,8 +317,7 @@ def remove_member(group_id, user_id):
 def list_group_transfers(group_id):
     """
     List all non-deleted transfers scoped to this group.
-    All group members can list files; external sharing restrictions only apply
-    when sharing files outside the group via ACL.
+    Gated by allow_group_transfers for non-admins.
     """
     user  = current_user()
     group = db.session.get(Group, group_id)
@@ -326,6 +327,11 @@ def list_group_transfers(group_id):
     if not _is_group_member(user, group):
         return jsonify({"error": "FORBIDDEN"}), 403
 
+    if not _is_group_admin(user, group):
+        settings = group.settings
+        if not settings or not settings.allow_group_transfers:
+            return jsonify({"error": "GROUP_TRANSFERS_DISABLED"}), 403
+
     from app.models.transfer import Transfer
     transfers = (
         Transfer.query
@@ -333,10 +339,17 @@ def list_group_transfers(group_id):
         .order_by(Transfer.created_at.desc())
         .all()
     )
-    from app.services.file_service import has_permission
-    transfers = [t for t in transfers if has_permission(user, t, "read")]
+    from app.middleware.acl_middleware import resolve_effective_permissions
 
-    return jsonify([t.to_dict() for t in transfers]), 200
+    # Include per-file effective permissions so the frontend can gate UI actions
+    result = []
+    for t in transfers:
+        d = t.to_dict()
+        perms = resolve_effective_permissions(t, user)
+        d["permissions"] = perms
+        result.append(d)
+
+    return jsonify(result), 200
 
 
 # ── POST /groups/<group_id>/transfers ─────────────────────────────────────────
@@ -347,8 +360,7 @@ def list_group_transfers(group_id):
 def upload_group_transfer(group_id):
     """
     Upload a file scoped to this group.
-    All group members can upload files; external sharing restrictions only apply
-    when sharing files outside the group via ACL.
+    Gated by allow_group_transfers for non-admins.
     """
     from flask import current_app
     from app.services import file_service
@@ -360,6 +372,11 @@ def upload_group_transfer(group_id):
 
     if not _is_group_member(user, group):
         return jsonify({"error": "FORBIDDEN"}), 403
+
+    if not _is_group_admin(user, group):
+        settings = group.settings
+        if not settings or not settings.allow_group_transfers:
+            return jsonify({"error": "GROUP_TRANSFERS_DISABLED"}), 403
 
     if "file" not in request.files:
         return jsonify({"error": "NO_FILE"}), 400
@@ -392,6 +409,9 @@ def upload_group_transfer(group_id):
     )
 
     if not result["ok"]:
+        error_code = result["error"]
+        if error_code in ("QUOTA_EXCEEDED", "GROUP_QUOTA_EXCEEDED"):
+            return jsonify({"error": error_code, **(result.get("details", {}))}), 413
         return jsonify({"error": result["error"]}), 400
 
     db.session.add(AuditLog(
@@ -425,6 +445,23 @@ def get_settings(group_id):
     return jsonify(group.settings.to_dict() if group.settings else {}), 200
 
 
+# ── GET /groups/<group_id>/quota ───────────────────────────────────────────
+@groups_bp.get("/<group_id>/quota")
+@jwt_required_custom
+@limiter.limit("30 per minute")
+def get_group_quota(group_id):
+    user  = current_user()
+    group = db.session.get(Group, group_id)
+    if not group:
+        return jsonify({"error": "NOT_FOUND"}), 404
+
+    if not _is_group_member(user, group):
+        return jsonify({"error": "FORBIDDEN"}), 403
+
+    from app.services.quota_service import get_group_quota_info
+    return jsonify(get_group_quota_info(group)), 200
+
+
 # ── PATCH /groups/<group_id>/settings ────────────────────────────────────────
 @groups_bp.patch("/<group_id>/settings")
 @csrf_protect
@@ -450,9 +487,26 @@ def update_settings(group_id):
         "allowMemberDirectory": "allow_member_directory",
         "allowMemberInvite":    "allow_member_invite",
         "allowExternalSharing": "allow_external_sharing",
+        "allowGroupTransfers":  "allow_group_transfers",
     }
 
     changed = []
+
+    # Handle storage quota update (admin only, separate from settings fields)
+    if "storageQuotaBytes" in data:
+        raw = data["storageQuotaBytes"]
+        if raw is None:
+            group.storage_quota_bytes = None
+            changed.append("storageQuotaBytes=unlimited")
+        else:
+            try:
+                val = int(raw)
+                if val > 0:
+                    group.storage_quota_bytes = val
+                    changed.append(f"storageQuotaBytes={val}")
+            except (ValueError, TypeError):
+                pass
+
     for json_key, db_field in allowed_fields.items():
         if json_key in data:
             new_val = bool(data[json_key])

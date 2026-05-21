@@ -29,7 +29,7 @@ LOCK_TIMEOUT_MINUTES = 15
 def has_permission(user: "User", transfer: "Transfer", permission_type: str) -> bool:
     """
     Vérifie si user a la permission demandée sur transfer.
-    permission_type: 'read' | 'write' | 'delete' | 'share'
+    permission_type: 'read' | 'write' | 'delete' | 'share' | 'download'
     """
     # Admin global → tout autorisé
     if user.role == "admin":
@@ -47,35 +47,45 @@ def has_permission(user: "User", transfer: "Transfer", permission_type: str) -> 
     if transfer.uploaded_by_id == user.id:
         return True
 
-    # Vérification ACL
-    acl_entry = next((a for a in transfer.acl_entries if a.user_id == user.id), None)
+    # Destinataire → lecture autorisée (pour preview/download des fichiers reçus)
+    if transfer.recipient_email and transfer.recipient_email == user.email:
+        if permission_type == "read":
+            return True
+
+    # Vérification ACL — chercher une entrée explicite pour cet utilisateur
     flag_map = {
-        "read":   "can_read",
-        "write":  "can_write",
-        "delete": "can_delete",
-        "share":  "can_share",
+        "read":     "can_read",
+        "write":    "can_write",
+        "delete":   "can_delete",
+        "share":    "can_share",
+        "download": "can_download",
     }
     flag = flag_map.get(permission_type, "can_read")
 
+    acl_entry = next((a for a in transfer.acl_entries if a.user_id == user.id), None)
+
     if acl_entry:
-        # Entrée ACL trouvée → vérifier le flag
+        # Entrée ACL explicite pour cet utilisateur → respecter ses flags
         if not getattr(acl_entry, flag):
-            return False
+            # Write implies read — you need to see content to edit it
+            if permission_type == "read" and acl_entry.can_write:
+                pass  # allow read when user has write
+            else:
+                return False
     else:
-        # Pas d'entrée ACL pour cet utilisateur
-        # Si le fichier a des ACL (= fichier restreint) → refus
-        if transfer.acl_entries:
-            return False
-        # Sinon fichier du groupe → politique de moindre privilège (lecture seule par défaut)
+        # Pas d'entrée ACL pour cet utilisateur spécifiquement
         if transfer.group_id:
+            # Fichier de groupe → vérifier que l'utilisateur est membre du groupe
             is_member = GroupMember.query.filter_by(
                 group_id=transfer.group_id, user_id=user.id
             ).first()
             if not is_member:
                 return False
-            if permission_type != "read":
+            # Membres du groupe : lecture et download autorisés par défaut, écriture/suppression refusées
+            if permission_type not in ("read", "download"):
                 return False
         else:
+            # Fichier personnel sans ACL explicite → refus
             return False
 
     # Pour la lecture : vérification récursive des dossiers parents
@@ -85,6 +95,7 @@ def has_permission(user: "User", transfer: "Transfer", permission_type: str) -> 
             return False
 
     return True
+
 
 
 
@@ -126,6 +137,31 @@ def _decrypt_file(data: bytes) -> bytes:
 
 def _allowed(filename: str, allowed: set) -> bool:
     return "." in filename and filename.rsplit(".", 1)[1].lower() in allowed
+
+
+# [Security] Malicious file detection — cahier des charges §6.l.ii
+# Blocks executables/scripts even if renamed to a safe extension (e.g. .pdf)
+_DANGEROUS_MAGIC_BYTES = [
+    (b"MZ",              "PE executable (Windows .exe/.dll)"),
+    (b"\x7fELF",         "ELF binary (Linux executable)"),
+    (b"\xfe\xed\xfa",    "Mach-O binary (macOS executable)"),
+    (b"\xcf\xfa\xed\xfe","Mach-O 64-bit binary"),
+    (b"#!/",             "Shell/script file"),
+    (b"#!\\",            "Windows script"),
+]
+
+def _validate_file_content(data: bytes) -> str | None:
+    """
+    Inspects the first bytes of a file for known executable signatures.
+    Returns an error message if dangerous content is detected, None if safe.
+    """
+    if len(data) < 4:
+        return None
+    header = data[:8]
+    for magic, desc in _DANGEROUS_MAGIC_BYTES:
+        if header.startswith(magic):
+            return f"Blocked: file content matches {desc}"
+    return None
 
 
 def _file_type(filename: str) -> str:
@@ -212,6 +248,30 @@ def upload_file(file: FileStorage, uploader_id: str, recipient_email: str,
     raw_data   = file.read()
     size_bytes = len(raw_data)
 
+    # [Security] Malicious file content check (cahier des charges §6.l.ii)
+    malware_check = _validate_file_content(raw_data)
+    if malware_check:
+        _log("UPLOAD_BLOCKED", uploader.email, uploader.id, "failed", ip,
+             resource=file.filename, details=malware_check, group_id=group_id)
+        return {"ok": False, "error": "MALICIOUS_FILE_BLOCKED", "details": malware_check}
+
+    # ── Quota check (before writing to disk) ─────────────────────────────────
+    if group_id:
+        # Group upload → check group quota (not user quota)
+        from app.services.quota_service import check_group_quota
+        from app.models.group import Group
+        target_group = db.session.get(Group, group_id)
+        if target_group:
+            quota_result = check_group_quota(target_group, size_bytes)
+        else:
+            quota_result = {"ok": True}
+    else:
+        # Personal upload → check user quota
+        from app.services.quota_service import check_quota
+        quota_result = check_quota(uploader, size_bytes)
+    if not quota_result["ok"]:
+        return {"ok": False, "error": quota_result.get("error", "QUOTA_EXCEEDED"), "details": quota_result}
+
     if encrypt:
         data_to_save = _encrypt_file(raw_data)
         enc_type     = "AES-256-GCM"
@@ -243,7 +303,7 @@ def upload_file(file: FileStorage, uploader_id: str, recipient_email: str,
         group_id=group_id,
         parent_id=parent_id,
         item_type="file",
-        status="Delivered" if recipient_email else "Pending",
+        status="Delivered" if (recipient_email or group_id) else "Pending",
         current_version=1,
     )
     db.session.add(transfer)
@@ -324,7 +384,9 @@ def get_transfer_file(transfer_id: str, user: User, ip: str, context: str = None
     if not t or t.is_deleted:
         return {"ok": False, "error": "NOT_FOUND"}
 
-    if not has_permission(user, t, "read"):
+    # For download requests, check 'download' permission; for preview, check 'read'
+    perm_type = "download" if context != "preview" else "read"
+    if not has_permission(user, t, perm_type):
         _log("UNAUTHORIZED_ACCESS", user.email, user.id, "failed", ip, resource=t.file_name)
         db.session.commit()
         return {"ok": False, "error": "FORBIDDEN"}

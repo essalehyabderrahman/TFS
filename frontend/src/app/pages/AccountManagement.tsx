@@ -257,8 +257,8 @@ export function AccountManagement() {
     <div className="flex flex-col gap-4 sm:gap-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-white text-2xl font-bold mb-1">Account Management</h1>
-          <p style={{ color: "#6b7fa8", fontSize: "14px" }}>Manage your profile and account settings</p>
+          <h1 className="text-foreground text-2xl font-bold mb-1">Account Management</h1>
+          <p style={{ color: "var(--muted-foreground)", fontSize: "14px" }}>Manage your profile and account settings</p>
         </div>
         <div className="flex items-center gap-3">
           <button onClick={() => { signOut(); navigate("/signin"); }}
@@ -292,17 +292,17 @@ export function AccountManagement() {
         ].map((stat) => (
           <div key={stat.label} className="p-4 rounded-xl"
             style={{ background: `${stat.color}10`, border: `1px solid ${stat.color}30` }}>
-            <p style={{ color: "#4a5578", fontSize: "12px", fontWeight: 600, letterSpacing: "0.05em" }}>{stat.label}</p>
+            <p style={{ color: "var(--muted-foreground)", fontSize: "12px", fontWeight: 600, letterSpacing: "0.05em" }}>{stat.label}</p>
             <p className="text-3xl font-bold mt-1" style={{ color: stat.color }}>{stat.value}</p>
           </div>
         ))}
       </div>
 
       <section className="p-5 rounded-xl"
-        style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)" }}>
+        style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
         <div className="flex items-center gap-2 mb-4">
           <User size={20} style={{ color: "#0B7FFF" }} />
-          <h2 className="text-white font-semibold text-lg">Profile</h2>
+          <h2 className="text-foreground font-semibold text-lg">Profile</h2>
         </div>
         <div className="flex items-center gap-4 mb-6">
           <div className="w-16 h-16 rounded-full flex items-center justify-center shrink-0"
@@ -310,8 +310,8 @@ export function AccountManagement() {
             {account.avatar}
           </div>
           <div>
-            <p className="text-white font-bold text-xl">{account.name}</p>
-            <p style={{ color: "#6b7fa8", fontSize: "14px" }}>{account.email}</p>
+            <p className="text-foreground font-bold text-xl">{account.name}</p>
+            <p style={{ color: "var(--muted-foreground)", fontSize: "14px" }}>{account.email}</p>
             <span className="inline-flex items-center px-2 py-0.5 rounded mt-1"
               style={{ fontSize: "11px", fontWeight: 700, letterSpacing: "0.05em", color: roleColor, background: `${roleColor}15`, border: `1px solid ${roleColor}30` }}>
               {account.role.toUpperCase()}
@@ -320,8 +320,8 @@ export function AccountManagement() {
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {[
-            { label: "EMAIL", value: account.email, icon: <Mail size={14} style={{ color: "#6b7fa8" }} /> },
-            { label: "COMPANY", value: account.company, icon: <Building2 size={14} style={{ color: "#6b7fa8" }} /> },
+            { label: "EMAIL", value: account.email, icon: <Mail size={14} style={{ color: "var(--muted-foreground)" }} /> },
+            { label: "COMPANY", value: account.company, icon: <Building2 size={14} style={{ color: "var(--muted-foreground)" }} /> },
             { label: "PLAN", value: account.plan },
             { label: "MFA", value: account.mfaEnabled ? "Enabled" : "Disabled",
               valueStyle: { color: account.mfaEnabled ? "#00E5A0" : "#ef4444" } },
@@ -329,10 +329,10 @@ export function AccountManagement() {
             { label: "LAST ACTIVE", value: new Date(account.lastActive).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) },
           ].map(({ label, value, icon, valueStyle }) => (
             <div key={label}>
-              <p style={{ color: "#4a5578", fontSize: "11px", fontWeight: 600, letterSpacing: "0.05em" }}>{label}</p>
+              <p style={{ color: "var(--muted-foreground)", fontSize: "11px", fontWeight: 600, letterSpacing: "0.05em" }}>{label}</p>
               <div className="flex items-center gap-2 mt-1">
                 {icon}
-                <p style={{ color: "#e2e8f0", fontSize: "14px", textTransform: "capitalize", ...valueStyle }}>{value}</p>
+                <p style={{ color: "var(--foreground)", fontSize: "14px", textTransform: "capitalize", ...valueStyle }}>{value}</p>
               </div>
             </div>
           ))}
@@ -340,15 +340,15 @@ export function AccountManagement() {
       </section>
 
       <section className="p-5 rounded-xl"
-        style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)" }}>
+        style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
         <div className="flex items-center gap-2 mb-4">
           <Shield size={20} style={{ color: "#0B7FFF" }} />
-          <h2 className="text-white font-semibold text-lg">Security</h2>
+          <h2 className="text-foreground font-semibold text-lg">Security</h2>
         </div>
         <div className="flex items-center justify-between py-3">
           <div>
-            <p className="text-white font-medium">Password</p>
-            <p style={{ color: "#6b7fa8", fontSize: "13px" }}>Change your login password</p>
+            <p className="text-foreground font-medium">Password</p>
+            <p style={{ color: "var(--muted-foreground)", fontSize: "13px" }}>Change your login password</p>
           </div>
           <button onClick={() => setShowPasswordDialog(true)}
             className="flex items-center gap-2 px-4 py-2 rounded-lg transition-colors hover:opacity-90"
@@ -356,60 +356,42 @@ export function AccountManagement() {
             <Key size={14} /> Change
           </button>
         </div>
-        <div className="flex items-center justify-between py-3 border-t" style={{ borderColor: "rgba(255,255,255,0.06)" }}>
-          {account.mfaEnabled ? (
-            <>
-              <div>
-                <p className="text-white font-medium flex items-center gap-2">
-                  Two-Factor Authentication
-                  {account.requireMfa && (
-                    <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-blue-500/10 border border-blue-500/25 text-[#0B7FFF]">
-                      Required by Policy
-                    </span>
-                  )}
-                </p>
-                <p style={{ color: "#6b7fa8", fontSize: "13px" }}>MFA is currently active on your account</p>
-              </div>
-              {!account.requireMfa && (
+        {!account.requireMfa && (
+          <div className="flex items-center justify-between py-3 border-t" style={{ borderColor: "var(--border)" }}>
+            {account.mfaEnabled ? (
+              <>
+                <div>
+                  <p className="text-foreground font-medium">Two-Factor Authentication</p>
+                  <p style={{ color: "var(--muted-foreground)", fontSize: "13px" }}>MFA is currently active on your account</p>
+                </div>
                 <button
                   onClick={() => setShowMfaDisableDialog(true)}
                   className="flex items-center gap-2 px-4 py-2 rounded-lg transition-colors hover:opacity-90"
                   style={{ background: "rgba(239,68,68,0.12)", border: "1px solid rgba(239,68,68,0.2)", color: "#ef4444", fontSize: "14px", fontWeight: 600 }}>
                   <Shield size={14} /> Disable MFA
                 </button>
-              )}
-            </>
-          ) : (
-            <>
-              <div>
-                <p className="text-white font-medium flex items-center gap-2">
-                  Two-Factor Authentication
-                  {account.requireMfa && (
-                    <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-amber-500/10 border border-amber-500/25 text-[#f59e0b]">
-                      Required
-                    </span>
-                  )}
-                </p>
-                <p style={{ color: account.requireMfa ? "#f59e0b" : "#ef4444", fontSize: "13px" }}>
-                  {account.requireMfa
-                    ? "MFA is mandatory under the current security policy — please set it up immediately"
-                    : "MFA is not active — your account is less secure"}
-                </p>
-              </div>
-              <button onClick={() => navigate("/dashboard/mfa-setup")}
-                className="flex items-center gap-2 px-4 py-2 rounded-lg transition-colors hover:opacity-90"
-                style={{ background: "rgba(0,229,160,0.12)", border: "1px solid rgba(0,229,160,0.2)", color: "#00E5A0", fontSize: "14px", fontWeight: 600 }}>
-                <Shield size={14} /> Enable MFA
-              </button>
-            </>
-          )}
-        </div>
+              </>
+            ) : (
+              <>
+                <div>
+                  <p className="text-foreground font-medium">Two-Factor Authentication</p>
+                  <p style={{ color: "#ef4444", fontSize: "13px" }}>MFA is not active — your account is less secure</p>
+                </div>
+                <button onClick={() => navigate("/dashboard/mfa-setup")}
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg transition-colors hover:opacity-90"
+                  style={{ background: "rgba(0,229,160,0.12)", border: "1px solid rgba(0,229,160,0.2)", color: "#00E5A0", fontSize: "14px", fontWeight: 600 }}>
+                  <Shield size={14} /> Enable MFA
+                </button>
+              </>
+            )}
+          </div>
+        )}
         
-        {account.mfaEnabled && (
-          <div className="flex items-center justify-between py-3 border-t" style={{ borderColor: "rgba(255,255,255,0.06)" }}>
+        {account.mfaEnabled && !account.requireMfa && (
+          <div className="flex items-center justify-between py-3 border-t" style={{ borderColor: "var(--border)" }}>
             <div>
-              <p className="text-white font-medium">Backup Code</p>
-              <p style={{ color: "#6b7fa8", fontSize: "13px" }}>
+              <p className="text-foreground font-medium">Backup Code</p>
+              <p style={{ color: "var(--muted-foreground)", fontSize: "13px" }}>
                 {account.backupCodeExists
                   ? "Regenerate your emergency single-use backup code"
                   : "No backup code — generate one to use if you lose access to your authenticator"}
@@ -427,8 +409,8 @@ export function AccountManagement() {
       {!isRootAdmin && (
         <section className="p-5 rounded-xl"
           style={{ background: "rgba(239,68,68,0.05)", border: "1px solid rgba(239,68,68,0.2)" }}>
-          <h2 className="text-white font-semibold text-lg mb-1">Danger Zone</h2>
-          <p style={{ color: "#6b7fa8", fontSize: "13px", marginBottom: "16px" }}>Irreversible actions. Proceed with caution.</p>
+          <h2 className="text-foreground font-semibold text-lg mb-1">Danger Zone</h2>
+          <p style={{ color: "var(--muted-foreground)", fontSize: "13px", marginBottom: "16px" }}>Irreversible actions. Proceed with caution.</p>
           <button onClick={() => setShowDeleteDialog(true)}
             className="flex items-center gap-2 px-4 py-2.5 rounded-lg transition-all hover:opacity-90"
             style={{ background: "rgba(239,68,68,0.15)", border: "1px solid rgba(239,68,68,0.3)", color: "#ef4444", fontSize: "14px", fontWeight: 600 }}>
@@ -439,23 +421,23 @@ export function AccountManagement() {
 
       {/* Edit Profile Dialog */}
       <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
-        <DialogContent style={{ background: "linear-gradient(180deg, #0d1228 0%, #0b0f20 100%)", border: "1px solid rgba(255,255,255,0.1)" }}>
-          <DialogHeader><DialogTitle className="text-white text-xl">Edit Profile</DialogTitle></DialogHeader>
+        <DialogContent style={{ background: "linear-gradient(180deg, #0d1228 0%, #0b0f20 100%)", border: "1px solid var(--border)" }}>
+          <DialogHeader><DialogTitle className="text-foreground text-xl">Edit Profile</DialogTitle></DialogHeader>
           <div className="space-y-4">
             {[{ label: "FULL NAME", value: editName, setter: setEditName, type: "text" },
               { label: "COMPANY", value: editCompany, setter: setEditCompany, type: "text" }].map(({ label, value, setter, type }) => (
               <div key={label}>
-                <label style={{ color: "#4a5578", fontSize: "12px", fontWeight: 600, letterSpacing: "0.05em" }}>{label}</label>
+                <label style={{ color: "var(--muted-foreground)", fontSize: "12px", fontWeight: 600, letterSpacing: "0.05em" }}>{label}</label>
                 <input type={type} value={value} onChange={(e) => setter(e.target.value)}
                   onKeyDown={e => { if (e.key === "Enter" && !isEditLoading) handleSaveProfile() }}
-                  className="w-full mt-1 px-4 py-2.5 rounded-lg text-white outline-none"
-                  style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", fontSize: "14px" }} />
+                  className="w-full mt-1 px-4 py-2.5 rounded-lg text-foreground outline-none"
+                  style={{ background: "var(--input-background)", border: "1px solid var(--border)", fontSize: "14px" }} />
               </div>
             ))}
           </div>
           <DialogFooter className="mt-6">
             <button onClick={() => setShowEditDialog(false)} className="px-4 py-2 rounded-lg"
-              style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "#e2e8f0" }}>Cancel</button>
+              style={{ background: "var(--input-background)", border: "1px solid var(--border)", color: "var(--foreground)" }}>Cancel</button>
             <button onClick={handleSaveProfile} disabled={isEditLoading}
               className="px-4 py-2 rounded-lg flex items-center gap-2 disabled:opacity-50"
               style={{ background: "linear-gradient(135deg, #0B7FFF 0%, #0960D9 100%)", color: "white" }}>
@@ -477,27 +459,27 @@ export function AccountManagement() {
         <DialogContent 
           onPointerDownOutside={e => { if (isPasswordResetRequired) e.preventDefault(); }}
           onEscapeKeyDown={e => { if (isPasswordResetRequired) e.preventDefault(); }}
-          style={{ background: "linear-gradient(180deg, #0d1228 0%, #0b0f20 100%)", border: "1px solid rgba(255,255,255,0.1)" }}
+          style={{ background: "linear-gradient(180deg, #0d1228 0%, #0b0f20 100%)", border: "1px solid var(--border)" }}
         >
-          <DialogHeader><DialogTitle className="text-white text-xl">Change Password</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle className="text-foreground text-xl">Change Password</DialogTitle></DialogHeader>
           <div className="space-y-4">
 
             {/* Current password */}
             <div>
-              <label style={{ color: "#4a5578", fontSize: "12px", fontWeight: 600, letterSpacing: "0.05em" }}>CURRENT PASSWORD</label>
+              <label style={{ color: "var(--muted-foreground)", fontSize: "12px", fontWeight: 600, letterSpacing: "0.05em" }}>CURRENT PASSWORD</label>
               <input type="password" value={currentPassword} onChange={e => setCurrentPassword(e.target.value)}
                 onKeyDown={e => { if (e.key === "Enter" && !isPasswordLoading && isNewPasswordStrong && doesPasswordMatch && !isSameAsCurrent) handleChangePassword() }}
-                className="w-full mt-1 px-4 py-2.5 rounded-lg text-white outline-none"
-                style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", fontSize: "14px" }} />
+                className="w-full mt-1 px-4 py-2.5 rounded-lg text-foreground outline-none"
+                style={{ background: "var(--input-background)", border: "1px solid var(--border)", fontSize: "14px" }} />
             </div>
 
             {/* New password + live requirements */}
             <div>
-              <label style={{ color: "#4a5578", fontSize: "12px", fontWeight: 600, letterSpacing: "0.05em" }}>NEW PASSWORD</label>
+              <label style={{ color: "var(--muted-foreground)", fontSize: "12px", fontWeight: 600, letterSpacing: "0.05em" }}>NEW PASSWORD</label>
               <input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)}
                 onKeyDown={e => { if (e.key === "Enter" && !isPasswordLoading && isNewPasswordStrong && doesPasswordMatch && !isSameAsCurrent) handleChangePassword() }}
-                className="w-full mt-1 px-4 py-2.5 rounded-lg text-white outline-none"
-                style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", fontSize: "14px" }} />
+                className="w-full mt-1 px-4 py-2.5 rounded-lg text-foreground outline-none"
+                style={{ background: "var(--input-background)", border: "1px solid var(--border)", fontSize: "14px" }} />
               {newPassword && isSameAsCurrent && (
                 <div className="flex items-center gap-2 mt-2 pl-1 animate-pulse">
                   <X size={12} style={{ color: "#ef4444" }} />
@@ -508,7 +490,7 @@ export function AccountManagement() {
               )}
               {newPassword && !isSameAsCurrent && (
                 <div className="grid grid-cols-2 gap-2 mt-3 p-3 rounded-xl"
-                  style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)" }}>
+                  style={{ background: "rgba(255,255,255,0.02)", border: "1px solid var(--border)" }}>
                   {passwordRequirements.map((req, i) => (
                     <div key={i} className="flex items-center gap-2">
                       {req.test(newPassword)
@@ -526,11 +508,11 @@ export function AccountManagement() {
 
             {/* Confirm password + match indicator */}
             <div>
-              <label style={{ color: "#4a5578", fontSize: "12px", fontWeight: 600, letterSpacing: "0.05em" }}>CONFIRM NEW PASSWORD</label>
+              <label style={{ color: "var(--muted-foreground)", fontSize: "12px", fontWeight: 600, letterSpacing: "0.05em" }}>CONFIRM NEW PASSWORD</label>
               <input type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)}
                 onKeyDown={e => { if (e.key === "Enter" && !isPasswordLoading && isNewPasswordStrong && doesPasswordMatch && !isSameAsCurrent) handleChangePassword() }}
-                className="w-full mt-1 px-4 py-2.5 rounded-lg text-white outline-none"
-                style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", fontSize: "14px" }} />
+                className="w-full mt-1 px-4 py-2.5 rounded-lg text-foreground outline-none"
+                style={{ background: "var(--input-background)", border: "1px solid var(--border)", fontSize: "14px" }} />
               {confirmPassword && (
                 <div className={`flex items-center gap-2 mt-1 pl-1 ${doesPasswordMatch ? "" : "animate-pulse"}`}>
                   {doesPasswordMatch ? (
@@ -558,7 +540,7 @@ export function AccountManagement() {
               onClick={() => { setShowPasswordDialog(false); setCurrentPassword(""); setNewPassword(""); setConfirmPassword(""); }}
               disabled={isPasswordResetRequired}
               className="px-4 py-2 rounded-lg disabled:opacity-20"
-              style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "#e2e8f0" }}>
+              style={{ background: "var(--input-background)", border: "1px solid var(--border)", color: "var(--foreground)" }}>
               Cancel
             </button>
             <button onClick={handleChangePassword} disabled={isPasswordLoading || !isNewPasswordStrong || !doesPasswordMatch || isSameAsCurrent}
@@ -572,15 +554,15 @@ export function AccountManagement() {
 
       {/* Delete Account Dialog */}
       <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
-        <AlertDialogContent style={{ background: "linear-gradient(180deg, #0d1228 0%, #0b0f20 100%)", border: "1px solid rgba(255,255,255,0.1)" }}>
+        <AlertDialogContent style={{ background: "linear-gradient(180deg, #0d1228 0%, #0b0f20 100%)", border: "1px solid var(--border)" }}>
           <AlertDialogHeader>
-            <AlertDialogTitle className="text-white">Delete Account</AlertDialogTitle>
-            <AlertDialogDescription style={{ color: "#6b7fa8" }}>
+            <AlertDialogTitle className="text-foreground">Delete Account</AlertDialogTitle>
+            <AlertDialogDescription style={{ color: "var(--muted-foreground)" }}>
               This will permanently delete your account and all uploaded files. This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "#e2e8f0" }}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel style={{ background: "var(--input-background)", border: "1px solid var(--border)", color: "var(--foreground)" }}>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={handleDeleteAccount} disabled={isDeleteLoading}
               className="flex items-center gap-2 disabled:opacity-50" style={{ background: "#ef4444", color: "white" }}>
               {isDeleteLoading && <Loader2 size={16} className="animate-spin" />} Delete My Account
@@ -591,26 +573,26 @@ export function AccountManagement() {
 
       {/* Disable MFA Dialog */}
       <Dialog open={showMfaDisableDialog} onOpenChange={v => { setShowMfaDisableDialog(v); setMfaDisableCode(""); }}>
-        <DialogContent style={{ background: "linear-gradient(180deg, #0d1228 0%, #0b0f20 100%)", border: "1px solid rgba(255,255,255,0.1)" }}>
+        <DialogContent style={{ background: "linear-gradient(180deg, #0d1228 0%, #0b0f20 100%)", border: "1px solid var(--border)" }}>
           <DialogHeader>
-            <DialogTitle className="text-white text-xl">Disable Two-Factor Authentication</DialogTitle>
+            <DialogTitle className="text-foreground text-xl">Disable Two-Factor Authentication</DialogTitle>
           </DialogHeader>
-          <p style={{ color: "#6b7fa8", fontSize: "13px" }}>
+          <p style={{ color: "var(--muted-foreground)", fontSize: "13px" }}>
             Enter your current TOTP code from your authenticator app to confirm. All existing sessions will be invalidated.
           </p>
           <div className="mt-4">
-            <label style={{ color: "#4a5578", fontSize: "12px", fontWeight: 600, letterSpacing: "0.05em" }}>TOTP CODE</label>
+            <label style={{ color: "var(--muted-foreground)", fontSize: "12px", fontWeight: 600, letterSpacing: "0.05em" }}>TOTP CODE</label>
             <input type="text" maxLength={6} value={mfaDisableCode}
               onChange={e => setMfaDisableCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
               onKeyDown={e => { if (e.key === "Enter" && !isMfaDisableLoading && mfaDisableCode.length === 6) handleDisableMfa() }}
               placeholder="000000"
-              className="w-full mt-1 px-4 py-3 rounded-lg text-white text-center text-2xl tracking-[0.3em] outline-none"
-              style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }} />
+              className="w-full mt-1 px-4 py-3 rounded-lg text-foreground text-center text-2xl tracking-[0.3em] outline-none"
+              style={{ background: "var(--input-background)", border: "1px solid var(--border)" }} />
           </div>
           <DialogFooter className="mt-6">
             <button onClick={() => { setShowMfaDisableDialog(false); setMfaDisableCode(""); }}
               className="px-4 py-2 rounded-lg"
-              style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "#e2e8f0" }}>Cancel</button>
+              style={{ background: "var(--input-background)", border: "1px solid var(--border)", color: "var(--foreground)" }}>Cancel</button>
             <button
               onClick={handleDisableMfa}
               disabled={isMfaDisableLoading}
@@ -625,18 +607,18 @@ export function AccountManagement() {
 
       {/* Regenerate Backup Code Dialog */}
       <Dialog open={showBackupRegenDialog} onOpenChange={v => { setShowBackupRegenDialog(v); setBackupRegenCode(""); setNewBackupCode(null); }}>
-        <DialogContent style={{ background: "linear-gradient(180deg, #0d1228 0%, #0b0f20 100%)", border: "1px solid rgba(255,255,255,0.1)" }}>
-          <DialogHeader><DialogTitle className="text-white text-xl">Regenerate Backup Code</DialogTitle></DialogHeader>
+        <DialogContent style={{ background: "linear-gradient(180deg, #0d1228 0%, #0b0f20 100%)", border: "1px solid var(--border)" }}>
+          <DialogHeader><DialogTitle className="text-foreground text-xl">Regenerate Backup Code</DialogTitle></DialogHeader>
           {newBackupCode ? (
             <div className="space-y-4">
-              <p style={{ color: "#6b7fa8", fontSize: "13px" }}>Your new backup code is shown below. Store it somewhere safe — it will never be shown again.</p>
+              <p style={{ color: "var(--muted-foreground)", fontSize: "13px" }}>Your new backup code is shown below. Store it somewhere safe — it will never be shown again.</p>
               <div className="bg-black/50 border border-white/10 rounded-xl px-4 py-5 text-center font-mono text-white text-2xl tracking-[0.4em] select-all">
                 {newBackupCode}
               </div>
               <button type="button" onClick={() => { navigator.clipboard.writeText(newBackupCode); toast.success("Backup code copied."); }}
-                className="w-full py-3 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center gap-3 hover:bg-white/10 transition-all cursor-pointer">
-                <Copy size={14} className="text-white/40" />
-                <span className="text-white/70 text-[9px] uppercase font-black tracking-widest">Copy to Clipboard</span>
+                className="w-full py-3 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center gap-3 hover:bg-accent transition-all cursor-pointer">
+                <Copy size={14} className="text-foreground/40" />
+                <span className="text-foreground/70 text-[9px] uppercase font-black tracking-widest">Copy to Clipboard</span>
               </button>
               <button onClick={() => { setShowBackupRegenDialog(false); setNewBackupCode(null); }}
                 className="w-full h-12 bg-[#00f2ff] hover:bg-white text-black font-black uppercase tracking-widest rounded-xl transition-all">
@@ -645,20 +627,20 @@ export function AccountManagement() {
             </div>
           ) : (
             <>
-              <p style={{ color: "#6b7fa8", fontSize: "13px" }}>Enter your current TOTP code to generate a new backup code. The old code is immediately invalidated.</p>
+              <p style={{ color: "var(--muted-foreground)", fontSize: "13px" }}>Enter your current TOTP code to generate a new backup code. The old code is immediately invalidated.</p>
               <div className="mt-4">
-                <label style={{ color: "#4a5578", fontSize: "12px", fontWeight: 600, letterSpacing: "0.05em" }}>TOTP CODE</label>
+                <label style={{ color: "var(--muted-foreground)", fontSize: "12px", fontWeight: 600, letterSpacing: "0.05em" }}>TOTP CODE</label>
                 <input type="text" maxLength={6} value={backupRegenCode}
                   onChange={e => setBackupRegenCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
                   onKeyDown={e => { if (e.key === "Enter" && !isBackupRegenLoading && backupRegenCode.length === 6) handleRegenerateBackupCode() }}
                   placeholder="000000"
-                  className="w-full mt-1 px-4 py-3 rounded-lg text-white text-center text-2xl tracking-[0.3em] outline-none"
-                  style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }} />
+                  className="w-full mt-1 px-4 py-3 rounded-lg text-foreground text-center text-2xl tracking-[0.3em] outline-none"
+                  style={{ background: "var(--input-background)", border: "1px solid var(--border)" }} />
               </div>
               <DialogFooter className="mt-6">
                 <button onClick={() => { setShowBackupRegenDialog(false); setBackupRegenCode(""); }}
                   className="px-4 py-2 rounded-lg"
-                  style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "#e2e8f0" }}>Cancel</button>
+                  style={{ background: "var(--input-background)", border: "1px solid var(--border)", color: "var(--foreground)" }}>Cancel</button>
                 <button onClick={handleRegenerateBackupCode} disabled={isBackupRegenLoading}
                   className="px-4 py-2 rounded-lg flex items-center gap-2 disabled:opacity-50"
                   style={{ background: "rgba(245,158,11,0.15)", border: "1px solid rgba(245,158,11,0.3)", color: "#f59e0b" }}>

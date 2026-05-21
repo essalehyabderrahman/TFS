@@ -5,6 +5,7 @@ from app.middleware.csrf_middleware import csrf_protect
 from app.models.audit_log import AuditLog, ACLEntry
 from app.models.user import User
 from app.models.transfer import Transfer
+from app.middleware.acl_middleware import requires_permission, resolve_effective_permissions
 from app.extensions import db, limiter
 import uuid
 import mimetypes
@@ -67,6 +68,8 @@ def upload():
     )
 
     if not result["ok"]:
+        if result["error"] in ("QUOTA_EXCEEDED", "GROUP_QUOTA_EXCEEDED"):
+            return jsonify({"error": result["error"], **(result.get("details", {}))}), 413
         return jsonify({"error": result["error"]}), 400
 
     return jsonify(result["transfer"]), 201
@@ -78,8 +81,7 @@ def upload():
 @limiter.limit("20 per minute")
 def download(transfer_id):
     user    = current_user()
-    context = request.args.get("context")
-    result  = file_service.get_transfer_file(transfer_id, user, _ip(), context=context)
+    result  = file_service.get_transfer_file(transfer_id, user, _ip(), context="download")
 
     if not result["ok"]:
         status = 403 if result["error"] == "FORBIDDEN" else 404
@@ -103,8 +105,7 @@ def preview(transfer_id):
     browser renders it (PDF viewer, <img>, etc.) rather than downloading.
     """
     user    = current_user()
-    context = request.args.get("context")
-    result  = file_service.get_transfer_file(transfer_id, user, _ip(), context=context)
+    result  = file_service.get_transfer_file(transfer_id, user, _ip(), context="preview")
 
     if not result["ok"]:
         error  = result["error"]
@@ -121,6 +122,23 @@ def preview(transfer_id):
         as_attachment=False,
         download_name=result["filename"],
     )
+
+
+# ── GET /transfers/<id>/permissions ────────────────────────────────────────────
+@transfers_bp.get("/<transfer_id>/permissions")
+@jwt_required_custom
+def get_permissions(transfer_id):
+    """
+    Returns the effective permissions of the authenticated user on this transfer.
+    Used by the frontend to conditionally render action buttons.
+    """
+    user = current_user()
+    transfer = db.session.get(Transfer, transfer_id)
+    if not transfer or transfer.is_deleted:
+        return jsonify({"error": "NOT_FOUND"}), 404
+
+    perms = resolve_effective_permissions(transfer, user)
+    return jsonify(perms), 200
 
 
 # ── PUT /transfers/<id>/content ────────────────────────────────────────────────
@@ -254,10 +272,11 @@ def grant_acl(transfer_id):
     data = request.json or {}
     apply_to_all = bool(data.get("applyToAll", False))
     
-    can_read   = bool(data.get("canRead", False))
-    can_write  = bool(data.get("canWrite", False))
-    can_delete = bool(data.get("canDelete", False))
-    can_share  = bool(data.get("canShare", False))
+    can_read     = bool(data.get("canRead", False))
+    can_write    = bool(data.get("canWrite", False))
+    can_delete   = bool(data.get("canDelete", False))
+    can_share    = bool(data.get("canShare", False))
+    can_download = bool(data.get("canDownload", True))
 
     if apply_to_all:
         from app.models.group import GroupMember
@@ -272,6 +291,7 @@ def grant_acl(transfer_id):
                 existing.can_write = can_write
                 existing.can_delete = can_delete
                 existing.can_share = can_share
+                existing.can_download = can_download
                 existing.granted_by_id = user.id
             else:
                 entry = ACLEntry(
@@ -282,6 +302,7 @@ def grant_acl(transfer_id):
                     can_write=can_write,
                     can_delete=can_delete,
                     can_share=can_share,
+                    can_download=can_download,
                     granted_by_id=user.id
                 )
                 db.session.add(entry)
@@ -293,7 +314,7 @@ def grant_acl(transfer_id):
             user_email=user.email,
             action="ACL_GRANTED_BULK",
             resource=t.file_name,
-            details=f"Bulk granted to {count} members: R={can_read} W={can_write} D={can_delete} S={can_share}",
+            details=f"Bulk granted to {count} members: R={can_read} W={can_write} D={can_delete} S={can_share} DL={can_download}",
             ip_address=_ip(),
             status="success"
         )
@@ -327,10 +348,11 @@ def grant_acl(transfer_id):
 
     if existing:
         entry = existing
-        entry.can_read   = can_read
-        entry.can_write  = can_write
-        entry.can_delete = can_delete
-        entry.can_share  = can_share
+        entry.can_read     = can_read
+        entry.can_write    = can_write
+        entry.can_delete   = can_delete
+        entry.can_share    = can_share
+        entry.can_download = can_download
         entry.granted_by_id = user.id
     else:
         entry = ACLEntry(
@@ -341,6 +363,7 @@ def grant_acl(transfer_id):
             can_write=can_write,
             can_delete=can_delete,
             can_share=can_share,
+            can_download=can_download,
             granted_by_id=user.id
         )
         db.session.add(entry)
@@ -351,7 +374,7 @@ def grant_acl(transfer_id):
         user_email=user.email,
         action="ACL_GRANTED",
         resource=t.file_name,
-        details=f"Granted to {target.email}: R={can_read} W={can_write} D={can_delete} S={can_share}",
+        details=f"Granted to {target.email}: R={can_read} W={can_write} D={can_delete} S={can_share} DL={can_download}",
         ip_address=_ip(),
         status="success"
     )

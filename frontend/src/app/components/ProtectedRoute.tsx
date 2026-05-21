@@ -19,7 +19,7 @@ export function ProtectedRoute() {
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          background: "#0b0f20",
+          background: "var(--popover)",
         }}
       >
         <div

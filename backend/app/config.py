@@ -18,6 +18,13 @@ class Config:
     SQLALCHEMY_DATABASE_URI = os.getenv("DATABASE_URL", f"sqlite:///{_DB_PATH}")
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
+    # [Concurrency] SQLite WAL mode — allows concurrent reads during writes
+    # busy_timeout prevents "database is locked" errors under load
+    SQLALCHEMY_ENGINE_OPTIONS = {
+        "connect_args": {"timeout": 15},
+        "pool_pre_ping": True,
+    }
+
     # JWT
     # [Security] Cryptographically random secret — must be set via env var in production
     JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "dev-jwt-secret")
@@ -37,7 +44,32 @@ class Config:
     # Uploads
     UPLOAD_FOLDER = os.getenv("UPLOAD_FOLDER", str(_BASE_DIR / "uploads"))
     MAX_CONTENT_LENGTH = int(os.getenv("MAX_CONTENT_LENGTH", 100 * 1024 * 1024))  # 100 MB
-    ALLOWED_EXTENSIONS = {"pdf", "png", "jpg", "jpeg", "gif", "zip", "mp4", "doc", "docx", "txt", "csv"}
+    ALLOWED_EXTENSIONS = {
+        # Documents & Office
+        "pdf", "doc", "docx", "txt", "csv", "rtf",
+        "xls", "xlsx", "ppt", "pptx", "odt", "ods", "odp",
+        # Images
+        "png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "ico",
+        # Video & Audio
+        "mp4", "mov", "avi", "mkv", "webm", "mp3", "wav", "ogg",
+        # Archives
+        "zip", "tar", "gz", "rar", "7z", "bz2",
+        # Developer — Source code
+        "py", "js", "ts", "tsx", "jsx", "java", "c", "cpp", "h", "hpp",
+        "cs", "go", "rs", "rb", "php", "swift", "kt", "scala", "r",
+        "lua", "pl", "sh", "bat", "ps1",
+        # Developer — Web & Markup
+        "html", "css", "scss", "less", "vue", "svelte",
+        # Developer — Config & Data
+        "json", "xml", "yaml", "yml", "toml", "ini", "env", "cfg",
+        "md", "markdown", "rst",
+        # Developer — DevOps & Infra
+        "dockerfile", "tf", "hcl",
+        # Developer — Database & Logs
+        "sql", "db", "sqlite", "log",
+        # Design & Other
+        "sketch", "fig", "ai", "psd", "eps",
+    }
 
     # CORS
     FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")

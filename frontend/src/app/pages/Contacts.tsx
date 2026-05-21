@@ -46,10 +46,10 @@ function ContactCard({
 
   return (
     <div
-      className="flex items-center gap-3 p-3 rounded-xl transition-all hover:bg-white/5"
+      className="flex items-center gap-3 p-3 rounded-xl transition-all hover:bg-accent"
       style={{
-        background: "rgba(255,255,255,0.03)",
-        border: "1px solid rgba(255,255,255,0.07)",
+        background: "var(--card)",
+        border: "1px solid var(--border)",
       }}
     >
       {/* Avatar */}
@@ -63,18 +63,18 @@ function ContactCard({
       {/* Info */}
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
-          <p className="text-white text-sm font-semibold truncate">{contact.displayName}</p>
+          <p className="text-foreground text-sm font-semibold truncate">{contact.displayName}</p>
           {contact.isExternal && (
-            <span style={{ fontSize: "9px", fontWeight: 700, color: "#6b7fa8", background: "rgba(255,255,255,0.06)", padding: "1px 5px", borderRadius: "4px" }}>
+            <span style={{ fontSize: "9px", fontWeight: 700, color: "var(--muted-foreground)", background: "rgba(255,255,255,0.06)", padding: "1px 5px", borderRadius: "4px" }}>
               EXTERNAL
             </span>
           )}
         </div>
         {contact.nickname && contact.nickname !== contact.name && (
-          <p style={{ color: "#4a5578", fontSize: "11px" }}>{contact.email}</p>
+          <p style={{ color: "var(--muted-foreground)", fontSize: "11px" }}>{contact.email}</p>
         )}
         {!contact.nickname && (
-          <p style={{ color: "#4a5578", fontSize: "11px" }}>{contact.email}</p>
+          <p style={{ color: "var(--muted-foreground)", fontSize: "11px" }}>{contact.email}</p>
         )}
       </div>
 
@@ -99,8 +99,8 @@ function ContactCard({
         <button
           onClick={() => onEdit(contact)}
           title="Set nickname"
-          className="p-1.5 rounded-lg transition-colors hover:bg-white/10"
-          style={{ color: "#6b7fa8" }}
+          className="p-1.5 rounded-lg transition-colors hover:bg-accent"
+          style={{ color: "var(--muted-foreground)" }}
         >
           <Edit2 size={13} />
         </button>
@@ -276,8 +276,8 @@ export function Contacts() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-white text-2xl font-bold mb-1">Contacts</h1>
-          <p style={{ color: "#6b7fa8", fontSize: "14px" }}>
+          <h1 className="text-foreground text-2xl font-bold mb-1">Contacts</h1>
+          <p style={{ color: "var(--muted-foreground)", fontSize: "14px" }}>
             People you transfer files with — for faster, easier sharing
           </p>
         </div>
@@ -292,8 +292,8 @@ export function Contacts() {
           {(isAppAdmin || isGroupAdmin) && (
             <button
               onClick={() => navigate("/dashboard/users")}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl transition-all hover:bg-white/10"
-              style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: "#e2e8f0", fontSize: "14px", fontWeight: 600 }}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl transition-all hover:bg-accent"
+              style={{ background: "var(--accent)", border: "1px solid var(--border)", color: "var(--foreground)", fontSize: "14px", fontWeight: 600 }}
             >
               <Users size={16} /> Team Directory
             </button>
@@ -310,24 +310,24 @@ export function Contacts() {
 
       {/* Search */}
       <div className="relative">
-        <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: "#6b7fa8" }} />
+        <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: "var(--muted-foreground)" }} />
         <input
           type="text"
           placeholder="Search by name or email..."
           value={search}
           onChange={e => setSearch(e.target.value)}
-          className="w-full pl-10 pr-4 py-2.5 rounded-lg text-white placeholder:text-slate-500 outline-none"
-          style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", fontSize: "14px" }}
+          className="w-full pl-10 pr-4 py-2.5 rounded-lg text-foreground placeholder:text-muted-foreground outline-none"
+          style={{ background: "var(--input-background)", border: "1px solid var(--border)", fontSize: "14px" }}
         />
       </div>
 
       {/* Sections */}
       {totalContacts === 0 ? (
         <div className="flex flex-col items-center justify-center py-24 rounded-xl gap-4"
-          style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)" }}>
-          <Mail size={48} style={{ color: "#3d4f6e" }} />
-          <p style={{ color: "#6b7fa8", fontSize: "15px" }}>No contacts yet.</p>
-          <p style={{ color: "#4a5578", fontSize: "13px" }}>
+          style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
+          <Mail size={48} style={{ color: "var(--muted-foreground)" }} />
+          <p style={{ color: "var(--muted-foreground)", fontSize: "15px" }}>No contacts yet.</p>
+          <p style={{ color: "var(--muted-foreground)", fontSize: "13px" }}>
             Contacts are added automatically when you send or receive files. You can also add them manually.
           </p>
         </div>
@@ -340,17 +340,17 @@ export function Contacts() {
               <section key={key}>
                 <div className="flex items-center gap-2 mb-3">
                   <span style={{ color: accent }}>{icon}</span>
-                  <h2 style={{ fontSize: "13px", color: "#3d4f6e", fontWeight: 700, letterSpacing: "0.1em" }}>
+                  <h2 style={{ fontSize: "13px", color: "var(--muted-foreground)", fontWeight: 700, letterSpacing: "0.1em" }}>
                     {label.toUpperCase()}
                   </h2>
                   <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold"
                     style={{ color: accent, background: `${accent}18` }}>
                     {list.length}
                   </span>
-                  <div className="flex-1" style={{ height: "1px", background: "rgba(255,255,255,0.05)" }} />
+                  <div className="flex-1" style={{ height: "1px", background: "var(--accent)" }} />
                 </div>
                 {list.length === 0 ? (
-                  <p style={{ color: "#4a5578", fontSize: "13px", paddingLeft: "4px" }}>{emptyText}</p>
+                  <p style={{ color: "var(--muted-foreground)", fontSize: "13px", paddingLeft: "4px" }}>{emptyText}</p>
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     {list.map(contact => (
@@ -374,29 +374,29 @@ export function Contacts() {
 
       {/* Add Contact Dialog */}
       <Dialog open={showAdd} onOpenChange={v => { setShowAdd(v); setAddEmail(""); setAddNickname("") }}>
-        <DialogContent style={{ background: "linear-gradient(180deg, #0d1228 0%, #0b0f20 100%)", border: "1px solid rgba(255,255,255,0.1)" }}>
-          <DialogHeader><DialogTitle className="text-white text-xl">Add Contact</DialogTitle></DialogHeader>
+        <DialogContent style={{ background: "linear-gradient(180deg, #0d1228 0%, #0b0f20 100%)", border: "1px solid var(--border)" }}>
+          <DialogHeader><DialogTitle className="text-foreground text-xl">Add Contact</DialogTitle></DialogHeader>
           <div className="space-y-4">
             <div>
-              <label style={{ color: "#4a5578", fontSize: "12px", fontWeight: 600, letterSpacing: "0.05em" }}>EMAIL</label>
+              <label style={{ color: "var(--muted-foreground)", fontSize: "12px", fontWeight: 600, letterSpacing: "0.05em" }}>EMAIL</label>
               <input type="email" placeholder="contact@example.com" value={addEmail}
                 onChange={e => setAddEmail(e.target.value)}
                 onKeyDown={e => { if (e.key === "Enter" && !isAdding) handleAdd() }}
-                className="w-full mt-1 px-4 py-2.5 rounded-lg text-white placeholder:text-slate-500 outline-none"
-                style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", fontSize: "14px" }} />
+                className="w-full mt-1 px-4 py-2.5 rounded-lg text-foreground placeholder:text-muted-foreground outline-none"
+                style={{ background: "var(--input-background)", border: "1px solid var(--border)", fontSize: "14px" }} />
             </div>
             <div>
-              <label style={{ color: "#4a5578", fontSize: "12px", fontWeight: 600, letterSpacing: "0.05em" }}>NICKNAME (optional)</label>
+              <label style={{ color: "var(--muted-foreground)", fontSize: "12px", fontWeight: 600, letterSpacing: "0.05em" }}>NICKNAME (optional)</label>
               <input type="text" placeholder="e.g. Mike from Legal" value={addNickname}
                 onChange={e => setAddNickname(e.target.value)}
                 onKeyDown={e => { if (e.key === "Enter" && !isAdding) handleAdd() }}
-                className="w-full mt-1 px-4 py-2.5 rounded-lg text-white placeholder:text-slate-500 outline-none"
-                style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", fontSize: "14px" }} />
+                className="w-full mt-1 px-4 py-2.5 rounded-lg text-foreground placeholder:text-muted-foreground outline-none"
+                style={{ background: "var(--input-background)", border: "1px solid var(--border)", fontSize: "14px" }} />
             </div>
           </div>
           <DialogFooter className="mt-6">
             <button onClick={() => setShowAdd(false)} className="px-4 py-2 rounded-lg"
-              style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "#e2e8f0" }}>Cancel</button>
+              style={{ background: "var(--input-background)", border: "1px solid var(--border)", color: "var(--foreground)" }}>Cancel</button>
             <button onClick={handleAdd} disabled={isAdding}
               className="px-4 py-2 rounded-lg flex items-center gap-2 disabled:opacity-50"
               style={{ background: "linear-gradient(135deg, #0B7FFF 0%, #0960D9 100%)", color: "white" }}>
@@ -408,20 +408,20 @@ export function Contacts() {
 
       {/* Edit Nickname Dialog */}
       <Dialog open={!!editTarget} onOpenChange={v => { if (!v) setEditTarget(null) }}>
-        <DialogContent style={{ background: "linear-gradient(180deg, #0d1228 0%, #0b0f20 100%)", border: "1px solid rgba(255,255,255,0.1)" }}>
-          <DialogHeader><DialogTitle className="text-white text-xl">Set Nickname</DialogTitle></DialogHeader>
-          <p style={{ color: "#6b7fa8", fontSize: "13px" }}>{editTarget?.email}</p>
+        <DialogContent style={{ background: "linear-gradient(180deg, #0d1228 0%, #0b0f20 100%)", border: "1px solid var(--border)" }}>
+          <DialogHeader><DialogTitle className="text-foreground text-xl">Set Nickname</DialogTitle></DialogHeader>
+          <p style={{ color: "var(--muted-foreground)", fontSize: "13px" }}>{editTarget?.email}</p>
           <div className="mt-2">
-            <label style={{ color: "#4a5578", fontSize: "12px", fontWeight: 600, letterSpacing: "0.05em" }}>NICKNAME</label>
+            <label style={{ color: "var(--muted-foreground)", fontSize: "12px", fontWeight: 600, letterSpacing: "0.05em" }}>NICKNAME</label>
             <input type="text" placeholder="Leave blank to clear" value={editNickname}
               onChange={e => setEditNickname(e.target.value)}
               onKeyDown={e => { if (e.key === "Enter" && !isSavingNick) handleSaveNickname() }}
-              className="w-full mt-1 px-4 py-2.5 rounded-lg text-white placeholder:text-slate-500 outline-none"
-              style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", fontSize: "14px" }} />
+              className="w-full mt-1 px-4 py-2.5 rounded-lg text-foreground placeholder:text-muted-foreground outline-none"
+              style={{ background: "var(--input-background)", border: "1px solid var(--border)", fontSize: "14px" }} />
           </div>
           <DialogFooter className="mt-6">
             <button onClick={() => setEditTarget(null)} className="px-4 py-2 rounded-lg"
-              style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "#e2e8f0" }}>Cancel</button>
+              style={{ background: "var(--input-background)", border: "1px solid var(--border)", color: "var(--foreground)" }}>Cancel</button>
             <button onClick={handleSaveNickname} disabled={isSavingNick}
               className="px-4 py-2 rounded-lg flex items-center gap-2 disabled:opacity-50"
               style={{ background: "linear-gradient(135deg, #0B7FFF 0%, #0960D9 100%)", color: "white" }}>
@@ -433,15 +433,15 @@ export function Contacts() {
 
       {/* Delete Confirmation */}
       <AlertDialog open={!!deleteTarget} onOpenChange={() => setDeleteTarget(null)}>
-        <AlertDialogContent style={{ background: "linear-gradient(180deg, #0d1228 0%, #0b0f20 100%)", border: "1px solid rgba(255,255,255,0.1)" }}>
+        <AlertDialogContent style={{ background: "linear-gradient(180deg, #0d1228 0%, #0b0f20 100%)", border: "1px solid var(--border)" }}>
           <AlertDialogHeader>
-            <AlertDialogTitle className="text-white">Remove Contact</AlertDialogTitle>
-            <AlertDialogDescription style={{ color: "#6b7fa8" }}>
+            <AlertDialogTitle className="text-foreground">Remove Contact</AlertDialogTitle>
+            <AlertDialogDescription style={{ color: "var(--muted-foreground)" }}>
               Remove {deleteTarget?.displayName} ({deleteTarget?.email}) from your contacts? This does not affect your transfer history.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "#e2e8f0" }}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel style={{ background: "var(--input-background)", border: "1px solid var(--border)", color: "var(--foreground)" }}>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={handleDelete} disabled={isDeleting}
               className="flex items-center gap-2"
               style={{ background: "#ef4444", color: "white" }}>

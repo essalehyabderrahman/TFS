@@ -71,7 +71,7 @@ const statusConfig: Record<Status, { bg: string; color: string; dot: string }> =
   },
   Expired: {
     bg: "rgba(100,116,139,0.15)",
-    color: "#94A3B8",
+    color: "var(--muted-foreground)",
     dot: "#64748B",
   },
   Pending: {
@@ -320,18 +320,18 @@ export function TransfersTable({ refreshKey }: TransfersTableProps = {}) {
   return (
     <div
       className="rounded-2xl"
-      style={{ border: "1px solid rgba(255,255,255,0.06)", overflow: "visible" }}
+      style={{ border: "1px solid var(--border)", overflow: "visible" }}
     >
       {/* Table Header */}
       <div
         className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4"
         style={{
           background: "rgba(255,255,255,0.02)",
-          borderBottom: "1px solid rgba(255,255,255,0.06)",
+          borderBottom: "1px solid var(--border)",
         }}
       >
         <div className="flex items-center gap-2 sm:gap-3">
-          <h2 className="text-sm sm:text-[15px]" style={{ color: "#e2e8f0", fontWeight: 600 }}>
+          <h2 className="text-sm sm:text-[15px]" style={{ color: "var(--foreground)", fontWeight: 600 }}>
             Recent Transfers
           </h2>
           <span
@@ -347,11 +347,11 @@ export function TransfersTable({ refreshKey }: TransfersTableProps = {}) {
           {hasActiveFilters && (
             <button
               onClick={clearFilters}
-              className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] sm:text-[11px] transition-colors hover:bg-white/5"
+              className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] sm:text-[11px] transition-colors hover:bg-accent"
               style={{
-                color: "#64748b",
-                background: "rgba(255,255,255,0.05)",
-                border: "1px solid rgba(255,255,255,0.07)",
+                color: "var(--muted-foreground)",
+                background: "var(--accent)",
+                border: "1px solid var(--border)",
               }}
             >
               Clear filters
@@ -367,11 +367,11 @@ export function TransfersTable({ refreshKey }: TransfersTableProps = {}) {
                 setShowSortMenu(!showSortMenu);
                 setShowFilterMenu(false);
               }}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-colors hover:bg-white/5"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-colors hover:bg-accent"
               style={{
                 fontSize: "12px",
                 color: sortField ? "#0B7FFF" : "#64748b",
-                border: "1px solid rgba(255,255,255,0.07)",
+                border: "1px solid var(--border)",
                 background: sortField ? "rgba(11,127,255,0.1)" : "transparent",
               }}
             >
@@ -388,8 +388,8 @@ export function TransfersTable({ refreshKey }: TransfersTableProps = {}) {
                 <div
                   className="absolute right-0 top-10 rounded-xl overflow-hidden z-50 min-w-[160px]"
                   style={{
-                    background: "#131929",
-                    border: "1px solid rgba(255,255,255,0.1)",
+                    background: "var(--popover)",
+                    border: "1px solid var(--border)",
                     boxShadow: "0 16px 40px rgba(0,0,0,0.5)",
                   }}
                 >
@@ -402,7 +402,7 @@ export function TransfersTable({ refreshKey }: TransfersTableProps = {}) {
                     <button
                       key={field}
                       onClick={() => handleSort(field)}
-                      className="w-full text-left px-4 py-2.5 transition-colors hover:bg-white/5 flex items-center justify-between gap-2"
+                      className="w-full text-left px-4 py-2.5 transition-colors hover:bg-accent flex items-center justify-between gap-2"
                       style={{
                         fontSize: "13px",
                         color: sortField === field ? "#0B7FFF" : "#94a3b8",
@@ -424,11 +424,11 @@ export function TransfersTable({ refreshKey }: TransfersTableProps = {}) {
                 setShowFilterMenu(!showFilterMenu);
                 setShowSortMenu(false);
               }}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-colors hover:bg-white/5"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-colors hover:bg-accent"
               style={{
                 fontSize: "12px",
                 color: hasActiveFilters ? "#0B7FFF" : "#64748b",
-                border: "1px solid rgba(255,255,255,0.07)",
+                border: "1px solid var(--border)",
                 background: hasActiveFilters ? "rgba(11,127,255,0.1)" : "transparent",
               }}
             >
@@ -451,8 +451,8 @@ export function TransfersTable({ refreshKey }: TransfersTableProps = {}) {
                 <div
                   className="absolute right-0 top-10 rounded-xl overflow-hidden z-50 min-w-[200px]"
                   style={{
-                    background: "#131929",
-                    border: "1px solid rgba(255,255,255,0.1)",
+                    background: "var(--popover)",
+                    border: "1px solid var(--border)",
                     boxShadow: "0 16px 40px rgba(0,0,0,0.5)",
                   }}
                 >
@@ -460,14 +460,14 @@ export function TransfersTable({ refreshKey }: TransfersTableProps = {}) {
                   <div className="p-3 border-b border-white/5">
                     <div
                       className="text-[10.5px] mb-2"
-                      style={{ color: "#3d4f6e", fontWeight: 700, letterSpacing: "0.1em" }}
+                      style={{ color: "var(--muted-foreground)", fontWeight: 700, letterSpacing: "0.1em" }}
                     >
                       STATUS
                     </div>
                     {(["Delivered", "Sending...", "Pending", "Expired"] as Status[]).map((status) => (
                       <label
                         key={status}
-                        className="flex items-center gap-2 py-1.5 cursor-pointer hover:bg-white/5 px-2 rounded transition-colors"
+                        className="flex items-center gap-2 py-1.5 cursor-pointer hover:bg-accent px-2 rounded transition-colors"
                       >
                         <input
                           type="checkbox"
@@ -475,7 +475,7 @@ export function TransfersTable({ refreshKey }: TransfersTableProps = {}) {
                           onChange={() => toggleStatusFilter(status)}
                           className="w-3.5 h-3.5 rounded accent-blue-500"
                         />
-                        <span style={{ fontSize: "12px", color: "#94a3b8" }}>{status}</span>
+                        <span style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>{status}</span>
                       </label>
                     ))}
                   </div>
@@ -484,14 +484,14 @@ export function TransfersTable({ refreshKey }: TransfersTableProps = {}) {
                   <div className="p-3">
                     <div
                       className="text-[10.5px] mb-2"
-                      style={{ color: "#3d4f6e", fontWeight: 700, letterSpacing: "0.1em" }}
+                      style={{ color: "var(--muted-foreground)", fontWeight: 700, letterSpacing: "0.1em" }}
                     >
                       FILE TYPE
                     </div>
                     {(["pdf", "zip", "video", "img"] as Transfer["fileType"][]).map((type) => (
                       <label
                         key={type}
-                        className="flex items-center gap-2 py-1.5 cursor-pointer hover:bg-white/5 px-2 rounded transition-colors"
+                        className="flex items-center gap-2 py-1.5 cursor-pointer hover:bg-accent px-2 rounded transition-colors"
                       >
                         <input
                           type="checkbox"
@@ -499,7 +499,7 @@ export function TransfersTable({ refreshKey }: TransfersTableProps = {}) {
                           onChange={() => toggleFileTypeFilter(type)}
                           className="w-3.5 h-3.5 rounded accent-blue-500"
                         />
-                        <span style={{ fontSize: "12px", color: "#94a3b8" }}>
+                        <span style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>
                           {type.toUpperCase()}
                         </span>
                       </label>
@@ -520,7 +520,7 @@ export function TransfersTable({ refreshKey }: TransfersTableProps = {}) {
           style={{
             gridTemplateColumns: "2.5fr 2fr 80px 110px 130px 40px",
             background: "rgba(0,0,0,0.15)",
-            borderBottom: "1px solid rgba(255,255,255,0.04)",
+            borderBottom: "1px solid var(--border)",
           }}
         >
           {["File Name", "Recipient", "Size", "Status", "Security", ""].map((col) => (
@@ -528,7 +528,7 @@ export function TransfersTable({ refreshKey }: TransfersTableProps = {}) {
               key={col}
               style={{
                 fontSize: "10.5px",
-                color: "#3d4f6e",
+                color: "var(--muted-foreground)",
                 fontWeight: 700,
                 letterSpacing: "0.1em",
               }}
@@ -542,7 +542,7 @@ export function TransfersTable({ refreshKey }: TransfersTableProps = {}) {
         <div>
           {filteredAndSortedTransfers.length === 0 ? (
             <div className="px-6 py-12 text-center">
-              <p style={{ fontSize: "13px", color: "#64748b" }}>No transfers match your filters</p>
+              <p style={{ fontSize: "13px", color: "var(--muted-foreground)" }}>No transfers match your filters</p>
             </div>
           ) : (
             filteredAndSortedTransfers.map((transfer, idx) => {
@@ -572,19 +572,19 @@ export function TransfersTable({ refreshKey }: TransfersTableProps = {}) {
                     </div>
                     <div className="min-w-0">
                       <p
-                        style={{ fontSize: "13px", color: "#cbd5e1", fontWeight: 500 }}
+                        style={{ fontSize: "13px", color: "var(--foreground)", fontWeight: 500 }}
                         className="truncate"
                       >
                         {transfer.fileName}
                       </p>
-                      <p style={{ fontSize: "11px", color: "#3d4f6e" }}>{transfer.date}</p>
+                      <p style={{ fontSize: "11px", color: "var(--muted-foreground)" }}>{transfer.date}</p>
                     </div>
                   </div>
 
                   {/* Recipient */}
                   <div className="min-w-0 pr-4">
                     <p
-                      style={{ fontSize: "12.5px", color: "#64748b" }}
+                      style={{ fontSize: "12.5px", color: "var(--muted-foreground)" }}
                       className="truncate"
                     >
                       {transfer.recipient}
@@ -593,7 +593,7 @@ export function TransfersTable({ refreshKey }: TransfersTableProps = {}) {
 
                   {/* Size */}
                   <div>
-                    <p style={{ fontSize: "12.5px", color: "#64748b" }}>{transfer.size}</p>
+                    <p style={{ fontSize: "12.5px", color: "var(--muted-foreground)" }}>{transfer.size}</p>
                   </div>
 
                   {/* Status Badge */}
@@ -655,7 +655,7 @@ export function TransfersTable({ refreshKey }: TransfersTableProps = {}) {
                   {/* More Options */}
                   <div className="flex items-center justify-center relative">
                     <button
-                      className="w-7 h-7 flex items-center justify-center rounded-lg opacity-0 group-hover:opacity-100 transition-all duration-150 hover:bg-white/10"
+                      className="w-7 h-7 flex items-center justify-center rounded-lg opacity-0 group-hover:opacity-100 transition-all duration-150 hover:bg-accent"
                       onClick={(e) => {
                         if (openMenu === transfer.id) {
                           setOpenMenu(null);
@@ -672,7 +672,7 @@ export function TransfersTable({ refreshKey }: TransfersTableProps = {}) {
                         }
                       }}
                     >
-                      <MoreHorizontal size={15} style={{ color: "#64748b" }} />
+                      <MoreHorizontal size={15} style={{ color: "var(--muted-foreground)" }} />
                     </button>
 
                     {openMenu === transfer.id && (
@@ -686,8 +686,8 @@ export function TransfersTable({ refreshKey }: TransfersTableProps = {}) {
                             menuDirection === "up" ? "bottom-8" : "top-8"
                           }`}
                           style={{
-                            background: "#131929",
-                            border: "1px solid rgba(255,255,255,0.1)",
+                            background: "var(--popover)",
+                            border: "1px solid var(--border)",
                             boxShadow: "0 16px 40px rgba(0,0,0,0.5)",
                           }}
                         >
@@ -696,8 +696,8 @@ export function TransfersTable({ refreshKey }: TransfersTableProps = {}) {
                               setPreviewTransfer(transfer);
                               setOpenMenu(null);
                             }}
-                            className="w-full text-left px-4 py-2.5 transition-colors hover:bg-white/5 flex items-center gap-2"
-                            style={{ fontSize: "13px", color: "#94a3b8" }}
+                            className="w-full text-left px-4 py-2.5 transition-colors hover:bg-accent flex items-center gap-2"
+                            style={{ fontSize: "13px", color: "var(--muted-foreground)" }}
                           >
                             <Eye size={14} />
                             Preview
@@ -706,8 +706,8 @@ export function TransfersTable({ refreshKey }: TransfersTableProps = {}) {
                             onClick={() => {
                               handleDownload(transfer);
                             }}
-                            className="w-full text-left px-4 py-2.5 transition-colors hover:bg-white/5 flex items-center gap-2"
-                            style={{ fontSize: "13px", color: "#94a3b8" }}
+                            className="w-full text-left px-4 py-2.5 transition-colors hover:bg-accent flex items-center gap-2"
+                            style={{ fontSize: "13px", color: "var(--muted-foreground)" }}
                           >
                             <Download size={14} />
                             Download
@@ -717,8 +717,8 @@ export function TransfersTable({ refreshKey }: TransfersTableProps = {}) {
                               setResendTransfer(transfer);
                               setOpenMenu(null);
                             }}
-                            className="w-full text-left px-4 py-2.5 transition-colors hover:bg-white/5 flex items-center gap-2"
-                            style={{ fontSize: "13px", color: "#94a3b8" }}
+                            className="w-full text-left px-4 py-2.5 transition-colors hover:bg-accent flex items-center gap-2"
+                            style={{ fontSize: "13px", color: "var(--muted-foreground)" }}
                           >
                             <Send size={14} />
                             Resend
@@ -728,8 +728,8 @@ export function TransfersTable({ refreshKey }: TransfersTableProps = {}) {
                               setDetailsTransfer(transfer);
                               setOpenMenu(null);
                             }}
-                            className="w-full text-left px-4 py-2.5 transition-colors hover:bg-white/5 flex items-center gap-2"
-                            style={{ fontSize: "13px", color: "#94a3b8" }}
+                            className="w-full text-left px-4 py-2.5 transition-colors hover:bg-accent flex items-center gap-2"
+                            style={{ fontSize: "13px", color: "var(--muted-foreground)" }}
                           >
                             <Eye size={14} />
                             View Details
@@ -740,7 +740,7 @@ export function TransfersTable({ refreshKey }: TransfersTableProps = {}) {
                                 setRevokeTransfer(transfer);
                                 setOpenMenu(null);
                               }}
-                              className="w-full text-left px-4 py-2.5 transition-colors hover:bg-white/5 flex items-center gap-2"
+                              className="w-full text-left px-4 py-2.5 transition-colors hover:bg-accent flex items-center gap-2"
                               style={{ fontSize: "13px", color: "#FBBF24" }}
                             >
                               <ShieldOff size={14} />
@@ -752,7 +752,7 @@ export function TransfersTable({ refreshKey }: TransfersTableProps = {}) {
                               setDeleteTransfer(transfer);
                               setOpenMenu(null);
                             }}
-                            className="w-full text-left px-4 py-2.5 transition-colors hover:bg-white/5 flex items-center gap-2"
+                            className="w-full text-left px-4 py-2.5 transition-colors hover:bg-accent flex items-center gap-2"
                             style={{ fontSize: "13px", color: "#F87171" }}
                           >
                             <Trash2 size={14} />
@@ -773,7 +773,7 @@ export function TransfersTable({ refreshKey }: TransfersTableProps = {}) {
       <div className="lg:hidden">
         {filteredAndSortedTransfers.length === 0 ? (
           <div className="px-4 py-12 text-center">
-            <p style={{ fontSize: "13px", color: "#64748b" }}>No transfers match your filters</p>
+            <p style={{ fontSize: "13px", color: "var(--muted-foreground)" }}>No transfers match your filters</p>
           </div>
         ) : (
           filteredAndSortedTransfers.map((transfer, idx) => {
@@ -800,23 +800,23 @@ export function TransfersTable({ refreshKey }: TransfersTableProps = {}) {
                   </div>
                   <div className="flex-1 min-w-0">
                     <p
-                      style={{ fontSize: "13px", color: "#cbd5e1", fontWeight: 500 }}
+                      style={{ fontSize: "13px", color: "var(--foreground)", fontWeight: 500 }}
                       className="truncate mb-0.5"
                     >
                       {transfer.fileName}
                     </p>
-                    <p style={{ fontSize: "11px", color: "#3d4f6e" }} className="mb-1">
+                    <p style={{ fontSize: "11px", color: "var(--muted-foreground)" }} className="mb-1">
                       {transfer.date}
                     </p>
                     <p
-                      style={{ fontSize: "12px", color: "#64748b" }}
+                      style={{ fontSize: "12px", color: "var(--muted-foreground)" }}
                       className="truncate"
                     >
                       {transfer.recipient}
                     </p>
                   </div>
                   <button
-                    className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 transition-colors"
+                    className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-accent transition-colors"
                     onClick={(e) => {
                       if (openMenu === transfer.id) {
                         setOpenMenu(null);
@@ -832,7 +832,7 @@ export function TransfersTable({ refreshKey }: TransfersTableProps = {}) {
                       }
                     }}
                   >
-                    <MoreHorizontal size={16} style={{ color: "#64748b" }} />
+                    <MoreHorizontal size={16} style={{ color: "var(--muted-foreground)" }} />
                   </button>
                 </div>
 
@@ -877,8 +877,8 @@ export function TransfersTable({ refreshKey }: TransfersTableProps = {}) {
                     className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px]"
                     style={{
                       fontWeight: 500,
-                      color: "#64748b",
-                      background: "rgba(255,255,255,0.04)",
+                      color: "var(--muted-foreground)",
+                      background: "var(--input-background)",
                     }}
                   >
                     {transfer.size}
@@ -891,8 +891,8 @@ export function TransfersTable({ refreshKey }: TransfersTableProps = {}) {
                     id={`mobile-menu-${transfer.id}`}
                     className="mt-3 rounded-xl overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200"
                     style={{
-                      background: "#131929",
-                      border: "1px solid rgba(255,255,255,0.1)",
+                      background: "var(--popover)",
+                      border: "1px solid var(--border)",
                     }}
                   >
                     <button
@@ -900,8 +900,8 @@ export function TransfersTable({ refreshKey }: TransfersTableProps = {}) {
                         setPreviewTransfer(transfer);
                         setOpenMenu(null);
                       }}
-                      className="w-full text-left px-4 py-2.5 transition-colors hover:bg-white/5 flex items-center gap-2"
-                      style={{ fontSize: "13px", color: "#94a3b8" }}
+                      className="w-full text-left px-4 py-2.5 transition-colors hover:bg-accent flex items-center gap-2"
+                      style={{ fontSize: "13px", color: "var(--muted-foreground)" }}
                     >
                       <Eye size={14} />
                       Preview
@@ -910,8 +910,8 @@ export function TransfersTable({ refreshKey }: TransfersTableProps = {}) {
                       onClick={() => {
                         handleDownload(transfer);
                       }}
-                      className="w-full text-left px-4 py-2.5 transition-colors hover:bg-white/5 flex items-center gap-2"
-                      style={{ fontSize: "13px", color: "#94a3b8" }}
+                      className="w-full text-left px-4 py-2.5 transition-colors hover:bg-accent flex items-center gap-2"
+                      style={{ fontSize: "13px", color: "var(--muted-foreground)" }}
                     >
                       <Download size={14} />
                       Download
@@ -921,8 +921,8 @@ export function TransfersTable({ refreshKey }: TransfersTableProps = {}) {
                         setResendTransfer(transfer);
                         setOpenMenu(null);
                       }}
-                      className="w-full text-left px-4 py-2.5 transition-colors hover:bg-white/5 flex items-center gap-2"
-                      style={{ fontSize: "13px", color: "#94a3b8" }}
+                      className="w-full text-left px-4 py-2.5 transition-colors hover:bg-accent flex items-center gap-2"
+                      style={{ fontSize: "13px", color: "var(--muted-foreground)" }}
                     >
                       <Send size={14} />
                       Resend
@@ -932,8 +932,8 @@ export function TransfersTable({ refreshKey }: TransfersTableProps = {}) {
                         setDetailsTransfer(transfer);
                         setOpenMenu(null);
                       }}
-                      className="w-full text-left px-4 py-2.5 transition-colors hover:bg-white/5 flex items-center gap-2"
-                      style={{ fontSize: "13px", color: "#94a3b8" }}
+                      className="w-full text-left px-4 py-2.5 transition-colors hover:bg-accent flex items-center gap-2"
+                      style={{ fontSize: "13px", color: "var(--muted-foreground)" }}
                     >
                       <Eye size={14} />
                       View Details
@@ -944,7 +944,7 @@ export function TransfersTable({ refreshKey }: TransfersTableProps = {}) {
                           setRevokeTransfer(transfer);
                           setOpenMenu(null);
                         }}
-                        className="w-full text-left px-4 py-2.5 transition-colors hover:bg-white/5 flex items-center gap-2"
+                        className="w-full text-left px-4 py-2.5 transition-colors hover:bg-accent flex items-center gap-2"
                         style={{ fontSize: "13px", color: "#FBBF24" }}
                       >
                         <ShieldOff size={14} />
@@ -956,7 +956,7 @@ export function TransfersTable({ refreshKey }: TransfersTableProps = {}) {
                         setDeleteTransfer(transfer);
                         setOpenMenu(null);
                       }}
-                      className="w-full text-left px-4 py-2.5 transition-colors hover:bg-white/5 flex items-center gap-2"
+                      className="w-full text-left px-4 py-2.5 transition-colors hover:bg-accent flex items-center gap-2"
                       style={{ fontSize: "13px", color: "#F87171" }}
                     >
                       <Trash2 size={14} />
@@ -987,22 +987,22 @@ export function TransfersTable({ refreshKey }: TransfersTableProps = {}) {
                 className="px-6 lg:px-8 py-5 lg:py-6 flex flex-row items-center justify-between"
                 style={{
                   background: "rgba(255,255,255,0.02)",
-                  borderBottom: "1px solid rgba(255,255,255,0.06)",
+                  borderBottom: "1px solid var(--border)",
                 }}
               >
                 <DialogTitle
                   className="text-[16px] lg:text-[18px]"
-                  style={{ color: "#e2e8f0", fontWeight: 600 }}
+                  style={{ color: "var(--foreground)", fontWeight: 600 }}
                 >
                   Transfer Details
                 </DialogTitle>
                 <button
                   onClick={() => setDetailsTransfer(null)}
-                  className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 transition-colors shrink-0 m-0"
+                  className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-accent transition-colors shrink-0 m-0"
                   style={{ marginTop: 0 }}
                   aria-label="Close"
                 >
-                  <span style={{ color: "#6b7fa8", fontSize: "20px", lineHeight: 1 }}>✕</span>
+                  <span style={{ color: "var(--muted-foreground)", fontSize: "20px", lineHeight: 1 }}>✕</span>
                 </button>
               </DialogHeader>
               <div className="px-6 lg:px-8 py-5 lg:py-6 space-y-5 lg:space-y-6">
@@ -1030,7 +1030,7 @@ export function TransfersTable({ refreshKey }: TransfersTableProps = {}) {
                     </div>
                     <div className="flex-1 min-w-0">
                       <p
-                        style={{ fontSize: "14px", color: "#e2e8f0", fontWeight: 500 }}
+                        style={{ fontSize: "14px", color: "var(--foreground)", fontWeight: 500 }}
                         className="mb-1 lg:mb-2 break-words lg:text-[15px]"
                       >
                         {detailsTransfer.fileName}
@@ -1131,11 +1131,11 @@ export function TransfersTable({ refreshKey }: TransfersTableProps = {}) {
                       setPreviewTransfer(detailsTransfer);
                       setDetailsTransfer(null);
                     }}
-                    className="px-4 lg:px-5 py-2.5 lg:py-3 rounded-xl transition-colors hover:bg-white/5"
+                    className="px-4 lg:px-5 py-2.5 lg:py-3 rounded-xl transition-colors hover:bg-accent"
                     style={{
                       fontSize: "13px",
-                      color: "#94a3b8",
-                      border: "1px solid rgba(255,255,255,0.1)",
+                      color: "var(--muted-foreground)",
+                      border: "1px solid var(--border)",
                     }}
                   >
                     <span className="lg:text-[14px]">Preview</span>
@@ -1145,11 +1145,11 @@ export function TransfersTable({ refreshKey }: TransfersTableProps = {}) {
                       setResendTransfer(detailsTransfer);
                       setDetailsTransfer(null);
                     }}
-                    className="px-4 lg:px-5 py-2.5 lg:py-3 rounded-xl transition-colors hover:bg-white/5"
+                    className="px-4 lg:px-5 py-2.5 lg:py-3 rounded-xl transition-colors hover:bg-accent"
                     style={{
                       fontSize: "13px",
-                      color: "#94a3b8",
-                      border: "1px solid rgba(255,255,255,0.1)",
+                      color: "var(--muted-foreground)",
+                      border: "1px solid var(--border)",
                     }}
                   >
                     <span className="lg:text-[14px]">Resend</span>
@@ -1173,7 +1173,7 @@ export function TransfersTable({ refreshKey }: TransfersTableProps = {}) {
           <AlertDialogHeader className="px-6 pt-6 pb-4">
             <AlertDialogTitle
               className="text-[16px] flex items-center gap-2"
-              style={{ color: "#e2e8f0", fontWeight: 600 }}
+              style={{ color: "var(--foreground)", fontWeight: 600 }}
             >
               <div
                 className="w-10 h-10 rounded-xl flex items-center justify-center"
@@ -1186,9 +1186,9 @@ export function TransfersTable({ refreshKey }: TransfersTableProps = {}) {
               </div>
               Delete Transfer
             </AlertDialogTitle>
-            <AlertDialogDescription style={{ fontSize: "13px", color: "#64748b" }}>
+            <AlertDialogDescription style={{ fontSize: "13px", color: "var(--muted-foreground)" }}>
               Are you sure you want to delete{" "}
-              <span style={{ color: "#94a3b8", fontWeight: 500 }}>
+              <span style={{ color: "var(--muted-foreground)", fontWeight: 500 }}>
                 {deleteTransfer?.fileName}
               </span>
               ? This action cannot be undone.
@@ -1199,8 +1199,8 @@ export function TransfersTable({ refreshKey }: TransfersTableProps = {}) {
               className="rounded-xl"
               style={{
                 fontSize: "13px",
-                color: "#94a3b8",
-                border: "1px solid rgba(255,255,255,0.1)",
+                color: "var(--muted-foreground)",
+                border: "1px solid var(--border)",
                 background: "transparent",
               }}
             >
@@ -1234,7 +1234,7 @@ export function TransfersTable({ refreshKey }: TransfersTableProps = {}) {
           <AlertDialogHeader className="px-6 pt-6 pb-4">
             <AlertDialogTitle
               className="text-[16px] flex items-center gap-2"
-              style={{ color: "#e2e8f0", fontWeight: 600 }}
+              style={{ color: "var(--foreground)", fontWeight: 600 }}
             >
               <div
                 className="w-10 h-10 rounded-xl flex items-center justify-center"
@@ -1247,9 +1247,9 @@ export function TransfersTable({ refreshKey }: TransfersTableProps = {}) {
               </div>
               Revoke Access
             </AlertDialogTitle>
-            <AlertDialogDescription style={{ fontSize: "13px", color: "#64748b" }}>
+            <AlertDialogDescription style={{ fontSize: "13px", color: "var(--muted-foreground)" }}>
               Revoke access to{" "}
-              <span style={{ color: "#94a3b8", fontWeight: 500 }}>
+              <span style={{ color: "var(--muted-foreground)", fontWeight: 500 }}>
                 {revokeTransfer?.fileName}
               </span>
               ? The recipient will no longer be able to download this file.
@@ -1260,8 +1260,8 @@ export function TransfersTable({ refreshKey }: TransfersTableProps = {}) {
               className="rounded-xl"
               style={{
                 fontSize: "13px",
-                color: "#94a3b8",
-                border: "1px solid rgba(255,255,255,0.1)",
+                color: "var(--muted-foreground)",
+                border: "1px solid var(--border)",
                 background: "transparent",
               }}
             >
@@ -1295,7 +1295,7 @@ export function TransfersTable({ refreshKey }: TransfersTableProps = {}) {
           <AlertDialogHeader className="px-6 pt-6 pb-4">
             <AlertDialogTitle
               className="text-[16px] flex items-center gap-2"
-              style={{ color: "#e2e8f0", fontWeight: 600 }}
+              style={{ color: "var(--foreground)", fontWeight: 600 }}
             >
               <div
                 className="w-10 h-10 rounded-xl flex items-center justify-center"
@@ -1308,13 +1308,13 @@ export function TransfersTable({ refreshKey }: TransfersTableProps = {}) {
               </div>
               Resend Transfer
             </AlertDialogTitle>
-            <AlertDialogDescription style={{ fontSize: "13px", color: "#64748b" }}>
+            <AlertDialogDescription style={{ fontSize: "13px", color: "var(--muted-foreground)" }}>
               Resend{" "}
-              <span style={{ color: "#94a3b8", fontWeight: 500 }}>
+              <span style={{ color: "var(--muted-foreground)", fontWeight: 500 }}>
                 {resendTransfer?.fileName}
               </span>{" "}
               to{" "}
-              <span style={{ color: "#94a3b8", fontWeight: 500 }}>
+              <span style={{ color: "var(--muted-foreground)", fontWeight: 500 }}>
                 {resendTransfer?.recipient}
               </span>
               ? A new secure link will be generated and sent.
@@ -1325,8 +1325,8 @@ export function TransfersTable({ refreshKey }: TransfersTableProps = {}) {
               className="rounded-xl"
               style={{
                 fontSize: "13px",
-                color: "#94a3b8",
-                border: "1px solid rgba(255,255,255,0.1)",
+                color: "var(--muted-foreground)",
+                border: "1px solid var(--border)",
                 background: "transparent",
               }}
             >
@@ -1388,13 +1388,13 @@ function DetailRow({
       </div>
       <div className="flex-1 min-w-0">
         <p
-          style={{ fontSize: "10.5px", color: "#3d4f6e", fontWeight: 700, letterSpacing: "0.05em" }}
+          style={{ fontSize: "10.5px", color: "var(--muted-foreground)", fontWeight: 700, letterSpacing: "0.05em" }}
           className="lg:text-[11px]"
         >
           {label.toUpperCase()}
         </p>
         <p
-          style={{ fontSize: "13px", color: "#cbd5e1" }}
+          style={{ fontSize: "13px", color: "var(--foreground)" }}
           className="truncate lg:text-[14px]"
         >
           {value}
