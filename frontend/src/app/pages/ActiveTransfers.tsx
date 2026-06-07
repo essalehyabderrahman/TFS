@@ -21,7 +21,7 @@ export function ActiveTransfers() {
           <h2 style={{ fontSize: "13px", color: "#3d4f6e", fontWeight: 700, letterSpacing: "0.1em" }}>
             UPLOAD FILES
           </h2>
-          <div className="flex-1" style={{ height: "1px", background: "rgba(255,255,255,0.05)" }} />
+          <div className="flex-1" style={{ height: "1px", background: "var(--background)" }} />
         </div>
         <UploadZone onUploaded={() => setRefreshKey(k => k + 1)} />
       </section>
@@ -32,7 +32,7 @@ export function ActiveTransfers() {
           <h2 style={{ fontSize: "13px", color: "#3d4f6e", fontWeight: 700, letterSpacing: "0.1em" }}>
             RECENT ACTIVITY
           </h2>
-          <div className="flex-1" style={{ height: "1px", background: "rgba(255,255,255,0.05)" }} />
+          <div className="flex-1" style={{ height: "1px", background: "var(--background)" }} />
         </div>
         <TransfersTable refreshKey={refreshKey} />
       </section>

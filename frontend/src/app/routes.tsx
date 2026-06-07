@@ -22,6 +22,7 @@ import { ForgotPassword } from "./pages/ForgotPassword";
 import { FileExplorer } from "./pages/FileExplorer";
 import { RecoveryManagement } from "./pages/RecoveryManagement";
 import { QuotaRequests } from "./pages/QuotaRequests";
+import { Trash } from "./pages/Trash";
 
 
 function RootLayout() {
@@ -53,6 +54,13 @@ function AdminOrGroupAdminRoute({ children }: { children: React.ReactNode }) {
   const { isAppAdmin, isGroupAdmin, isInitializing } = useAuth()
   if (isInitializing) return null
   if (!isAppAdmin && !isGroupAdmin) return <Navigate to="/dashboard" replace />
+  return <>{children}</>
+}
+
+function AdminOnlyRoute({ children }: { children: React.ReactNode }) {
+  const { isAppAdmin, isInitializing } = useAuth()
+  if (isInitializing) return null
+  if (!isAppAdmin) return <Navigate to="/dashboard" replace />
   return <>{children}</>
 }
 
@@ -117,20 +125,42 @@ export const router = createBrowserRouter([
                   </AdminOrGroupAdminRoute>
                 ),
               },
-              { path: "users", Component: UserManagement },
-              { path: "team", Component: TeamManagement },
+              {
+                path: "users",
+                element: (
+                  <AdminOnlyRoute>
+                    <UserManagement />
+                  </AdminOnlyRoute>
+                ),
+              },
+              {
+                path: "team",
+                element: (
+                  <AdminOnlyRoute>
+                    <TeamManagement />
+                  </AdminOnlyRoute>
+                ),
+              },
               { path: "groups", Component: GroupWorkspace },
               { path: "security", Component: SecuritySettings },
               { path: "account", Component: AccountManagement },
               { path: "contacts", Component: Contacts },
               { path: "explorer", Component: FileExplorer },
-              { path: "recovery-management", Component: RecoveryManagement },
+              { path: "trash", Component: Trash },
+              {
+                path: "recovery-management",
+                element: (
+                  <AdminOnlyRoute>
+                    <RecoveryManagement />
+                  </AdminOnlyRoute>
+                ),
+              },
               {
                 path: "quota-requests",
                 element: (
-                  <AdminOrGroupAdminRoute>
+                  <AdminOnlyRoute>
                     <QuotaRequests />
-                  </AdminOrGroupAdminRoute>
+                  </AdminOnlyRoute>
                 ),
               },
             ],

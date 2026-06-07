@@ -140,6 +140,13 @@ def create_app() -> Flask:
     from werkzeug.middleware.proxy_fix import ProxyFix
     app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
 
+    # ── Cleanup Scheduler ─────────────────────────────────────────────────────
+    # Skip in reloader child process to avoid duplicate schedulers
+    import os as _os
+    if not app.debug or _os.environ.get("WERKZEUG_RUN_MAIN") == "true":
+        from .services.cleanup_service import init_scheduler
+        init_scheduler(app)
+        
     return app
 
 
@@ -153,9 +160,14 @@ def _migrate_columns(app) -> None:
     import sqlalchemy
 
     migrations = [
-        ("users",  "storage_quota_bytes", "BIGINT"),
-        ("groups", "storage_quota_bytes", "BIGINT"),
-        ("acl_entries", "can_download", "BOOLEAN DEFAULT 1"),
+        ("users",     "storage_quota_bytes", "BIGINT"),
+        ("groups",    "storage_quota_bytes", "BIGINT"),
+        ("acl_entries", "can_download",      "BOOLEAN DEFAULT 1"),
+        ("transfers", "trashed_at",          "DATETIME"),
+        ("transfers", "content_hash",        "VARCHAR(64)"),
+        ("user_files",  "content_hash",      "VARCHAR(64)"),
+        ("transfers",   "thumbnail_path",    "VARCHAR(500)"),
+        ("user_files",  "thumbnail_path",    "VARCHAR(500)"),
     ]
 
     for table, column, col_type in migrations:

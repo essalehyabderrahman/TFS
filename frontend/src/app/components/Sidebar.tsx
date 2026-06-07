@@ -14,6 +14,7 @@ import {
   FolderOpen,
   Key,
   ArrowUpCircle,
+  Trash2,
 } from "lucide-react";
 
 const allNavItems = [
@@ -21,6 +22,7 @@ const allNavItems = [
   { icon: Download,      label: "Received Files",          id: "received",  path: "/dashboard/received",  adminOnly: false, hideForAdmin: false },
   { icon: Users,         label: "Contacts",                id: "contacts",  path: "/dashboard/contacts",  adminOnly: false, hideForAdmin: false },
   { icon: FolderOpen,    label: "File Manager",            id: "explorer",  path: "/dashboard/explorer",  adminOnly: false, hideForAdmin: false },
+  { icon: Trash2,        label: "Recycle Bin",             id: "trash",     path: "/dashboard/trash",     adminOnly: false, hideForAdmin: false },
   { icon: ClipboardList, label: "Audit & Compliance Logs", id: "audit",     path: "/dashboard/audit",     adminOnly: false, hideForAdmin: false, adminOrGroupAdminOnly: true },
   { icon: Key,           label: "Recovery Requests",       id: "recovery-management", path: "/dashboard/recovery-management", adminOnly: true, hideForAdmin: false },
   { icon: UserCog,       label: "User Management",         id: "users",     path: "/dashboard/users",     adminOnly: true,  hideForAdmin: false },
@@ -102,7 +104,7 @@ export function Sidebar({ isOpen, onClose, onNewTransfer }: SidebarProps) {
               className="w-9 h-9 rounded-xl flex items-center justify-center font-black text-lg"
               style={{
                 background: "#00d2ff",
-                color: "#000",
+                color: "var(--background)",
                 boxShadow: "0 0 20px rgba(0,210,255,0.3)",
               }}
             >
@@ -110,8 +112,8 @@ export function Sidebar({ isOpen, onClose, onNewTransfer }: SidebarProps) {
             </div>
             <div className="flex flex-col">
               <span
-                className="text-white tracking-widest"
-                style={{ fontSize: "18px", fontWeight: 800, letterSpacing: "0.15em" }}
+                className="tracking-widest"
+                style={{ color: "#00D2FF", fontSize: "18px", fontWeight: 800, letterSpacing: "0.15em" }}
               >
                 TFS
               </span>
@@ -126,7 +128,7 @@ export function Sidebar({ isOpen, onClose, onNewTransfer }: SidebarProps) {
         <div className="px-4 pb-5">
           <button
             onClick={() => onNewTransfer?.()}
-            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-black font-black uppercase tracking-widest transition-all duration-200 hover:opacity-90 active:scale-95"
+            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-background font-black uppercase tracking-widest transition-all duration-200 hover:opacity-90 cursor-pointer active:scale-95"
             style={{
               background: "#00D2FF",
               boxShadow: "0 4px 20px rgba(0,210,255,0.25)",
@@ -208,7 +210,7 @@ export function Sidebar({ isOpen, onClose, onNewTransfer }: SidebarProps) {
             {user?.avatar || "TFS"}
           </div>
           <div className="flex-1 min-w-0">
-            <p style={{ fontSize: "13px", color: "#e2e8f0", fontWeight: 600 }} className="truncate">
+            <p style={{ fontSize: "13px", color: "var(--foreground)", fontWeight: 600 }} className="truncate">
               {user?.name || "Loading..."}
             </p>
             <span

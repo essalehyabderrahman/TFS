@@ -174,3 +174,51 @@ export async function revokeAcl(
     return { ok: false, error: String(err) };
   }
 }
+
+export async function apiSaveTransferToExplorer(
+  transferId: string,
+): Promise<{ ok: boolean; fileId?: string; error?: string }> {
+  try {
+    const data = await apiRequest<{ ok: boolean; fileId: string }>(
+      `/transfers/${transferId}/save-to-explorer`,
+      { method: "POST" },
+    );
+    return { ok: true, fileId: data.fileId };
+  } catch (err: any) {
+    return { ok: false, error: err?.message ?? "UNKNOWN" };
+  }
+}
+
+// ── Trash ──────────────────────────────────────────────────────────────────────
+
+export async function fetchTrash(): Promise<{ data: Transfer[]; error: string | null }> {
+  try {
+    const data = await apiRequest<Transfer[]>("/transfers/trash");
+    return { data, error: null };
+  } catch (err) {
+    return { data: [], error: String(err) };
+  }
+}
+
+export async function restoreTransfer(
+  transferId: string,
+): Promise<{ ok: boolean; error: string | null }> {
+  try {
+    await apiRequest(`/transfers/${transferId}/restore`, { method: "POST" });
+    return { ok: true, error: null };
+  } catch (err) {
+    return { ok: false, error: String(err) };
+  }
+}
+
+export async function permanentDeleteTransfer(
+  transferId: string,
+): Promise<{ ok: boolean; error: string | null }> {
+  try {
+    await apiRequest(`/transfers/${transferId}/permanent`, { method: "DELETE" });
+    return { ok: true, error: null };
+  } catch (err) {
+    return { ok: false, error: String(err) };
+  }
+}
+

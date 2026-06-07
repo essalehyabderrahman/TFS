@@ -24,6 +24,9 @@ def _auto_add_contact(owner_id: str, email: str, source: str) -> None:
             return  # already known, don't overwrite manual data
 
         target = User.query.filter_by(email=email).first()
+        if target and owner_id == target.id:
+            return  # skip adding the user itself as contact
+
         contact = Contact(
             id=str(uuid.uuid4()),
             owner_id=owner_id,
@@ -63,7 +66,7 @@ def list_contacts():
     received_from = []
 
     def _add(bucket: list, c: Contact):
-        if c.id not in seen:
+        if c.id not in seen and c.contact_user_id != user.id:
             seen.add(c.id)
             bucket.append(c.to_dict())
 

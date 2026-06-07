@@ -158,3 +158,37 @@ export async function updateExplorerFileContent(
     return { data: null, error: err?.message ?? "UNKNOWN_ERROR" }
   }
 }
+
+// ─── Trash ────────────────────────────────────────────────────────────────────
+
+export async function apiListTrash(): Promise<{ data: FSItem[]; error: string | null }> {
+  try {
+    const data = await apiRequest<FSItem[]>("/explorer/trash")
+    return { data, error: null }
+  } catch (err: any) {
+    return { data: [], error: err?.message ?? "UNKNOWN_ERROR" }
+  }
+}
+
+export async function apiRestoreItem(
+  itemId: string
+): Promise<{ ok: boolean; error: string | null }> {
+  try {
+    await apiRequest(`/explorer/${itemId}/restore`, { method: "POST" })
+    return { ok: true, error: null }
+  } catch (err: any) {
+    return { ok: false, error: err?.message ?? "UNKNOWN_ERROR" }
+  }
+}
+
+export async function apiPermanentDeleteItem(
+  itemId: string
+): Promise<{ ok: boolean; error: string | null }> {
+  try {
+    await apiRequest(`/explorer/${itemId}/permanent`, { method: "DELETE" })
+    return { ok: true, error: null }
+  } catch (err: any) {
+    return { ok: false, error: err?.message ?? "UNKNOWN_ERROR" }
+  }
+}
+

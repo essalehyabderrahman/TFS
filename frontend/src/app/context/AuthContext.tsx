@@ -43,6 +43,12 @@ export const AuthContext = createContext<AuthContextValue | null>(null)
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null)
+  const userRef = useRef<AuthUser | null>(null)
+  
+  useEffect(() => {
+    userRef.current = user
+  }, [user])
+
   const [isMfaPending, setIsMfaPending] = useState(false)
   const [isInitializing, setIsInitializing] = useState(true)
   const [isPasswordResetRequired, setIsPasswordResetRequired] = useState(false)
@@ -184,6 +190,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // This prevents in-flight 401 responses from background requests showing
     // a spurious "session terminated" popup after the user has already signed out.
     if (isSigningOutRef.current) return
+
+    // [Fix] Do not show a session expired modal if the user is already logged out.
+    // This handles cases where a delayed 401 response from a background request
+    // arrives after the sign-out process has completely finished.
+    if (userRef.current === null) return
+
     await apiSignOut()          // nuke HttpOnly cookie server-side first
     setUser(null)
     setIsMfaPending(false)

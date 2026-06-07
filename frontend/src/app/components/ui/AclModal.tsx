@@ -133,17 +133,17 @@ export function AclModal({ transferId, transferName, groupId, onClose }: AclModa
 
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.7)" }} onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(var(--background))" }} onClick={onClose}>
       <div
         className="w-full max-w-2xl rounded-2xl flex flex-col gap-0 overflow-hidden"
-        style={{ background: "linear-gradient(180deg, #0d1228 0%, #0b0f20 100%)", border: "1px solid rgba(255,255,255,0.1)", boxShadow: "0 24px 60px rgba(0,0,0,0.7)" }}
+        style={{ background: "var(--card-background)", border: "1px solid var(--border)", boxShadow: "0 24px 60px rgba(0,0,0,0.7)" }}
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
           <div className="flex items-center gap-2">
             <Shield size={16} style={{ color: "#a855f7" }} />
-            <p className="text-white font-bold text-sm truncate max-w-[400px]">Permissions — {transferName}</p>
+            <p className="font-bold text-sm truncate max-w-[400px]" style={{color: "var(--foreground)"}}>Permissions — {transferName}</p>
           </div>
           <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/10 transition-colors cursor-pointer">
             <X size={16} style={{ color: "#64748b" }} />
@@ -204,7 +204,7 @@ export function AclModal({ transferId, transferName, groupId, onClose }: AclModa
                       </div>
                       <div className="min-w-0">
                         <div className="flex items-center gap-1.5">
-                          <p className="text-sm text-white font-medium truncate">{row.name}</p>
+                          <p className="text-sm font-medium truncate" style={{color: "var(--foreground)"}}>{row.name}</p>
                           {isAdmin && (
                             <span className="flex items-center gap-0.5 text-[9px] font-bold text-[#a855f7] bg-purple-500/10 px-1.5 py-0.5 rounded">
                               <Crown size={9} /> Admin

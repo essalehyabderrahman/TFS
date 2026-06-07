@@ -7,6 +7,7 @@ from app.models.user import User
 from app.models.transfer import Transfer
 from app.middleware.acl_middleware import requires_permission, resolve_effective_permissions
 from app.extensions import db, limiter
+import os
 import uuid
 import mimetypes
 
@@ -188,6 +189,56 @@ def delete(transfer_id):
         return jsonify({"error": result["error"]}), status
     return jsonify({"deleted": True}), 200
 
+
+# ── GET /transfers/trash ───────────────────────────────────────────────────────
+@transfers_bp.get("/trash")
+@jwt_required_custom
+def trash():
+    user = current_user()
+    data = file_service.list_trash(user)
+    return jsonify(data), 200
+
+
+# ── POST /transfers/<id>/restore ───────────────────────────────────────────────
+@transfers_bp.post("/<transfer_id>/restore")
+@csrf_protect
+@jwt_required_custom
+def restore_trashed(transfer_id):
+    user = current_user()
+    result = file_service.restore_transfer(transfer_id, user, _ip())
+    if not result["ok"]:
+        status = 403 if result["error"] == "FORBIDDEN" else 404
+        return jsonify({"error": result["error"]}), status
+    return jsonify({"restored": True}), 200
+
+
+# ── DELETE /transfers/<id>/permanent ───────────────────────────────────────────
+@transfers_bp.delete("/<transfer_id>/permanent")
+@csrf_protect
+@jwt_required_custom
+def permanent_delete(transfer_id):
+    user = current_user()
+    result = file_service.permanently_delete_transfer(transfer_id, user, _ip())
+    if not result["ok"]:
+        status = 403 if result["error"] == "FORBIDDEN" else 404
+        return jsonify({"error": result["error"]}), status
+    return jsonify({"deleted": True}), 200
+
+# ── GET /transfers/<id>/thumbnail ─────────────────────────────────────────────
+@transfers_bp.get("/<transfer_id>/thumbnail")
+@jwt_required_custom
+@limiter.limit("60 per minute")
+def thumbnail(transfer_id):
+    user     = current_user()
+    transfer = db.session.get(Transfer, transfer_id)
+    if not transfer or transfer.is_deleted:
+        return jsonify({"error": "NOT_FOUND"}), 404
+    from app.services.file_service import has_permission
+    if not has_permission(user, transfer, "read"):
+        return jsonify({"error": "FORBIDDEN"}), 403
+    if not transfer.thumbnail_path or not os.path.exists(transfer.thumbnail_path):
+        return jsonify({"error": "NO_THUMBNAIL"}), 404
+    return send_file(transfer.thumbnail_path, mimetype="image/webp")
 
 # ── GET /transfers/<id>/versions ───────────────────────────────────────────────
 @transfers_bp.get("/<transfer_id>/versions")
@@ -464,3 +515,56 @@ def revoke_transfer(transfer_id):
     db.session.commit()
 
     return jsonify(t.to_dict()), 200
+
+
+# ── POST /transfers/<id>/save-to-explorer ──────────────────────────────────────
+@transfers_bp.route("/<transfer_id>/save-to-explorer", methods=["POST"])
+@csrf_protect
+@jwt_required_custom
+def save_transfer_to_explorer(transfer_id):
+    from app.models.user_file import UserFile
+    import shutil, uuid, os
+
+    curr_user = current_user()
+    transfer = db.session.get(Transfer, transfer_id)
+
+    if not transfer or transfer.is_deleted:
+        return jsonify({"error": "NOT_FOUND"}), 404
+
+    # Must be a recipient of this transfer
+    is_recipient = transfer.recipient_email == curr_user.email
+    if not is_recipient and curr_user.role != "admin":
+        return jsonify({"error": "FORBIDDEN"}), 403
+
+    # Find the physical file on disk
+    src_path = transfer.stored_path
+    if not src_path or not os.path.exists(src_path):
+        return jsonify({"error": "FILE_NOT_FOUND"}), 404
+
+    # Copy the file into uploads dir with a new unique name
+    new_file_id = str(uuid.uuid4())
+    ext = os.path.splitext(transfer.file_name)[1]
+    enc_suffix = ".enc" if transfer.is_encrypted else ""
+    dest_filename = f"uf_{new_file_id}{ext}{enc_suffix}"
+    from app.services.file_service import _category_subdir
+    _cat_dir = os.path.join(current_app.config["UPLOAD_FOLDER"], _category_subdir(transfer.file_type))
+    os.makedirs(_cat_dir, exist_ok=True)
+    dest_path = os.path.join(_cat_dir, dest_filename)
+    shutil.copy2(src_path, dest_path)
+
+    # Create a UserFile DB record at root level (parent_id=None)
+    uf = UserFile(
+        id=new_file_id,
+        owner_id=curr_user.id,
+        name=transfer.file_name,
+        item_type="file",
+        parent_id=None,
+        stored_path=dest_path,
+        size_bytes=transfer.size_bytes,
+        is_encrypted=transfer.is_encrypted,
+        file_kind=transfer.file_type,
+    )
+    db.session.add(uf)
+    db.session.commit()
+
+    return jsonify({"ok": True, "fileId": new_file_id}), 201

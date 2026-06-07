@@ -4,12 +4,5 @@ dist
 .env
 .env.local
 *.local
-
-# Ignore scratch and log files in the root
-/*.txt
-/*.sh
-!/errors.txt
-
-# Ensure requirements.txt is ALWAYS tracked
-!backend/requirements.txt
-!**/requirements.txt
+venv
+uploads/*

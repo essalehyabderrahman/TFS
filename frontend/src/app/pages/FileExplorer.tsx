@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from "react";
+import { useSearchParams } from "react-router";
 import {
   Folder,
   FolderOpen,
@@ -182,7 +183,7 @@ function MoveModal({
       <div
         className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-[90vw] max-w-[420px] rounded-2xl overflow-hidden"
         style={{
-          background: "linear-gradient(180deg, #0d1321 0%, #0b0f20 100%)",
+          background: "var(--card-background)",
           border: "1px solid var(--border)",
           boxShadow: "0 24px 64px rgba(0,0,0,0.7)",
         }}
@@ -238,7 +239,7 @@ function MoveModal({
         >
           <button
             onClick={onClose}
-            className="px-4 py-2 rounded-xl text-[13px] transition-colors hover:bg-accent"
+            className="px-4 py-2 rounded-xl text-[13px] transition-colors hover:bg-accent cursor-pointer"
             style={{ color: "var(--muted-foreground)", border: "1px solid var(--border)" }}
           >
             Cancel
@@ -257,10 +258,10 @@ function MoveModal({
               <button
                 disabled={isInvalidMove}
                 onClick={() => selected && onMove(targetId)}
-                className="px-4 py-2 rounded-xl text-[13px] font-semibold transition-all hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed"
+                className="px-4 py-2 rounded-xl text-[13px] font-semibold transition-all hover:brightness-110 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                 style={{
                   background: "linear-gradient(135deg, #0B7FFF 0%, #0960CC 100%)",
-                  color: "var(--foreground)",
+                  color: "white",
                   boxShadow: !isInvalidMove ? "0 4px 16px rgba(11,127,255,0.25)" : "none",
                 }}
               >
@@ -310,6 +311,7 @@ export function FileExplorer() {
   const [previewItem, setPreviewItem] = useState<FSItem | null>(null);
   const [previewEditMode, setPreviewEditMode] = useState(false);
   const [detailsItem, setDetailsItem] = useState<FSItem | null>(null);
+  const [searchParams] = useSearchParams();
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const renameInputRef = useRef<HTMLInputElement>(null);
@@ -331,6 +333,14 @@ export function FileExplorer() {
     });
     return () => { cancelled = true; };
   }, [currentFolderId, loadKey]);
+
+  // When items load, check for a fileId in the URLSearchParams
+  useEffect(() => {
+    const targetId = searchParams.get("fileId");
+    if (!targetId || items.length === 0) return;
+    const match = items.find((i) => i.id === targetId && i.type === "file");
+    if (match) setDetailsItem(match);
+  }, [items, searchParams]);
 
   // Focus rename / new folder inputs
   useEffect(() => {
@@ -977,7 +987,7 @@ export function FileExplorer() {
           onClick={() => !uploading && fileInputRef.current?.click()}
           className="relative w-full rounded-2xl flex flex-col items-center justify-center cursor-pointer transition-all duration-300 group"
           style={{
-            minHeight: "140px",
+            minHeight: "200px",
             border: isDragOver ? "1.5px dashed #00d2ff" : "1.5px dashed rgba(255,255,255,0.12)",
             background: isDragOver ? "rgba(0,210,255,0.07)" : uploading ? "rgba(0,210,255,0.03)" : "rgba(255,255,255,0.02)",
             boxShadow: isDragOver ? "0 0 30px rgba(0,210,255,0.12)" : "none",
@@ -987,7 +997,7 @@ export function FileExplorer() {
           <div
             className="absolute inset-0 rounded-2xl opacity-20 pointer-events-none"
             style={{
-              backgroundImage: `linear-gradient(rgba(0,210,255,0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(0,210,255,0.08) 1px, transparent 1px)`,
+              backgroundImage: `linear-gradient(var(--border) 1px, transparent 1px), linear-gradient(90deg, var(--border) 1px, transparent 1px)`,
               backgroundSize: "32px 32px",
             }}
           />
@@ -1201,7 +1211,7 @@ export function FileExplorer() {
             </p>
             <div className="flex gap-2">
               <button onClick={() => setDeleteConfirmId(null)} className="flex-1 py-2 rounded-xl text-[13px] transition-colors hover:bg-accent" style={{ color: "var(--muted-foreground)", border: "1px solid var(--border)" }}>Cancel</button>
-              <button onClick={() => deleteItem(deleteConfirmId)} className="flex-1 py-2 rounded-xl text-[13px] font-semibold transition-all hover:brightness-110" style={{ background: "linear-gradient(135deg, #F87171 0%, #DC2626 100%)", color: "#fff" }}>Delete</button>
+              <button onClick={() => deleteItem(deleteConfirmId)} className="flex-1 py-2 rounded-xl text-[13px] font-semibold transition-all hover:brightness-110" style={{ background: "linear-gradient(135deg, #F87171 0%, #DC2626 100%)", color: "#0f1729" }}>Delete</button>
             </div>
           </div>
         </div>
@@ -1211,7 +1221,7 @@ export function FileExplorer() {
       <Dialog open={!!detailsItem} onOpenChange={() => setDetailsItem(null)}>
         <DialogContent
           style={{
-            background: "linear-gradient(180deg, #0d1228 0%, #0b0f20 100%)",
+            background: "var(--card-background)",
             border: "1px solid var(--border)",
             maxWidth: "420px",
             boxShadow: "0 24px 64px rgba(0,0,0,0.7)",
@@ -1267,7 +1277,7 @@ export function FileExplorer() {
                       setPreviewEditMode(false);
                       setDetailsItem(null);
                     }}
-                    className="flex-1 py-2.5 rounded-xl text-[13px] font-semibold transition-colors hover:bg-accent flex items-center justify-center gap-1.5"
+                    className="flex-1 py-2.5 rounded-xl text-[13px] font-semibold transition-colors hover:bg-accent flex items-center justify-center gap-1.5 cursor-pointer"
                     style={{ color: "var(--muted-foreground)", border: "1px solid var(--border)" }}
                   >
                     <Eye size={14} />
@@ -1279,7 +1289,7 @@ export function FileExplorer() {
                     handleExplorerDownload(detailsItem);
                     setDetailsItem(null);
                   }}
-                  className="flex-1 py-2.5 rounded-xl text-[13px] font-semibold transition-all hover:brightness-110 flex items-center justify-center gap-1.5"
+                  className="flex-1 py-2.5 rounded-xl text-[13px] font-semibold transition-all hover:brightness-110 flex items-center justify-center gap-1.5 cursor-pointer"
                   style={{
                     background: "linear-gradient(135deg, #0B7FFF 0%, #0960CC 100%)",
                     color: "#fff",

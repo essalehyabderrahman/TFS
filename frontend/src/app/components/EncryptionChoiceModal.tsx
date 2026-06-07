@@ -49,7 +49,7 @@ export function EncryptionChoiceModal({ files, onChoose, onCancel }: EncryptionC
         <div
           className="relative w-[92vw] max-w-[460px] rounded-2xl overflow-hidden"
           style={{
-            background: "linear-gradient(180deg, #0d1321 0%, #080c1a 100%)",
+            background: "var(--card-background)",
             border: "1px solid var(--border)",
             boxShadow: "0 32px 80px rgba(0,0,0,0.8), 0 0 0 1px rgba(255,255,255,0.04) inset",
           }}
@@ -204,7 +204,7 @@ export function EncryptionChoiceModal({ files, onChoose, onCancel }: EncryptionC
           >
             <button
               onClick={onCancel}
-              className="px-4 py-2 rounded-xl text-[13px] transition-colors hover:bg-accent"
+              className="px-4 py-2 rounded-xl text-[13px] transition-colors hover:bg-accent hover:cursor-pointer"
               style={{ color: "var(--muted-foreground)", border: "1px solid var(--border)" }}
             >
               Cancel

@@ -56,13 +56,13 @@ export function AccountManagement() {
 
   const passwordRequirements = [
     { label: "At least 12 characters", test: (p: string) => p.length >= 12 },
-    { label: "Contains a number",       test: (p: string) => /\d/.test(p) },
-    { label: "Lowercase & Uppercase",   test: (p: string) => /[a-z]/.test(p) && /[A-Z]/.test(p) },
-    { label: "Special character",       test: (p: string) => /[!@#$%^&*(),.?":{}|<>_\-+=\[\]\\;'/`~]/.test(p) },
+    { label: "Contains a number", test: (p: string) => /\d/.test(p) },
+    { label: "Lowercase & Uppercase", test: (p: string) => /[a-z]/.test(p) && /[A-Z]/.test(p) },
+    { label: "Special character", test: (p: string) => /[!@#$%^&*(),.?":{}|<>_\-+=\[\]\\;'/`~]/.test(p) },
   ];
-  const isNewPasswordStrong    = passwordRequirements.every(req => req.test(newPassword));
-  const doesPasswordMatch      = newPassword.length > 0 && newPassword === confirmPassword;
-  const isSameAsCurrent        = newPassword.length > 0 && newPassword === currentPassword;
+  const isNewPasswordStrong = passwordRequirements.every(req => req.test(newPassword));
+  const doesPasswordMatch = newPassword.length > 0 && newPassword === confirmPassword;
+  const isSameAsCurrent = newPassword.length > 0 && newPassword === currentPassword;
 
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [isDeleteLoading, setIsDeleteLoading] = useState(false);
@@ -174,8 +174,8 @@ export function AccountManagement() {
       navigate("/signin");
     } else {
       const messages: Record<string, string> = {
-        LAST_ADMIN_PROTECTED:      "Cannot delete account: you are the last active platform admin.",
-        ROOT_PROTECTED:            "The root admin account cannot be deleted.",
+        LAST_ADMIN_PROTECTED: "Cannot delete account: you are the last active platform admin.",
+        ROOT_PROTECTED: "The root admin account cannot be deleted.",
         LAST_GROUP_ADMIN_PROTECTED: "Cannot delete account: you are the sole admin of one or more groups. Transfer group admin rights before deleting your account.",
       };
       toast.error(messages[result.error ?? ""] ?? "Account deletion failed.");
@@ -312,7 +312,7 @@ export function AccountManagement() {
         </div>
         <div className="flex items-center gap-4 mb-6">
           <div className="w-16 h-16 rounded-full flex items-center justify-center shrink-0"
-            style={{ background: "linear-gradient(135deg, #0B7FFF 0%, #0960D9 100%)", fontSize: "20px", fontWeight: 700, color: "#fff" }}>
+            style={{ background: "linear-gradient(135deg, #0B7FFF 0%, #0960D9 100%)", fontSize: "20px", fontWeight: 700, color: "#0f1729" }}>
             {account.avatar}
           </div>
           <div>
@@ -329,8 +329,10 @@ export function AccountManagement() {
             { label: "EMAIL", value: account.email, icon: <Mail size={14} style={{ color: "var(--muted-foreground)" }} /> },
             { label: "COMPANY", value: account.company, icon: <Building2 size={14} style={{ color: "var(--muted-foreground)" }} /> },
             { label: "PLAN", value: account.plan },
-            { label: "MFA", value: account.mfaEnabled ? "Enabled" : "Disabled",
-              valueStyle: { color: account.mfaEnabled ? "#00E5A0" : "#ef4444" } },
+            {
+              label: "MFA", value: account.mfaEnabled ? "Enabled" : "Disabled",
+              valueStyle: { color: account.mfaEnabled ? "#00E5A0" : "#ef4444" }
+            },
             { label: "JOINED", value: new Date(account.joinedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) },
             { label: "LAST ACTIVE", value: new Date(account.lastActive).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) },
           ].map(({ label, value, icon, valueStyle }) => (
@@ -392,7 +394,7 @@ export function AccountManagement() {
             )}
           </div>
         )}
-        
+
         {account.mfaEnabled && !account.requireMfa && (
           <div className="flex items-center justify-between py-3 border-t" style={{ borderColor: "var(--border)" }}>
             <div>
@@ -427,11 +429,11 @@ export function AccountManagement() {
 
       {/* Edit Profile Dialog */}
       <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
-        <DialogContent style={{ background: "linear-gradient(180deg, #0d1228 0%, #0b0f20 100%)", border: "1px solid var(--border)" }}>
+        <DialogContent style={{ background: "var(--card-background)", border: "1px solid var(--border)" }}>
           <DialogHeader><DialogTitle className="text-foreground text-xl">Edit Profile</DialogTitle></DialogHeader>
           <div className="space-y-4">
             {[{ label: "FULL NAME", value: editName, setter: setEditName, type: "text" },
-              { label: "COMPANY", value: editCompany, setter: setEditCompany, type: "text" }].map(({ label, value, setter, type }) => (
+            { label: "COMPANY", value: editCompany, setter: setEditCompany, type: "text" }].map(({ label, value, setter, type }) => (
               <div key={label}>
                 <label style={{ color: "var(--muted-foreground)", fontSize: "12px", fontWeight: 600, letterSpacing: "0.05em" }}>{label}</label>
                 <input type={type} value={value} onChange={(e) => setter(e.target.value)}
@@ -454,18 +456,18 @@ export function AccountManagement() {
       </Dialog>
 
       {/* Change Password Dialog */}
-      <Dialog 
-        open={showPasswordDialog} 
+      <Dialog
+        open={showPasswordDialog}
         onOpenChange={v => {
           // If reset is required, the user cannot close the dialog by clicking outside or pressing ESC
           if (isPasswordResetRequired) return;
           setShowPasswordDialog(v);
         }}
       >
-        <DialogContent 
+        <DialogContent
           onPointerDownOutside={e => { if (isPasswordResetRequired) e.preventDefault(); }}
           onEscapeKeyDown={e => { if (isPasswordResetRequired) e.preventDefault(); }}
-          style={{ background: "linear-gradient(180deg, #0d1228 0%, #0b0f20 100%)", border: "1px solid var(--border)" }}
+          style={{ background: "var(--card-background)", border: "1px solid var(--border)" }}
         >
           <DialogHeader><DialogTitle className="text-foreground text-xl">Change Password</DialogTitle></DialogHeader>
           <div className="space-y-4">
@@ -542,7 +544,7 @@ export function AccountManagement() {
           </div>
 
           <DialogFooter className="mt-6">
-            <button 
+            <button
               onClick={() => { setShowPasswordDialog(false); setCurrentPassword(""); setNewPassword(""); setConfirmPassword(""); }}
               disabled={isPasswordResetRequired}
               className="px-4 py-2 rounded-lg disabled:opacity-20"
@@ -560,7 +562,7 @@ export function AccountManagement() {
 
       {/* Delete Account Dialog */}
       <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
-        <AlertDialogContent style={{ background: "linear-gradient(180deg, #0d1228 0%, #0b0f20 100%)", border: "1px solid var(--border)" }}>
+        <AlertDialogContent style={{ background: "var(--card-background)", border: "1px solid var(--border)" }}>
           <AlertDialogHeader>
             <AlertDialogTitle className="text-foreground">Delete Account</AlertDialogTitle>
             <AlertDialogDescription style={{ color: "var(--muted-foreground)" }}>
@@ -579,7 +581,7 @@ export function AccountManagement() {
 
       {/* Disable MFA Dialog */}
       <Dialog open={showMfaDisableDialog} onOpenChange={v => { setShowMfaDisableDialog(v); setMfaDisableCode(""); }}>
-        <DialogContent style={{ background: "linear-gradient(180deg, #0d1228 0%, #0b0f20 100%)", border: "1px solid var(--border)" }}>
+        <DialogContent style={{ background: "var(--card-background)", border: "1px solid var(--border)" }}>
           <DialogHeader>
             <DialogTitle className="text-foreground text-xl">Disable Two-Factor Authentication</DialogTitle>
           </DialogHeader>
@@ -613,7 +615,7 @@ export function AccountManagement() {
 
       {/* Regenerate Backup Code Dialog */}
       <Dialog open={showBackupRegenDialog} onOpenChange={v => { setShowBackupRegenDialog(v); setBackupRegenCode(""); setNewBackupCode(null); }}>
-        <DialogContent style={{ background: "linear-gradient(180deg, #0d1228 0%, #0b0f20 100%)", border: "1px solid var(--border)" }}>
+        <DialogContent style={{ background: "var(--card-background)", border: "1px solid var(--border)" }}>
           <DialogHeader><DialogTitle className="text-foreground text-xl">Regenerate Backup Code</DialogTitle></DialogHeader>
           {newBackupCode ? (
             <div className="space-y-4">

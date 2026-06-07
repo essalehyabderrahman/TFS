@@ -217,10 +217,10 @@ export function RecoveryManagement() {
       {/* ── Header ─────────────────────────────────────────────────────────── */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-white text-2xl font-black uppercase italic tracking-tighter">
+          <h1 className="text-2xl font-black uppercase italic tracking-tighter" style={{ color: "var(--foreground)" }}>
             Recovery <span className="text-[#00d2ff]">Management</span>
           </h1>
-          <p className="text-white/30 text-xs uppercase tracking-widest mt-1">
+          <p className="text-xs uppercase tracking-widest mt-1" style={{ color: "var(--foreground)" }}>
             Admin · Password recovery requests
           </p>
         </div>
@@ -231,8 +231,8 @@ export function RecoveryManagement() {
               onClick={() => setFilter(f)}
               className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest border transition-all ${
                 filter === f
-                  ? "bg-[#00d2ff] text-black border-transparent"
-                  : "bg-white/5 text-white/40 border-white/10 hover:border-white/30"
+                  ? "bg-[#00d2ff] text-black border-transparent hover:cursor-pointer"
+                  : "text-muted-foreground border-white/10 hover:border-muted-foreground cursor-pointer"
               }`}
             >
               {f}
@@ -248,8 +248,8 @@ export function RecoveryManagement() {
         </div>
       ) : requests.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-24 gap-3 text-white/20">
-          <ClipboardCheck size={40} className="opacity-30" />
-          <p className="text-sm uppercase tracking-widest">No {filter} requests.</p>
+          <ClipboardCheck size={50} className="opacity-30" style={{ color: "#6b7fa8"}}/>
+          <p className="text-sm uppercase tracking-widest" style={{ color: "#6b7fa8" }}>No {filter} requests.</p>
         </div>
       ) : (
         <div className="space-y-4">
@@ -274,7 +274,7 @@ export function RecoveryManagement() {
                       </div>
                       <div>
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className="font-bold text-white text-sm">{req.fullName}</span>
+                          <span className="font-bold text-foreground text-sm">{req.fullName}</span>
                           {/* Status badge */}
                           <span className={`text-[9px] font-black uppercase tracking-widest
                                            px-2 py-0.5 rounded-full border ${statusStyles[req.status] ?? ""}`}>
@@ -289,10 +289,10 @@ export function RecoveryManagement() {
                             </span>
                           )}
                         </div>
-                        <div className="text-white/40 text-xs mt-0.5">{req.userEmail}</div>
+                        <div className="text-muted-foreground text-xs mt-0.5">{req.userEmail}</div>
                       </div>
                     </div>
-                    <div className="text-white/20 text-[10px] text-right whitespace-nowrap shrink-0">
+                    <div className="text-muted-foreground text-[10px] text-right whitespace-nowrap shrink-0">
                       {new Date(req.createdAt).toLocaleString()}
                     </div>
                   </div>
@@ -300,26 +300,26 @@ export function RecoveryManagement() {
                   {/* User message */}
                   {req.message && (
                     <div className="mt-3 ml-13 pl-1 border-l border-white/10 ml-[52px]">
-                      <p className="text-white/30 text-xs italic">"{req.message}"</p>
+                      <p className="text-muted-foreground text-xs italic">"{req.message}"</p>
                     </div>
                   )}
 
                   {/* Verification data */}
                   {(req.lastTransferredFile || req.estimatedRegistrationDate) && (
                     <div className="mt-3 ml-[52px] p-3.5 rounded-xl bg-white/[0.01] border border-white/[0.04] space-y-1 text-xs">
-                      <div className="text-[10px] font-black uppercase tracking-widest text-[#00d2ff] mb-1">
+                      <div className="text-[10px] font-black uppercase tracking-wider text-[#00d2ff] mb-1">
                         Identity Verification Data
                       </div>
                       {req.lastTransferredFile && (
                         <div>
-                          <span className="text-white/30 uppercase font-black tracking-wider text-[9px] mr-1.5">Last File:</span>
-                          <span className="text-white/70">{req.lastTransferredFile}</span>
+                          <span className="text-muted-foreground uppercase font-black tracking-wider text-[9px] mr-1.5">Last File:</span>
+                          <span className="text-foreground">{req.lastTransferredFile}</span>
                         </div>
                       )}
                       {req.estimatedRegistrationDate && (
                         <div>
-                          <span className="text-white/30 uppercase font-black tracking-wider text-[9px] mr-1.5">Est. Registration Date:</span>
-                          <span className="text-white/70">{req.estimatedRegistrationDate}</span>
+                          <span className="text-muted-foreground uppercase font-black tracking-wider text-[9px] mr-1.5">Est. Registration Date:</span>
+                          <span className="text-foreground">{req.estimatedRegistrationDate}</span>
                         </div>
                       )}
                     </div>
@@ -335,7 +335,7 @@ export function RecoveryManagement() {
                       const isPasswordStrong = passwordRequirements.every(reqRule => reqRule.test(cs.draftPassword));
                       return (
                         <div className="p-5 space-y-4">
-                          <p className="text-[10px] font-black uppercase tracking-widest text-white/30 flex items-center gap-2">
+                          <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground flex items-center gap-2">
                             <Key size={11} /> Step 1 — Set a temporary password
                           </p>
 
@@ -351,7 +351,7 @@ export function RecoveryManagement() {
                                   emailBody: buildEmailBody(req.fullName, e.target.value),
                                 })}
                                 className="w-full bg-white/5 border border-white/10 rounded-xl h-10 px-3
-                                           text-white font-mono text-sm tracking-widest outline-none
+                                           text-foreground font-mono text-sm tracking-widest outline-none
                                            focus:border-[#00d2ff]/50 transition-all"
                                 placeholder="Auto-generated password..."
                               />
@@ -367,8 +367,8 @@ export function RecoveryManagement() {
                                   emailBody: buildEmailBody(req.fullName, p),
                                 });
                               }}
-                              className="p-2.5 rounded-xl bg-white/5 border border-white/10 text-white/40
-                                         hover:text-white hover:border-white/30 transition-all"
+                              className="p-2.5 rounded-xl bg-white/5 border border-white/10 text-muted-foreground/40
+                                         hover:text-foreground hover:border-white/30 transition-all"
                             >
                               <RefreshCw size={14} />
                             </button>
@@ -376,8 +376,8 @@ export function RecoveryManagement() {
                             <button
                               title="Copy password"
                               onClick={() => copyToClipboard(cs.draftPassword, "Password")}
-                              className="p-2.5 rounded-xl bg-white/5 border border-white/10 text-white/40
-                                         hover:text-white hover:border-white/30 transition-all"
+                              className="p-2.5 rounded-xl bg-white/5 border border-white/10 text-muted-foreground/40
+                                         hover:text-foreground hover:border-white/30 transition-all"
                             >
                               <Copy size={14} />
                             </button>
@@ -385,7 +385,7 @@ export function RecoveryManagement() {
 
                           {/* Password rules indicator */}
                           {cs.draftPassword && (
-                            <div className="grid grid-cols-2 gap-2 p-4 bg-white/[0.02] border border-white/[0.05] rounded-2xl">
+                            <div className="grid grid-cols-2 gap-2 p-4 bg-white/[0.02] border border-muted-foreground/10 rounded-2xl">
                               {passwordRequirements.map((reqRule, i) => {
                                 const passed = reqRule.test(cs.draftPassword);
                                 return (
@@ -395,7 +395,7 @@ export function RecoveryManagement() {
                                     ) : (
                                       <div className="w-1.5 h-1.5 rounded-full bg-white/10 ml-1"></div>
                                     )}
-                                    <span className={`text-[9px] font-black uppercase tracking-tighter ${passed ? 'text-white/60' : 'text-white/20'}`}>
+                                    <span className={`text-[9px] font-black uppercase tracking-tighter ${passed ? 'text-[#00d2ff]' : 'text-muted-foreground/20'}`}>
                                       {reqRule.label}
                                     </span>
                                   </div>
@@ -446,12 +446,12 @@ export function RecoveryManagement() {
                               Password set successfully
                             </p>
                             <div className="flex items-center gap-2 mt-1">
-                              <code className="text-white/60 font-mono text-xs tracking-widest truncate">
+                              <code className="text-foreground font-mono text-xs tracking-widest truncate">
                                 {cs.appliedPassword}
                               </code>
                               <button
                                 onClick={() => copyToClipboard(cs.appliedPassword, "Password")}
-                                className="text-white/30 hover:text-white transition-colors shrink-0"
+                                className="text-muted-foreground/30 hover:text-foreground transition-colors shrink-0"
                               >
                                 <Copy size={11} />
                               </button>
@@ -460,14 +460,14 @@ export function RecoveryManagement() {
                         </div>
 
                         {/* Email composer */}
-                        <p className="text-[10px] font-black uppercase tracking-widest text-white/30 flex items-center gap-2">
+                        <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground flex items-center gap-2">
                           <Mail size={11} /> Step 2 — Compose & send the notification email
                         </p>
 
                         <div className="space-y-3">
                           {/* To */}
                           <div>
-                            <label className="text-[9px] font-black uppercase tracking-widest text-white/30">
+                            <label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">
                               To
                             </label>
                             <input
@@ -475,12 +475,12 @@ export function RecoveryManagement() {
                               value={cs.emailTo}
                               onChange={e => update(req.id, { emailTo: e.target.value })}
                               className="w-full mt-1 bg-white/5 border border-white/10 rounded-xl h-9 px-3
-                                         text-white text-sm outline-none focus:border-[#00d2ff]/50 transition-all"
+                                         text-foreground text-sm outline-none focus:border-[#00d2ff]/50 transition-all"
                             />
                           </div>
                           {/* Subject */}
                           <div>
-                            <label className="text-[9px] font-black uppercase tracking-widest text-white/30">
+                            <label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">
                               Subject
                             </label>
                             <input
@@ -488,13 +488,13 @@ export function RecoveryManagement() {
                               value={cs.emailSubject}
                               onChange={e => update(req.id, { emailSubject: e.target.value })}
                               className="w-full mt-1 bg-white/5 border border-white/10 rounded-xl h-9 px-3
-                                         text-white text-sm outline-none focus:border-[#00d2ff]/50 transition-all"
+                                         text-foreground text-sm outline-none focus:border-[#00d2ff]/50 transition-all"
                             />
                           </div>
                           {/* Body */}
                           <div>
                             <div className="flex items-center justify-between mb-1">
-                              <label className="text-[9px] font-black uppercase tracking-widest text-white/30">
+                              <label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">
                                 Body
                               </label>
                               <button
@@ -502,7 +502,7 @@ export function RecoveryManagement() {
                                   emailBody: buildEmailBody(req.fullName, cs.appliedPassword),
                                 })}
                                 className="text-[9px] font-black uppercase tracking-widest
-                                           text-white/20 hover:text-[#00d2ff] transition-colors flex items-center gap-1"
+                                           text-foreground/20 hover:text-[#00d2ff] transition-colors flex items-center gap-1"
                               >
                                 <RefreshCw size={9} /> Reset to template
                               </button>
@@ -512,9 +512,9 @@ export function RecoveryManagement() {
                               onChange={e => update(req.id, { emailBody: e.target.value })}
                               rows={9}
                               className="w-full bg-white/5 border border-white/10 rounded-xl p-3
-                                         text-white/80 text-xs font-mono outline-none resize-y
+                                         text-foreground/80 text-xs font-mono outline-none resize-y
                                          focus:border-[#00d2ff]/50 transition-all
-                                         placeholder:text-white/20"
+                                         placeholder:text-foreground/20"
                             />
                           </div>
                         </div>
@@ -556,7 +556,7 @@ export function RecoveryManagement() {
                             onClick={() => update(req.id, { panel: "idle" })}
                             disabled={cs.loading}
                             className="px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest
-                                       text-white/20 hover:text-white transition-colors"
+                                       text-muted-foreground hover:text-foreground transition-colors"
                           >
                             ← Back
                           </button>

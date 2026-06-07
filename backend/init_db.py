@@ -17,6 +17,7 @@ from app.models.group import Group, GroupMember, GroupSettings
 from app.models.team_settings import TeamSettings
 from app.models.notification import Notification
 from app.models.recovery_request import RecoveryRequest  # noqa: F401
+from app.services.file_service import _encrypt_file
 
 # Create the flask app configured appropriately
 app = create_app()
@@ -317,9 +318,39 @@ with app.app_context():
         expiry_date=now + timedelta(days=29),
     )
     db.session.add_all([gt1, gt2, gt3, gt4])
+    print("Generating physical mock files on disk...")
+    upload_dir = app.config.get("UPLOAD_FOLDER")
+    if not upload_dir:
+        upload_dir = os.path.join(base_dir, "uploads")
+    os.makedirs(upload_dir, exist_ok=True)
+
+    all_transfers = [t1, t2, t3, t4, gt1, gt2, gt3, gt4]
+    for t in all_transfers:
+        # Fix stored_path to be absolute
+        if t.stored_path and t.stored_path.startswith("/uploads/"):
+            filename = t.stored_path.replace("/uploads/", "")
+            t.stored_path = os.path.join(upload_dir, filename)
+
+        # Create dummy content
+        size = t.size_bytes if t.size_bytes else 1024
+        dummy_text = f"This is a dummy file for {t.original_name}. Demonstration purposes only.\n".encode('utf-8')
+        content = dummy_text * (size // len(dummy_text) + 1)
+        content = content[:size]
+
+        # Encrypt if needed
+        is_encrypted = getattr(t, 'is_encrypted', "AES" in str(t.encryption_type))
+        if is_encrypted:
+            try:
+                content = _encrypt_file(content)
+            except Exception as e:
+                print(f"Error encrypting mock file: {e}")
+
+        os.makedirs(os.path.dirname(t.stored_path), exist_ok=True)
+        with open(t.stored_path, "wb") as f:
+            f.write(content)
 
     db.session.commit()
-    print("Database initialization and data seeding completed successfully!")
+    print("Database initialization, data seeding, and physical file generation completed successfully!")
     print()
     print("----------------------------------------------------------")
     if os.environ.get("PRINT_SEED_PASSWORDS") == "true":

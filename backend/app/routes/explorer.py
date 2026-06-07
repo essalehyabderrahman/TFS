@@ -1,5 +1,6 @@
 import logging
 import mimetypes
+import os
 from flask import Blueprint, request, jsonify, send_file, current_app
 
 from app.middleware.auth_middleware import jwt_required_custom, current_user
@@ -171,6 +172,40 @@ def delete_item(item_id):
         return jsonify({"error": error}), 400
     return jsonify({"deleted": True, "count": result["deleted"]}), 200
 
+# ── GET /explorer/trash ────────────────────────────────────────────────────────
+@explorer_bp.get("/trash")
+@jwt_required_custom
+def list_trash():
+    user = current_user()
+    data = explorer_service.list_trash(user)
+    return jsonify(data), 200
+
+# ── POST /explorer/<id>/restore ────────────────────────────────────────────────
+@explorer_bp.post("/<item_id>/restore")
+@csrf_protect
+@jwt_required_custom
+def restore_item(item_id):
+    user = current_user()
+    result = explorer_service.restore_item(user, item_id)
+    if not result["ok"]:
+        error = result["error"]
+        status = 403 if error == "FORBIDDEN" else 404
+        return jsonify({"error": error}), status
+    return jsonify({"restored": True, "count": result["restored"]}), 200
+
+# ── DELETE /explorer/<id>/permanent ────────────────────────────────────────────
+@explorer_bp.delete("/<item_id>/permanent")
+@csrf_protect
+@jwt_required_custom
+def permanent_delete_item(item_id):
+    user = current_user()
+    result = explorer_service.permanently_delete_item(user, item_id)
+    if not result["ok"]:
+        error = result["error"]
+        status = 403 if error == "FORBIDDEN" else 404
+        return jsonify({"error": error}), status
+    return jsonify({"deleted": True}), 200
+
 
 # ── GET /explorer/<id>/download ────────────────────────────────────────────────
 @explorer_bp.get("/<item_id>/download")
@@ -226,6 +261,23 @@ def preview_file(item_id):
         download_name=result["filename"],
     )
 
+
+# ── GET /explorer/<id>/thumbnail ──────────────────────────────────────────────
+@explorer_bp.get("/<item_id>/thumbnail")
+@jwt_required_custom
+@limiter.limit("60 per minute")
+def thumbnail(item_id):
+    from app.models.user_file import UserFile
+    from app.extensions import db as _db
+    user = current_user()
+    item = _db.session.get(UserFile, item_id)
+    if not item or item.is_deleted:
+        return jsonify({"error": "NOT_FOUND"}), 404
+    if item.owner_id != user.id:
+        return jsonify({"error": "FORBIDDEN"}), 403
+    if not item.thumbnail_path or not os.path.exists(item.thumbnail_path):
+        return jsonify({"error": "NO_THUMBNAIL"}), 404
+    return send_file(item.thumbnail_path, mimetype="image/webp")
 
 # ── PUT /explorer/<id>/content ─────────────────────────────────────────────────
 @explorer_bp.put("/<item_id>/content")

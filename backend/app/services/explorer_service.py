@@ -20,7 +20,10 @@ from app.models.user_file import UserFile
 from app.models.user import User
 
 # Re-use encryption helpers from the existing file service
-from app.services.file_service import _encrypt_file, _decrypt_file, _file_type
+from app.services.file_service import (
+    _encrypt_file, _decrypt_file, _file_type, _category_subdir,
+    _compute_hash, _find_existing_path, _is_path_shared,
+)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -124,19 +127,25 @@ def upload_file(user: User, file: FileStorage, parent_id: str | None,
         if not parent or parent.owner_id != user.id or parent.is_deleted:
             return {"ok": False, "error": "PARENT_NOT_FOUND"}
 
-    safe_name = secure_filename(file.filename)
-    stored_id = str(uuid.uuid4())
-    os.makedirs(upload_folder, exist_ok=True)
-    ext = ".enc" if is_encrypted else ""
-    stored_path = os.path.join(upload_folder, f"uf_{stored_id}_{safe_name}{ext}")
-
-    raw_data = file.read()
+    safe_name  = secure_filename(file.filename)
+    stored_id  = str(uuid.uuid4())
+    raw_data   = file.read()
     size_bytes = len(raw_data)
-    
-    data_to_write = _encrypt_file(raw_data) if is_encrypted else raw_data
 
-    with open(stored_path, "wb") as fp:
-        fp.write(data_to_write)
+    content_hash  = _compute_hash(raw_data)
+    existing_path = _find_existing_path(content_hash, is_encrypted)
+
+    if existing_path:
+        stored_path = existing_path
+    else:
+        ext      = ".enc" if is_encrypted else ""
+        _cat_dir = os.path.join(upload_folder, _category_subdir(_file_type(safe_name)))
+        os.makedirs(_cat_dir, exist_ok=True)
+        stored_path = os.path.join(_cat_dir, f"uf_{stored_id}_{safe_name}{ext}")
+
+        data_to_write = _encrypt_file(raw_data) if is_encrypted else raw_data
+        with open(stored_path, "wb") as fp:
+            fp.write(data_to_write)
 
     user_file = UserFile(
         id=stored_id,
@@ -148,6 +157,7 @@ def upload_file(user: User, file: FileStorage, parent_id: str | None,
         size_bytes=size_bytes,
         file_kind=_file_type(safe_name),
         is_encrypted=is_encrypted,
+        content_hash=content_hash,
     )
     db.session.add(user_file)
     db.session.commit()
@@ -247,6 +257,76 @@ def delete_item(user: User, item_id: str) -> dict:
 
     db.session.commit()
     return {"ok": True, "deleted": len(ids_to_delete)}
+
+def list_trash(user: User) -> list[dict]:
+    items = UserFile.query.filter_by(
+        owner_id=user.id,
+        is_deleted=True,
+    ).order_by(UserFile.updated_at.desc()).all()
+    return [i.to_dict() for i in items]
+
+def restore_item(user: User, item_id: str) -> dict:
+    item = db.session.get(UserFile, item_id)
+    if not item or not item.is_deleted:
+        return {"ok": False, "error": "NOT_FOUND"}
+    if item.owner_id != user.id:
+        return {"ok": False, "error": "FORBIDDEN"}
+
+    ids_to_restore = _collect_deleted_descendants(item_id) if item.item_type == "folder" else [item_id]
+
+    UserFile.query.filter(
+        UserFile.id.in_(ids_to_restore)
+    ).update({"is_deleted": False}, synchronize_session="fetch")
+
+    db.session.commit()
+    return {"ok": True, "restored": len(ids_to_restore)}
+
+def _collect_deleted_descendants(folder_id: str) -> list[str]:
+    ids = [folder_id]
+    children = UserFile.query.filter_by(parent_id=folder_id, is_deleted=True).all()
+    for child in children:
+        if child.item_type == "folder":
+            ids.extend(_collect_deleted_descendants(child.id))
+        else:
+            ids.append(child.id)
+    return ids
+
+def permanently_delete_item(user: User, item_id: str) -> dict:
+    item = db.session.get(UserFile, item_id)
+    if not item or not item.is_deleted:
+        return {"ok": False, "error": "NOT_FOUND"}
+    if item.owner_id != user.id:
+        return {"ok": False, "error": "FORBIDDEN"}
+
+    # Gather paths
+    paths_to_delete = []
+    
+    def gather_paths(it):
+        if it.stored_path:
+            paths_to_delete.append(it.stored_path)
+        if it.item_type == "folder":
+            children = UserFile.query.filter_by(parent_id=it.id).all()
+            for child in children:
+                gather_paths(child)
+
+    gather_paths(item)
+
+    # Include thumbnail (per-record, never shared)
+    if item.thumbnail_path and os.path.exists(item.thumbnail_path):
+        paths_to_delete.append(item.thumbnail_path)
+
+    for path in paths_to_delete:
+        if path and os.path.exists(path) and not _is_path_shared(path):
+            try:
+                os.remove(path)
+            except Exception:
+                pass
+
+    db.session.delete(item)
+    db.session.commit()
+    return {"ok": True}
+
+
 
 
 # ──────────────────────────────────────────────────────────────────────────────

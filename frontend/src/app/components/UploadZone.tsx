@@ -229,9 +229,9 @@ export function UploadZone({ onUploaded }: UploadZoneProps) {
         <select
           value={expiryDays}
           onChange={(e) => setExpiryDays(Number(e.target.value))}
-          className="h-9 px-3 rounded-lg text-white outline-none text-sm"
+          className="h-9 px-3 rounded-lg outline-none text-sm"
           style={{
-            background: "#121725",
+            background: "var(--input-background)",
             border: "1px solid var(--border)",
             minWidth: "140px",
             color: "var(--foreground)",
@@ -253,7 +253,7 @@ export function UploadZone({ onUploaded }: UploadZoneProps) {
         onDrop={onDrop}
         className="relative w-full rounded-2xl flex flex-col items-center justify-center cursor-pointer transition-all duration-300 group"
         style={{
-          minHeight: "160px",
+          minHeight: "200px",
           border: dragging ? "1.5px dashed #00d2ff" : "1.5px dashed rgba(255,255,255,0.12)",
           background: dragging ? "rgba(0,210,255,0.07)" : uploading ? "rgba(0,210,255,0.03)" : "rgba(255,255,255,0.02)",
           boxShadow: dragging ? "0 0 30px rgba(0,210,255,0.12)" : "none",
@@ -266,7 +266,7 @@ export function UploadZone({ onUploaded }: UploadZoneProps) {
         <div
           className="absolute inset-0 rounded-2xl opacity-20 pointer-events-none"
           style={{
-            backgroundImage: `linear-gradient(rgba(0,210,255,0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(0,210,255,0.08) 1px, transparent 1px)`,
+            backgroundImage: `linear-gradient(var(--border) 1px, transparent 1px), linear-gradient(90deg, var(--border) 1px, transparent 1px)`,
             backgroundSize: "32px 32px",
           }}
         />

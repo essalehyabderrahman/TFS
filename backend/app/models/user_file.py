@@ -21,6 +21,8 @@ class UserFile(db.Model):
     file_kind   = db.Column(db.String(20),  nullable=True)    # pdf|img|zip|video|doc|other
     is_encrypted = db.Column(db.Boolean,    nullable=False, default=True)
     is_deleted  = db.Column(db.Boolean,     nullable=False, default=False)
+    thumbnail_path = db.Column(db.String(500), nullable=True)
+    content_hash = db.Column(db.String(64),  nullable=True, index=True)
     created_at  = db.Column(db.DateTime,    nullable=False, default=lambda: datetime.now(timezone.utc))
     updated_at  = db.Column(db.DateTime,    nullable=False,
                             default=lambda: datetime.now(timezone.utc),
@@ -69,6 +71,7 @@ class UserFile(db.Model):
             "isEncrypted":   self.is_encrypted,
             "createdAt":     self._fmt_date(self.created_at),
             "dateTimestamp": int(self.created_at.timestamp()),
+            "hasThumbnail":  self.thumbnail_path is not None,
         }
 
     def _fmt_date(self, dt: datetime) -> str:

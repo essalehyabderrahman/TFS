@@ -71,7 +71,7 @@ export function QuotaRequests() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white flex items-center gap-3">
+          <h1 className="text-2xl font-bold flex items-center gap-3" style={{ color: "var(--foreground)" }}>
             <ArrowUpCircle size={28} style={{ color: "#00d2ff" }} />
             Quota Requests
             {pendingCount > 0 && (
@@ -205,7 +205,7 @@ export function QuotaRequests() {
 
       {/* Resolve confirmation dialog */}
       <Dialog open={!!resolveTarget} onOpenChange={() => setResolveTarget(null)}>
-        <DialogContent style={{ background: "linear-gradient(180deg, #0d1228 0%, #0b0f20 100%)", border: "1px solid var(--border)" }}>
+        <DialogContent style={{ background: "var(--card-background)", border: "1px solid var(--border)" }}>
           <DialogHeader>
             <DialogTitle className="text-foreground text-lg">
               {resolveTarget?.action === "approve" ? "✅ Approve Request" : "❌ Reject Request"}

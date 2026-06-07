@@ -101,7 +101,7 @@ export function SecuritySettings() {
     <div className="flex flex-col gap-4 sm:gap-6">
       {/* Header */}
       <div>
-        <h1 className="text-white text-2xl font-bold mb-1">Security Settings</h1>
+        <h1 className="text-2xl font-bold mb-1" style={{ color: "var(--foreground)" }}>Security Settings</h1>
         <p style={{ color: "#6b7fa8", fontSize: "14px" }}>
           Manage your security preferences and authentication methods
         </p>
@@ -111,8 +111,8 @@ export function SecuritySettings() {
       <div
         className="p-5 rounded-xl"
         style={{
-          background: "linear-gradient(135deg, rgba(0,229,160,0.12) 0%, rgba(0,229,160,0.05) 100%)",
-          border: "1px solid rgba(0,229,160,0.25)",
+          background: "var(--card-background)",
+          border: "1px solid var(--border)",
         }}
       >
         <div className="flex items-start gap-4">
@@ -126,7 +126,7 @@ export function SecuritySettings() {
           </div>
           <div className="flex-1">
             <div className="flex items-center gap-2 mb-2">
-              <h3 className="text-white font-semibold text-lg">Security Status: Excellent</h3>
+              <h3 className="text-foreground font-semibold text-lg">Security Status: Excellent</h3>
               <span
                 className="inline-flex items-center px-2 py-0.5 rounded"
                 style={{
@@ -161,13 +161,13 @@ export function SecuritySettings() {
       >
         <div className="flex items-center gap-2 mb-4">
           <Bell size={20} style={{ color: "#0B7FFF" }} />
-          <h2 className="text-white font-semibold text-lg">Security Notifications</h2>
+          <h2 className="text-foreground font-semibold text-lg">Security Notifications</h2>
         </div>
 
         <div className="space-y-4">
           <div className="flex items-center justify-between py-3">
             <div>
-              <p className="text-white font-medium">Login Notifications</p>
+              <p className="text-foreground font-medium">Login Notifications</p>
               <p style={{ color: "#6b7fa8", fontSize: "13px" }}>Receive alerts for new sign-ins and security events</p>
             </div>
             <Switch
@@ -192,13 +192,13 @@ export function SecuritySettings() {
       >
         <div className="flex items-center gap-2 mb-4">
           <Clock size={20} style={{ color: "#0B7FFF" }} />
-          <h2 className="text-white font-semibold text-lg">Session Management</h2>
+          <h2 className="text-foreground font-semibold text-lg">Session Management</h2>
         </div>
 
         <div className="space-y-4">
           <div className="flex items-center justify-between py-3">
             <div>
-              <p className="text-white font-medium">Session Timeout</p>
+              <p className="text-foreground font-medium">Session Timeout</p>
               <p style={{ color: "#6b7fa8", fontSize: "13px" }}>
                 Sessions automatically expire after 15 minutes of inactivity and 8 hours absolute maximum.
               </p>
@@ -230,7 +230,7 @@ export function SecuritySettings() {
         >
           <div className="flex items-center gap-2 mb-1">
             <Shield size={20} style={{ color: "#f59e0b" }} />
-            <h2 className="text-white font-semibold text-lg">Platform Policy</h2>
+            <h2 className="text-foreground font-semibold text-lg">Platform Policy</h2>
             <span
               className="px-2 py-0.5 rounded text-[10px] font-black tracking-widest uppercase ml-1"
               style={{ color: "#f59e0b", background: "rgba(245,158,11,0.12)", border: "1px solid rgba(245,158,11,0.2)" }}
@@ -274,7 +274,7 @@ export function SecuritySettings() {
                 <div className="flex items-start gap-3">
                   <div className="mt-0.5 shrink-0">{icon}</div>
                   <div>
-                    <p className="text-white font-medium">{label}</p>
+                    <p className="text-foreground font-medium">{label}</p>
                     <p style={{ color: "#6b7fa8", fontSize: "13px" }}>{desc}</p>
                   </div>
                 </div>

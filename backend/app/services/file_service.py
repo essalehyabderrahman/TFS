@@ -1,3 +1,4 @@
+from flask_jwt_extended import default_callbacks
 import uuid
 import os
 import io
@@ -175,6 +176,56 @@ def _file_type(filename: str) -> str:
     }
     return mapping.get(ext, "other")
 
+def _category_subdir(file_type: str) -> str:
+    """Maps a file_type string to its physical storage subdirectory name."""
+    return {
+        "img":   "images",
+        "video": "videos",
+        "doc":   "documents",
+        "pdf":   "documents",
+        "zip":   "archives",
+    }.get(file_type, "other")
+
+def _compute_hash(data: bytes) -> str:
+    """Return the hex SHA-256 digest of raw file bytes."""
+    import hashlib
+    return hashlib.sha256(data).hexdigest()
+
+
+def _find_existing_path(content_hash: str, is_encrypted: bool) -> str | None:
+    """
+    Return the stored_path of any existing file with the same hash and
+    encryption mode, or None. Searches Transfer and UserFile tables.
+    Only returns a path if the physical file actually exists on disk.
+    """
+    from app.models.user_file import UserFile
+
+    for t in Transfer.query.filter_by(
+        content_hash=content_hash, is_encrypted=is_encrypted
+    ).filter(Transfer.stored_path.isnot(None)).all():
+        if t.stored_path and os.path.exists(t.stored_path):
+            return t.stored_path
+
+    for uf in UserFile.query.filter_by(
+        content_hash=content_hash, is_encrypted=is_encrypted
+    ).filter(UserFile.stored_path.isnot(None)).all():
+        if uf.stored_path and os.path.exists(uf.stored_path):
+            return uf.stored_path
+
+    return None
+
+def _is_path_shared(path: str) -> bool:
+    """
+    Return True if more than one DB record (Transfer, FileVersion, or UserFile)
+    references this stored_path. Used to prevent deleting a shared physical file.
+    """
+    from app.models.user_file import UserFile
+    total = (
+        Transfer.query.filter(Transfer.stored_path == path).count()
+        + FileVersion.query.filter(FileVersion.stored_path == path).count()
+        + UserFile.query.filter(UserFile.stored_path == path).count()
+    )
+    return total > 1
 
 def _log(action, user_email, user_id, status, ip, resource="", details="", group_id=None):
     db.session.add(AuditLog(
@@ -272,19 +323,31 @@ def upload_file(file: FileStorage, uploader_id: str, recipient_email: str,
     if not quota_result["ok"]:
         return {"ok": False, "error": quota_result.get("error", "QUOTA_EXCEEDED"), "details": quota_result}
 
-    if encrypt:
-        data_to_save = _encrypt_file(raw_data)
-        enc_type     = "AES-256-GCM"
-        ext_suffix   = ".enc"
+    content_hash  = _compute_hash(raw_data)
+    existing_path = _find_existing_path(content_hash, encrypt)
+
+    if existing_path:
+        enc_type    = "AES-256-GCM" if encrypt else "None"
+        stored_path = existing_path
+        _log("FILE_DEDUP", uploader.email, uploader_id, "success", ip,
+             resource=safe_name, details="Dedup hit; reusing existing file on disk",
+             group_id=group_id)
     else:
-        data_to_save = raw_data
-        enc_type     = "None"
-        ext_suffix   = ""
+        if encrypt:
+            data_to_save = _encrypt_file(raw_data)
+            enc_type     = "AES-256-GCM"
+            ext_suffix   = ".enc"
+        else:
+            data_to_save = raw_data
+            enc_type     = "None"
+            ext_suffix   = ""
 
-    stored_path = os.path.join(upload_folder, f"{stored_id}_{safe_name}{ext_suffix}")
+        _cat_dir    = os.path.join(upload_folder, _category_subdir(_file_type(safe_name)))
+        os.makedirs(_cat_dir, exist_ok=True)
+        stored_path = os.path.join(_cat_dir, f"{stored_id}_{safe_name}{ext_suffix}")
 
-    with open(stored_path, "wb") as f:
-        f.write(data_to_save)
+        with open(stored_path, "wb") as f:
+            f.write(data_to_save)
 
     expiry = datetime.now(timezone.utc) + timedelta(days=expiry_days) if expiry_days else None
 
@@ -302,6 +365,7 @@ def upload_file(file: FileStorage, uploader_id: str, recipient_email: str,
         uploaded_by_id=uploader_id,
         group_id=group_id,
         parent_id=parent_id,
+        content_hash=content_hash,
         item_type="file",
         status="Delivered" if (recipient_email or group_id) else "Pending",
         current_version=1,
@@ -372,6 +436,42 @@ def list_received(user: User) -> list:
         Transfer.uploaded_by_id != user.id,
         Transfer.is_deleted == False
     ).order_by(Transfer.created_at.desc()).all()
+    return [t.to_dict() for t in transfers]
+
+
+def list_trash(user: User) -> list:
+    """
+    Returns all soft-deleted transfers visible to `user`.
+
+    - App admin  → sees everything.
+    - Group admin → sees personal transfers + trashed transfers for groups
+                    where the user holds the 'admin' role.
+    - Regular user → sees only their own personal (non-group) transfers.
+    """
+    from app.models.group import GroupMember
+    if user.role == "admin":
+        transfers = Transfer.query.filter(Transfer.is_deleted == True).order_by(Transfer.updated_at.desc()).all()
+    else:
+        # Groups where this user is an admin
+        admin_memberships = GroupMember.query.filter_by(user_id=user.id, role="admin").all()
+        admin_group_ids = [m.group_id for m in admin_memberships]
+
+        # Personal deleted transfers (no group) OR group transfers where user is group admin
+        if admin_group_ids:
+            transfers = Transfer.query.filter(
+                Transfer.is_deleted == True,
+                db.or_(
+                    db.and_(Transfer.uploaded_by_id == user.id, Transfer.group_id == None),
+                    Transfer.group_id.in_(admin_group_ids)
+                )
+            ).order_by(Transfer.updated_at.desc()).all()
+        else:
+            transfers = Transfer.query.filter(
+                Transfer.is_deleted == True,
+                Transfer.uploaded_by_id == user.id,
+                Transfer.group_id == None
+            ).order_by(Transfer.updated_at.desc()).all()
+
     return [t.to_dict() for t in transfers]
 
 
@@ -475,25 +575,99 @@ def delete_transfer(transfer_id: str, user: User, ip: str) -> dict:
         db.session.commit()
         return {"ok": False, "error": "FORBIDDEN"}
 
-    deleted_paths: set = set()
-    paths_to_delete = [t.stored_path] if t.stored_path else []
-    for v in t.versions:
-        if v.stored_path and v.stored_path not in paths_to_delete:
-            paths_to_delete.append(v.stored_path)
+    # Soft delete: do not remove from disk, just mark as deleted.
+    t.locked_by_id = None
+    t.locked_at    = None
+    t.is_deleted  = True
+    t.trashed_at  = datetime.now(timezone.utc)
+    
+    # Also recursively soft-delete children if it's a folder
+    if t.item_type == "folder":
+        def soft_delete_children(folder_id):
+            children = Transfer.query.filter_by(parent_id=folder_id, is_deleted=False).all()
+            for child in children:
+                child.locked_by_id = None
+                child.locked_at = None
+                child.is_deleted = True
+                child.trashed_at = datetime.now(timezone.utc)
+                if child.item_type == "folder":
+                    soft_delete_children(child.id)
+        soft_delete_children(t.id)
 
+    _log("FILE_MOVED_TO_TRASH", user.email, user.id, "success", ip, resource=t.file_name, group_id=t.group_id)
+    db.session.commit()
+    return {"ok": True}
+
+
+def restore_transfer(transfer_id: str, user: User, ip: str) -> dict:
+    t = db.session.get(Transfer, transfer_id)
+    if not t or not t.is_deleted:
+        return {"ok": False, "error": "NOT_FOUND"}
+
+    if not has_permission(user, t, "delete"): # usually restore uses delete perms
+        return {"ok": False, "error": "FORBIDDEN"}
+
+    t.is_deleted = False
+
+    # Also recursively restore children if it's a folder
+    if t.item_type == "folder":
+        def restore_children(folder_id):
+            children = Transfer.query.filter_by(parent_id=folder_id, is_deleted=True).all()
+            for child in children:
+                child.is_deleted = False
+                if child.item_type == "folder":
+                    restore_children(child.id)
+        restore_children(t.id)
+
+    _log("FILE_RESTORED", user.email, user.id, "success", ip, resource=t.file_name, group_id=t.group_id)
+    db.session.commit()
+    return {"ok": True}
+
+
+def permanently_delete_transfer(transfer_id: str, user: User, ip: str) -> dict:
+    t = db.session.get(Transfer, transfer_id)
+    if not t or not t.is_deleted:
+        return {"ok": False, "error": "NOT_FOUND"}
+
+    if not has_permission(user, t, "delete"):
+        return {"ok": False, "error": "FORBIDDEN"}
+
+    # Gather paths before cascade deletes them from memory
+    paths_to_delete = []
+    
+    def gather_paths(item):
+        if item.stored_path:
+            paths_to_delete.append(item.stored_path)
+        for v in item.versions:
+            if v.stored_path:
+                paths_to_delete.append(v.stored_path)
+        if item.item_type == "folder":
+            children = Transfer.query.filter_by(parent_id=item.id).all()
+            for child in children:
+                gather_paths(child)
+
+    gather_paths(t)
+
+    # Delete physical files
+    deleted_paths: set = set()
+    # Also collect the thumbnail file (per-record, never shared)
+    if t.thumbnail_path and os.path.exists(t.thumbnail_path):
+        paths_to_delete.append(t.thumbnail_path)
+    
     for path in paths_to_delete:
         if path and path not in deleted_paths:
+            if _is_path_shared(path):
+                deleted_paths.add(path)  # skip removal — another record still uses this file
+                continue
             try:
                 os.remove(path)
                 deleted_paths.add(path)
             except Exception as e:
-                _log("FILE_DELETE_DISK_ERROR", user.email, user.id, "warning", ip,
-                     resource=t.file_name, details=str(e))
+                _log("FILE_DELETE_DISK_ERROR", user.email, user.id, "warning", ip, resource=t.file_name, details=str(e))
 
-    t.locked_by_id = None
-    t.locked_at    = None
-    t.is_deleted   = True
-    _log("FILE_DELETE", user.email, user.id, "success", ip, resource=t.file_name, group_id=t.group_id)
+    # The DB cascade will handle children if we delete the parent, but wait, `parent_id` is ON DELETE CASCADE
+    db.session.delete(t)
+    _log("FILE_PERMANENTLY_DELETED", user.email, user.id, "success", ip, resource=t.file_name, group_id=t.group_id)
     db.session.commit()
     return {"ok": True}
 
@@ -742,13 +916,20 @@ def upload_group_version(transfer_id: str, file: FileStorage, user: User, ip: st
     raw_data   = file.read()
     size_bytes = len(raw_data)
 
-    data_to_save = _encrypt_file(raw_data) if t.is_encrypted else raw_data
-    ext_suffix   = ".enc" if t.is_encrypted else ""
-    stored_path  = os.path.join(upload_folder, f"{stored_id}_{safe_name}{ext_suffix}")
+    content_hash  = _compute_hash(raw_data)
+    existing_path = _find_existing_path(content_hash, t.is_encrypted)
 
-    os.makedirs(upload_folder, exist_ok=True)
-    with open(stored_path, "wb") as f:
-        f.write(data_to_save)
+    if existing_path:
+        stored_path = existing_path
+    else:
+        data_to_save = _encrypt_file(raw_data) if t.is_encrypted else raw_data
+        ext_suffix   = ".enc" if t.is_encrypted else ""
+        _cat_dir     = os.path.join(upload_folder, _category_subdir(_file_type(safe_name)))
+        os.makedirs(_cat_dir, exist_ok=True)
+        stored_path  = os.path.join(_cat_dir, f"{stored_id}_{safe_name}{ext_suffix}")
+
+        with open(stored_path, "wb") as f:
+            f.write(data_to_save)
 
     new_num = t.current_version + 1
     v = FileVersion(
@@ -764,6 +945,7 @@ def upload_group_version(transfer_id: str, file: FileStorage, user: User, ip: st
     t.stored_path     = stored_path
     t.size_bytes      = size_bytes
     db.session.add(v)
+    t.content_hash = content_hash
     _log("FILE_VERSION_UPLOAD", user.email, user.id, "success", ip,
          resource=t.file_name, details=f"v{new_num} uploaded", group_id=t.group_id)
     db.session.commit()

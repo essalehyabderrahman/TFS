@@ -204,7 +204,7 @@ export function TeamManagement() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-white text-2xl font-bold mb-1">Team Management</h1>
+          <h1 className="text-2xl font-bold mb-1" style={{ color: "var(--foreground)" }}>Team Management</h1>
           <p style={{ color: "#6b7fa8", fontSize: "14px" }}>Manage groups and their members</p>
         </div>
         <button
@@ -219,14 +219,14 @@ export function TeamManagement() {
 
       {/* Groups List */}
       {isLoading ? (
-        <div className="flex flex-col items-center justify-center py-24 rounded-xl text-white/40"
-          style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)" }}>
+        <div className="flex flex-col items-center justify-center py-24 rounded-xl"
+          style={{ background: "var(--background)", border: "1px solid var(--border)", color: "var(--foreground)" }}>
           <Loader2 size={40} className="animate-spin text-[#0B7FFF] mb-4" />
           <p className="text-[10px] font-black uppercase tracking-[0.4em]">Loading Groups...</p>
         </div>
       ) : groups.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-24 rounded-xl"
-          style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)" }}>
+          style={{ background: "var(--background)", border: "1px solid var(--border)", color: "var(--foreground)" }}>
           <Users size={48} style={{ color: "#3d4f6e", marginBottom: "16px" }} />
           <p style={{ color: "#6b7fa8", fontSize: "15px" }}>No groups yet. Create your first group.</p>
         </div>
@@ -234,17 +234,17 @@ export function TeamManagement() {
         <div className="flex flex-col gap-3">
           {groups.map(group => (
             <div key={group.id} className="rounded-xl overflow-hidden"
-              style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)" }}>
+              style={{ background: "var(--background)", border: "1px solid var(--border)", color: "var(--foreground)" }}>
               {/* Group Header Row */}
               <div className="flex items-center gap-4 p-4 cursor-pointer hover:bg-white/5 transition-colors"
                 onClick={() => handleExpandGroup(group.id)}>
                 <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
-                  style={{ background: "rgba(11,127,255,0.15)", border: "1px solid rgba(11,127,255,0.2)" }}>
+                  style={{ background: "var(--background)", border: "1px solid var(--border)" }}>
                   <Users size={20} style={{ color: "#0B7FFF" }} />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-white font-semibold">{group.name}</p>
-                  <p style={{ color: "#6b7fa8", fontSize: "13px" }}>
+                  <p className="font-semibold">{group.name}</p>
+                  <p style={{ color: "var(--foreground)", fontSize: "13px" }}>
                     {group.description || "No description"} · {group.memberCount} member{group.memberCount !== 1 ? "s" : ""}
                   </p>
                 </div>
@@ -286,13 +286,13 @@ export function TeamManagement() {
                             {(groupMembers[group.id] ?? []).map(member => (
                               <div key={member.id} className="flex items-center gap-3 p-3 rounded-lg"
                                 style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}>
-                                <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 text-xs font-bold text-white"
-                                  style={{ background: "linear-gradient(135deg, #0B7FFF 0%, #0960D9 100%)" }}>
+                                <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 text-xs font-bold"
+                                  style={{ background: "linear-gradient(135deg, #0B7FFF 0%, #0960D9 100%)", color: "white"}}>
                                   {member.userAvatar || member.userName.charAt(0).toUpperCase()}
                                 </div>
                                 <div className="flex-1 min-w-0">
                                   <div className="flex items-center gap-2">
-                                    <p className="text-white text-sm font-medium truncate">{member.userName}</p>
+                                    <p className="text-sm font-medium truncate" style={{color: "var(--foreground)"}}>{member.userName}</p>
                                     {/* Root badge — data comes from GroupMember which doesn't carry isRoot,
                                         so we skip it here; root badge is shown in the global team list */}
                                   </div>
@@ -309,7 +309,7 @@ export function TeamManagement() {
                                       className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs transition-colors hover:bg-white/10"
                                       style={{
                                         background: "rgba(255,255,255,0.06)",
-                                        border: "1px solid rgba(255,255,255,0.1)",
+                                        border: "1px solid var(--border)",
                                         color: member.role === "admin" ? "#0B7FFF" : "#6b7fa8",
                                         minWidth: "80px",
                                       }}
@@ -321,8 +321,8 @@ export function TeamManagement() {
                                       <div
                                         className="absolute right-0 mt-1 rounded-lg overflow-hidden z-20"
                                         style={{
-                                          background: "#0d1228",
-                                          border: "1px solid rgba(255,255,255,0.1)",
+                                          background: "var(--background)",
+                                          border: "1px solid var(--border)",
                                           boxShadow: "0 10px 40px rgba(0,0,0,0.6)",
                                           minWidth: "110px",
                                         }}
@@ -339,7 +339,7 @@ export function TeamManagement() {
                                             style={{
                                               color: r === member.role
                                                 ? "#0B7FFF"
-                                                : "#e2e8f0",
+                                                : "var(--foreground)",
                                               fontWeight: r === member.role ? 700 : 400,
                                             }}
                                           >
@@ -368,7 +368,7 @@ export function TeamManagement() {
 
                       {/* Group Settings */}
                       {groupSettings[group.id] && (
-                        <div className="pt-4 border-t" style={{ borderColor: "rgba(255,255,255,0.08)" }}>
+                        <div className="pt-4 border-t" style={{ borderColor: "var(--border)" }}>
                           <div className="flex items-center gap-2 mb-3">
                             <Settings size={16} style={{ color: "#0B7FFF" }} />
                             <p style={{ color: "#4a5578", fontSize: "12px", fontWeight: 600, letterSpacing: "0.1em" }}>
@@ -383,9 +383,9 @@ export function TeamManagement() {
                               { field: "allowGroupTransfers", label: "Group File Access", desc: "All members can see group-scoped files" },
                             ].map(({ field, label, desc }) => (
                               <div key={field} className="flex items-center justify-between p-3 rounded-lg"
-                                style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)" }}>
+                                style={{ background: "rgba(255,255,255,0.02)", border: "1px solid var(--border)" }}>
                                 <div>
-                                  <p className="text-white text-sm font-medium">{label}</p>
+                                  <p className="text-sm font-medium" style={{ color: "var(--foreground)" }}>{label}</p>
                                   <p style={{ color: "#6b7fa8", fontSize: "11px" }}>{desc}</p>
                                 </div>
                                 <Switch
@@ -408,30 +408,30 @@ export function TeamManagement() {
 
       {/* Create Group Dialog */}
       <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
-        <DialogContent style={{ background: "linear-gradient(180deg, #0d1228 0%, #0b0f20 100%)", border: "1px solid rgba(255,255,255,0.1)" }}>
-          <DialogHeader><DialogTitle className="text-white text-xl">Create New Group</DialogTitle></DialogHeader>
+        <DialogContent style={{ background: "var(--card-background)", border: "1px solid var(--border)" }}>
+          <DialogHeader><DialogTitle className="text-xl" style={{ color: "var(--foreground)" }}>Create New Group</DialogTitle></DialogHeader>
           <div className="space-y-4">
             <div>
               <label style={{ color: "#4a5578", fontSize: "12px", fontWeight: 600, letterSpacing: "0.05em" }}>GROUP NAME</label>
               <input type="text" placeholder="Engineering Team" value={newGroupName}
                 onChange={e => setNewGroupName(e.target.value)}
                 onKeyDown={e => { if (e.key === "Enter" && !isCreating) handleCreateGroup() }}
-                className="w-full mt-1 px-4 py-2.5 rounded-lg text-white placeholder:text-slate-500 outline-none"
-                style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", fontSize: "14px" }} />
+                className="w-full mt-1 px-4 py-2.5 rounded-lg placeholder:text-slate-500 outline-none"
+                style={{ background: "rgba(255,255,255,0.04)", border: "1px solid var(--border)", fontSize: "14px", color: "var(--foreground)" }} />
             </div>
             <div>
               <label style={{ color: "#4a5578", fontSize: "12px", fontWeight: 600, letterSpacing: "0.05em" }}>DESCRIPTION (optional)</label>
               <input type="text" placeholder="Responsible for backend and infrastructure" value={newGroupDesc}
                 onChange={e => setNewGroupDesc(e.target.value)}
                 onKeyDown={e => { if (e.key === "Enter" && !isCreating) handleCreateGroup() }}
-                className="w-full mt-1 px-4 py-2.5 rounded-lg text-white placeholder:text-slate-500 outline-none"
-                style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", fontSize: "14px" }} />
+                className="w-full mt-1 px-4 py-2.5 rounded-lg placeholder:text-slate-500 outline-none"
+                style={{ background: "rgba(255,255,255,0.04)", border: "1px solid var(--border)", fontSize: "14px", color: "var(--foreground)" }} />
             </div>
           </div>
           <DialogFooter className="mt-6">
             <button onClick={() => setShowCreateDialog(false)}
               className="px-4 py-2 rounded-lg"
-              style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "#e2e8f0" }}>
+              style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "var(--foreground)" }}>
               Cancel
             </button>
             <button onClick={handleCreateGroup} disabled={isCreating}
@@ -446,8 +446,8 @@ export function TeamManagement() {
 
       {/* Invite Member Dialog */}
       <Dialog open={!!inviteGroupId} onOpenChange={() => { setInviteGroupId(null); setShowRoleDropdown(false) }}>
-        <DialogContent style={{ background: "linear-gradient(180deg, #0d1228 0%, #0b0f20 100%)", border: "1px solid rgba(255,255,255,0.1)" }}>
-          <DialogHeader><DialogTitle className="text-white text-xl">Invite to Group</DialogTitle></DialogHeader>
+        <DialogContent style={{ background: "var(--card-background)", border: "1px solid var(--border)" }}>
+          <DialogHeader><DialogTitle className="text-xl" style={{ color: "var(--foreground)" }}>Invite to Group</DialogTitle></DialogHeader>
           <div className="space-y-4">
             <div>
               <label style={{ color: "#4a5578", fontSize: "12px", fontWeight: 600, letterSpacing: "0.05em" }}>USER EMAIL</label>
@@ -457,8 +457,8 @@ export function TeamManagement() {
                 value={inviteEmail}
                 onChange={e => handleEmailInput(e.target.value)}
                 onKeyDown={e => { if (e.key === "Enter" && !isInviting) handleInviteMember() }}
-                className="w-full mt-1 px-4 py-2.5 rounded-lg text-white placeholder:text-slate-500 outline-none"
-                style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", fontSize: "14px" }}
+                className="w-full mt-1 px-4 py-2.5 rounded-lg placeholder:text-slate-500 outline-none"
+                style={{ background: "rgba(255,255,255,0.04)", border: "1px solid var(--border)", fontSize: "14px", color: "var(--foreground)" }}
               />
             </div>
             <div>
@@ -470,9 +470,9 @@ export function TeamManagement() {
                     onClick={() => setShowRoleDropdown(v => !v)}
                     className="w-full flex items-center justify-between px-4 py-2.5 rounded-lg transition-colors"
                     style={{
-                      background: "rgba(255,255,255,0.04)",
-                      border: "1px solid rgba(255,255,255,0.08)",
-                      color: "#e2e8f0",
+                      background: "var(--background)",
+                      border: "1px solid var(--border)",
+                      color: "var(--foreground)",
                       fontSize: "14px",
                     }}
                   >
@@ -483,8 +483,8 @@ export function TeamManagement() {
                     <div
                       className="absolute left-0 right-0 mt-2 rounded-lg overflow-hidden z-10"
                       style={{
-                        background: "#0d1228",
-                        border: "1px solid rgba(255,255,255,0.1)",
+                        background: "var(--background)",
+                        border: "1px solid var(--border)",
                         boxShadow: "0 10px 40px rgba(0,0,0,0.5)",
                       }}
                     >
@@ -495,7 +495,7 @@ export function TeamManagement() {
                           onClick={() => { setInviteRole(r); setShowRoleDropdown(false) }}
                           className="w-full px-4 py-2.5 text-left transition-colors hover:bg-white/5"
                           style={{
-                            color: inviteRole === r ? "#0B7FFF" : "#e2e8f0",
+                            color: inviteRole === r ? "#0B7FFF" : "var(--foreground)",
                             fontSize: "14px",
                           }}
                         >
@@ -507,7 +507,7 @@ export function TeamManagement() {
                 </div>
               ) : (
                 <div className="w-full mt-1 px-4 py-2.5 rounded-lg"
-                  style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.3)", fontSize: "14px" }}>
+                  style={{ background: "var(--background)", border: "1px solid var(--border)", color: "rgba(255,255,255,0.3)", fontSize: "14px" }}>
                   Member — standard group access
                 </div>
               )}
@@ -516,7 +516,7 @@ export function TeamManagement() {
           <DialogFooter className="mt-6">
             <button onClick={() => setInviteGroupId(null)}
               className="px-4 py-2 rounded-lg"
-              style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "#e2e8f0" }}>
+              style={{ background: "var(--background)", border: "1px solid var(--border)", color: "var(--foreground)" }}>
               Cancel
             </button>
             <button onClick={handleInviteMember} disabled={isInviting}
@@ -531,15 +531,15 @@ export function TeamManagement() {
 
       {/* Delete Group Confirmation */}
       <AlertDialog open={!!groupToDelete} onOpenChange={() => setGroupToDelete(null)}>
-        <AlertDialogContent style={{ background: "linear-gradient(180deg, #0d1228 0%, #0b0f20 100%)", border: "1px solid rgba(255,255,255,0.1)" }}>
+        <AlertDialogContent style={{ background: "var(--card-background)", border: "1px solid var(--border)" }}>
           <AlertDialogHeader>
-            <AlertDialogTitle className="text-white">Delete Group</AlertDialogTitle>
+            <AlertDialogTitle style={{ color: "var(--foreground)" }}>Delete Group</AlertDialogTitle>
             <AlertDialogDescription style={{ color: "#6b7fa8" }}>
               Are you sure you want to delete "{groupToDelete?.name}"? All members will lose group access. This cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "#e2e8f0" }}>
+            <AlertDialogCancel style={{ background: "var(--background)", border: "1px solid var(--border)", color: "var(--foreground)" }}>
               Cancel
             </AlertDialogCancel>
             <AlertDialogAction onClick={handleDeleteGroup} disabled={isDeleting}
@@ -554,15 +554,15 @@ export function TeamManagement() {
 
       {/* Remove Member Confirmation */}
       <AlertDialog open={!!memberToRemove} onOpenChange={() => setMemberToRemove(null)}>
-        <AlertDialogContent style={{ background: "linear-gradient(180deg, #0d1228 0%, #0b0f20 100%)", border: "1px solid rgba(255,255,255,0.1)" }}>
+        <AlertDialogContent style={{ background: "var(--card-background)", border: "1px solid var(--border)" }}>
           <AlertDialogHeader>
-            <AlertDialogTitle className="text-white">Remove Member</AlertDialogTitle>
+            <AlertDialogTitle style={{ color: "var(--foreground)" }}>Remove Member</AlertDialogTitle>
             <AlertDialogDescription style={{ color: "#6b7fa8" }}>
               Remove {memberToRemove?.member.userEmail} from this group? Their files will remain but they will lose group access.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "#e2e8f0" }}>
+            <AlertDialogCancel style={{ background: "var(--background)", border: "1px solid var(--border)", color: "var(--foreground)" }}>
               Cancel
             </AlertDialogCancel>
             <AlertDialogAction onClick={handleRemoveMember} disabled={isRemoving}

@@ -374,7 +374,7 @@ export function Contacts() {
 
       {/* Add Contact Dialog */}
       <Dialog open={showAdd} onOpenChange={v => { setShowAdd(v); setAddEmail(""); setAddNickname("") }}>
-        <DialogContent style={{ background: "linear-gradient(180deg, #0d1228 0%, #0b0f20 100%)", border: "1px solid var(--border)" }}>
+        <DialogContent style={{ background: "var(--card-background)", border: "1px solid var(--border)" }}>
           <DialogHeader><DialogTitle className="text-foreground text-xl">Add Contact</DialogTitle></DialogHeader>
           <div className="space-y-4">
             <div>
@@ -395,10 +395,10 @@ export function Contacts() {
             </div>
           </div>
           <DialogFooter className="mt-6">
-            <button onClick={() => setShowAdd(false)} className="px-4 py-2 rounded-lg"
+            <button onClick={() => setShowAdd(false)} className="px-4 py-2 rounded-lg hover:cursor-pointer"
               style={{ background: "var(--input-background)", border: "1px solid var(--border)", color: "var(--foreground)" }}>Cancel</button>
             <button onClick={handleAdd} disabled={isAdding}
-              className="px-4 py-2 rounded-lg flex items-center gap-2 disabled:opacity-50"
+              className="px-4 py-2 rounded-lg flex items-center gap-2 disabled:opacity-50 hover:cursor-pointer"
               style={{ background: "linear-gradient(135deg, #0B7FFF 0%, #0960D9 100%)", color: "white" }}>
               {isAdding && <Loader2 size={16} className="animate-spin" />} Add Contact
             </button>
@@ -408,7 +408,7 @@ export function Contacts() {
 
       {/* Edit Nickname Dialog */}
       <Dialog open={!!editTarget} onOpenChange={v => { if (!v) setEditTarget(null) }}>
-        <DialogContent style={{ background: "linear-gradient(180deg, #0d1228 0%, #0b0f20 100%)", border: "1px solid var(--border)" }}>
+        <DialogContent style={{ background: "var(--card-background)", border: "1px solid var(--border)" }}>
           <DialogHeader><DialogTitle className="text-foreground text-xl">Set Nickname</DialogTitle></DialogHeader>
           <p style={{ color: "var(--muted-foreground)", fontSize: "13px" }}>{editTarget?.email}</p>
           <div className="mt-2">
@@ -433,7 +433,7 @@ export function Contacts() {
 
       {/* Delete Confirmation */}
       <AlertDialog open={!!deleteTarget} onOpenChange={() => setDeleteTarget(null)}>
-        <AlertDialogContent style={{ background: "linear-gradient(180deg, #0d1228 0%, #0b0f20 100%)", border: "1px solid var(--border)" }}>
+        <AlertDialogContent style={{ background: "var(--card-background)", border: "1px solid var(--border)" }}>
           <AlertDialogHeader>
             <AlertDialogTitle className="text-foreground">Remove Contact</AlertDialogTitle>
             <AlertDialogDescription style={{ color: "var(--muted-foreground)" }}>

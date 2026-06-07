@@ -1,11 +1,12 @@
 import { useState } from "react";
-import { Download, FileCheck, Eye, Info, Search, Filter, ChevronDown, Loader2 } from "lucide-react";
+import { Download, FileCheck, Eye, Info, Search, Filter, ChevronDown, Loader2, FolderOpen, FolderInput } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../components/ui/dialog";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { useReceivedTransfers } from "../hooks/useReceivedTransfers";
 import { FileViewer } from "../components/ui/FileViewer";
-// import { useAuth } from "../hooks/useAuth"; // unused
+import { useNavigate } from "react-router";
+import { apiSaveTransferToExplorer } from "../api/transfers";
 
 interface ReceivedFile {
   id: string;
@@ -28,6 +29,8 @@ export function ReceivedFiles() {
   const [selectedFile, setSelectedFile] = useState<ReceivedFile | null>(null);
   const [previewFile, setPreviewFile] = useState<ReceivedFile | null>(null);
   const [showFilterDropdown, setShowFilterDropdown] = useState(false);
+  const [savingId, setSavingId] = useState<string | null>(null);
+  const navigate = useNavigate();
 
   // /transfers/received already scopes to current user — no client-side filter needed
   const receivedFiles: ReceivedFile[] = transfers
@@ -115,13 +118,29 @@ export function ReceivedFiles() {
     }
   };
 
+  const handleSaveToExplorer = async (file: ReceivedFile) => {
+    setSavingId(file.id);
+    const result = await apiSaveTransferToExplorer(file.id);
+    setSavingId(null);
+    if (!result.ok) {
+      toast.error(
+        result.error === "FILE_NOT_FOUND" ? "The source file could not be found on the server."
+        : result.error === "FORBIDDEN"    ? "You do not have permission to save this file."
+        : "Failed to save file to explorer."
+      );
+      return;
+    }
+    toast.success(`"${file.fileName}" saved to your File Explorer.`, {
+      action: { label: "Open Explorer", onClick: () => navigate("/dashboard/explorer") },
+    });
+  };
 
   return (
     <div className="flex flex-col gap-4 sm:gap-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-white text-2xl font-bold mb-1">Received Files</h1>
+          <h1 className="text-2xl font-bold mb-1" style={{ color: "var(--foreground)" }}>Received Files</h1>
           <p style={{ color: "#6b7fa8", fontSize: "14px" }}>
             Files shared with you by other team members
           </p>
@@ -146,8 +165,8 @@ export function ReceivedFiles() {
       <div
         className="flex flex-col sm:flex-row gap-3 p-4 rounded-xl"
         style={{
-          background: "rgba(255,255,255,0.03)",
-          border: "1px solid rgba(255,255,255,0.08)",
+          background: "var(--background)",
+          border: "1px solid var(--border)",
         }}
       >
         <div className="flex-1 relative">
@@ -157,10 +176,10 @@ export function ReceivedFiles() {
             placeholder="Search files or senders..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2.5 rounded-lg text-white placeholder:text-slate-500 outline-none"
+            className="w-full pl-10 pr-4 py-2.5 rounded-lg text-foreground placeholder:text-slate-500 outline-none"
             style={{
-              background: "rgba(255,255,255,0.04)",
-              border: "1px solid rgba(255,255,255,0.08)",
+              background: "var(--background)",
+              border: "1px solid var(--border)",
               fontSize: "14px",
             }}
           />
@@ -170,9 +189,9 @@ export function ReceivedFiles() {
             onClick={() => setShowFilterDropdown(!showFilterDropdown)}
             className="flex items-center gap-2 px-4 py-2.5 rounded-lg transition-colors"
             style={{
-              background: "rgba(255,255,255,0.04)",
-              border: "1px solid rgba(255,255,255,0.08)",
-              color: "#e2e8f0",
+              background: "var(--background)",
+              border: "1px solid var(--border)",
+              color: "var(--foreground)",
               fontSize: "14px",
             }}
           >
@@ -184,8 +203,8 @@ export function ReceivedFiles() {
             <div
               className="absolute right-0 mt-2 w-48 rounded-lg overflow-hidden z-10"
               style={{
-                background: "#0d1228",
-                border: "1px solid rgba(255,255,255,0.1)",
+                background: "var(--background)",
+                border: "1px solid var(--border)",
                 boxShadow: "0 10px 40px rgba(0,0,0,0.5)",
               }}
             >
@@ -198,7 +217,7 @@ export function ReceivedFiles() {
                   }}
                   className="w-full px-4 py-2.5 text-left transition-colors hover:bg-white/5"
                   style={{
-                    color: statusFilter === status ? "#0B7FFF" : "#e2e8f0",
+                    color: statusFilter === status ? "#0B7FFF" : "var(--foreground)",
                     fontSize: "14px",
                   }}
                 >
@@ -237,12 +256,33 @@ export function ReceivedFiles() {
           filteredFiles.map((file) => (
             <div
               key={file.id}
-              className="p-4 rounded-xl transition-all hover:bg-white/5"
+              className="relative p-4 rounded-xl transition-all hover:bg-white/5"
               style={{
                 background: "rgba(255,255,255,0.03)",
                 border: "1px solid rgba(255,255,255,0.08)",
               }}
             >
+              <button
+                disabled={savingId === file.id}
+                onClick={(e) => { e.stopPropagation(); handleSaveToExplorer(file); }}
+                title="Save to My Files"
+                className="absolute top-3 right-3 flex items-center gap-1.5 px-2.5 py-1 rounded-lg transition-all hover:brightness-110 disabled:opacity-50"
+                style={{
+                  background: "rgba(0,229,160,0.12)",
+                  border: "1px solid rgba(0,229,160,0.25)",
+                  color: "#00E5A0",
+                  fontSize: "11px",
+                  fontWeight: 700,
+                  letterSpacing: "0.04em",
+                  zIndex: 1,
+                }}
+              >
+                {savingId === file.id
+                  ? <Loader2 size={12} className="animate-spin" />
+                  : <FolderInput size={12} />
+                }
+                {savingId === file.id ? "SAVING…" : "SAVE TO FILES"}
+              </button>
               <div className="flex flex-col gap-4">
                 {/* File Icon & Info */}
                 <div className="flex items-start gap-3 flex-1 min-w-0">
@@ -274,7 +314,7 @@ export function ReceivedFiles() {
                       <span style={{ color: "#4a5578", fontSize: "11px", fontWeight: 600, letterSpacing: "0.05em" }}>
                         RECEIVED
                       </span>
-                      <span style={{ color: "#e2e8f0", fontSize: "13px" }}>
+                      <span style={{ color: "var(--foreground)", fontSize: "13px" }}>
                         {format(file.receivedAt, "MMM d, h:mm a")}
                       </span>
                     </div>
@@ -312,7 +352,7 @@ export function ReceivedFiles() {
                     style={{ 
                       background: "rgba(255,255,255,0.04)",
                       border: "1px solid rgba(255,255,255,0.08)",
-                      color: "#e2e8f0",
+                      color: "var(--foreground)",
                       fontSize: "13px",
                       fontWeight: 600,
                     }}
@@ -328,7 +368,7 @@ export function ReceivedFiles() {
                         style={{ 
                           background: "rgba(255,255,255,0.04)",
                           border: "1px solid rgba(255,255,255,0.08)",
-                          color: "#e2e8f0",
+                          color: "var(--foreground)",
                           fontSize: "13px",
                           fontWeight: 600,
                         }}
@@ -362,8 +402,8 @@ export function ReceivedFiles() {
         <DialogContent
           className="sm:max-w-2xl"
           style={{
-            background: "linear-gradient(180deg, #0d1228 0%, #0b0f20 100%)",
-            border: "1px solid rgba(255,255,255,0.1)",
+            background: "var(--card-background)",
+            border: "1px solid var(--border)",
           }}
         >
           {selectedFile && (

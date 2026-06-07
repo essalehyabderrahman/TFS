@@ -287,7 +287,7 @@ export function QuotaBar({ refreshKey }: QuotaBarProps) {
 
       {/* Request More Space Dialog */}
       <Dialog open={showDialog} onOpenChange={setShowDialog}>
-        <DialogContent style={{ background: "linear-gradient(180deg, #0d1228 0%, #0b0f20 100%)", border: "1px solid var(--border)" }}>
+        <DialogContent style={{ background: "var(--card-background)", border: "1px solid var(--border)" }}>
           <DialogHeader>
             <DialogTitle className="text-white text-xl flex items-center gap-2">
               <ArrowUpCircle size={20} style={{ color: "#00d2ff" }} />

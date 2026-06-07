@@ -599,7 +599,7 @@ export function GroupWorkspace() {
               className="w-full flex items-center gap-2 px-3 py-2 rounded-lg transition-colors text-left"
               style={{
                 paddingLeft: `${12 + depth * 18}px`,
-                background: isSelected ? "rgba(11,127,255,0.14)" : "transparent",
+                background: isSelected ? "var(--background)" : "transparent",
                 opacity: isCurrent ? 0.4 : 1,
                 cursor: isCurrent ? "not-allowed" : "pointer",
               }}
@@ -627,7 +627,7 @@ export function GroupWorkspace() {
         <div
           className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-[90vw] max-w-[420px] rounded-2xl overflow-hidden"
           style={{
-            background: "linear-gradient(180deg, #0d1321 0%, #0b0f20 100%)",
+            background: "var(--card-background)",
             border: "1px solid var(--border)",
             boxShadow: "0 24px 64px rgba(0,0,0,0.7)",
           }}
@@ -640,7 +640,7 @@ export function GroupWorkspace() {
             <div className="flex items-center gap-2.5">
               <div
                 className="w-8 h-8 rounded-lg flex items-center justify-center"
-                style={{ background: "rgba(11,127,255,0.12)", border: "1px solid rgba(11,127,255,0.2)" }}
+                style={{ background: "var(--background)", border: "1px solid var(--border)" }}
               >
                 <MoveRight size={15} style={{ color: "#0B7FFF" }} />
               </div>
@@ -661,13 +661,13 @@ export function GroupWorkspace() {
               onClick={() => setSelected("__root__")}
               className="w-full flex items-center gap-2 px-3 py-2 rounded-lg transition-colors text-left mb-1"
               style={{
-                background: selected === "__root__" ? "rgba(11,127,255,0.14)" : "transparent",
+                background: selected === "__root__" ? "var(--background)" : "transparent",
                 opacity: currentFolderId === null ? 0.4 : 1,
                 cursor: currentFolderId === null ? "not-allowed" : "pointer",
               }}
             >
               <Home size={14} style={{ color: "#60A5FA", flexShrink: 0 }} />
-              <span style={{ fontSize: "13px", color: selected === "__root__" ? "#e2e8f0" : "#94a3b8" }}>Root Workspace</span>
+              <span style={{ fontSize: "13px", color: "var(--foreground)" }}>Root Workspace</span>
               {currentFolderId === null && <span style={{ fontSize: "10px", color: "var(--muted-foreground)", marginLeft: "auto" }}>current</span>}
             </button>
             {renderTree(null)}
@@ -721,11 +721,12 @@ export function GroupWorkspace() {
 
   // ── Drag-over drop zone ────────────────────────────────────────────────────
   const onZoneDragOver = (e: React.DragEvent) => {
-    if (draggingId) {
-      const draggingItem = transfers.find((i) => i.id === draggingId);
+    e.preventDefault();
+    const id= e.dataTransfer.getData("itemId");
+    if (id) {
+      const draggingItem = transfers.find((i) => i.id === id);
       if (draggingItem && draggingItem.parentId === currentFolderId) return;
     }
-    e.preventDefault();
     setIsDragOver(true);
   };
   const onZoneDragLeave = () => setIsDragOver(false);
@@ -757,15 +758,20 @@ export function GroupWorkspace() {
   // ── Item drag ──────────────────────────────────────────────────────────────
   const onItemDragStart = (e: React.DragEvent, id: string) => {
     e.dataTransfer.setData("itemId", id);
+    e.dataTransfer.effectAllowed = "move";
     setDraggingId(id);
   };
   const onItemDragEnd = () => { setDraggingId(null); setDropTargetId(null); };
   const onFolderDragOver = (e: React.DragEvent, folderId: string) => {
-    if (draggingId === folderId) return;
-    const draggingItem = transfers.find((i) => i.id === draggingId);
+    e.preventDefault(); 
+    e.stopPropagation();
+
+    const id = e.dataTransfer.getData("itemId");
+    if (!id || id === folderId) return;
+
+    const draggingItem = transfers.find((i) => i.id === id);
     if (draggingItem && draggingItem.parentId === folderId) return;
     
-    e.preventDefault(); e.stopPropagation();
     e.dataTransfer.dropEffect = "move";
     setDropTargetId(folderId);
   };
@@ -916,7 +922,7 @@ export function GroupWorkspace() {
           style={{
             top: isAbsolute ? "2rem" : undefined,
             right: isAbsolute ? "0" : undefined,
-            background: "var(--popover)",
+            background: "var(--background)",
             border: "1px solid var(--border)",
             boxShadow: "0 16px 40px rgba(0,0,0,0.6)",
           }}
@@ -928,9 +934,9 @@ export function GroupWorkspace() {
                 <button
                   onClick={() => { setPreviewFile(item); setPreviewEditMode(false); onClose(); }}
                   className="w-full flex items-center gap-2 px-3 py-2 text-[13px] hover:bg-accent transition-colors"
-                  style={{ color: "var(--muted-foreground)" }}
+                  style={{ color: "var(--foreground)" }}
                 >
-                  <Eye size={14} /> Preview
+                  <Eye size={14}/> Preview
                 </button>
                 {isEditableText(item.fileName, item.fileType) && canWrite(item) && (
                   <button
@@ -1018,7 +1024,7 @@ export function GroupWorkspace() {
         className="group relative flex flex-col items-center gap-2 p-4 rounded-2xl cursor-pointer transition-all duration-200 hover:bg-white/[0.04]"
         style={{
           border: isDropTarget ? `1px solid ${fileColor(item)}66` : "1px solid var(--border)",
-          background: isDragging ? "rgba(11,127,255,0.07)" : isDropTarget ? `${fileColor(item)}0d` : "rgba(255,255,255,0.015)",
+          background: isDragging ? "var(--background)" : isDropTarget ? `${fileColor(item)}0d` : "var(--background)",
           opacity: isDragging ? 0.5 : 1,
         }}
         onClick={() => {
@@ -1044,10 +1050,10 @@ export function GroupWorkspace() {
             onBlur={confirmRename}
             onClick={e => e.stopPropagation()}
             className="w-full text-center text-[12px] rounded px-1 py-0.5 outline-none"
-            style={{ background: "rgba(11,127,255,0.15)", border: "1px solid rgba(11,127,255,0.4)", color: "var(--foreground)" }}
+            style={{ background: "var(--background)", border: "1px solid var(--border)", color: "var(--foreground)" }}
           />
         ) : (
-          <p className="text-center text-[12px] font-semibold truncate w-full px-1 text-white">
+          <p className="text-center text-[12px] font-semibold truncate w-full px-1" style={{ color: "var(--foreground)" }}>
             {item.fileName}
           </p>
         )}
@@ -1089,7 +1095,7 @@ export function GroupWorkspace() {
         className="group grid grid-cols-[1fr_80px] sm:grid-cols-[1fr_90px_120px_80px] items-center px-5 py-3.5 transition-all duration-150 hover:bg-white/[0.025] relative cursor-pointer"
         style={{
           borderBottom: "1px solid var(--border)",
-          background: isDragging ? "rgba(11,127,255,0.06)" : isDropTarget ? `${fileColor(item)}0a` : "transparent",
+          background: isDragging ? "var(--background)" : isDropTarget ? `${fileColor(item)}0a` : "transparent",
           opacity: isDragging ? 0.5 : 1,
           outline: isDropTarget ? `1px dashed ${fileColor(item)}66` : "none",
           borderRadius: isDropTarget ? "8px" : undefined,
@@ -1119,10 +1125,10 @@ export function GroupWorkspace() {
                 onBlur={confirmRename}
                 onClick={e => e.stopPropagation()}
                 className="w-full text-[13px] rounded-lg px-2 py-1 outline-none"
-                style={{ background: "rgba(11,127,255,0.15)", border: "1px solid rgba(11,127,255,0.4)", color: "var(--foreground)" }}
+                style={{ background: "var(--background)", border: "1px solid var(--border)", color: "var(--foreground)" }}
               />
             ) : (
-              <p className="text-[13px] font-medium truncate text-white">{item.fileName}</p>
+              <p className="text-[13px] font-medium truncate" style={{ color: "var(--foreground)" }}>{item.fileName}</p>
             )}
 
 
@@ -1247,7 +1253,7 @@ export function GroupWorkspace() {
 
   if (isLoadingGroups) {
     return (
-      <div className="flex flex-col items-center justify-center h-[60vh] gap-4 text-white/40">
+      <div className="flex flex-col items-center justify-center h-[60vh] gap-4" style={{ color: "var(--foreground)" }}>
         <Loader2 size={40} className="animate-spin text-[#0B7FFF]" />
         <p className="text-[10px] font-black uppercase tracking-[0.4em]">Loading Groups...</p>
       </div>
@@ -1287,8 +1293,8 @@ export function GroupWorkspace() {
             onClick={() => setShowPicker(v => !v)}
             className="flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all hover:opacity-90"
             style={{
-              background: "rgba(11,127,255,0.1)",
-              border: "1px solid rgba(11,127,255,0.25)",
+              background: "var(--background)",
+              border: "1px solid var(--border)",
               color: "var(--foreground)",
               fontSize: "14px",
               fontWeight: 600,
@@ -1299,7 +1305,7 @@ export function GroupWorkspace() {
             <span className="flex-1 text-left truncate">
               {selectedGroup ? selectedGroup.name : "Select a group"}
             </span>
-            <ChevronDown size={14} style={{ color: "var(--muted-foreground)", flexShrink: 0 }} />
+            <ChevronDown size={14} style={{ color: "var(--foreground)", flexShrink: 0 }} />
           </button>
           {showGroupPicker && (
             <div
@@ -1321,7 +1327,7 @@ export function GroupWorkspace() {
                     setTab("files")
                   }}
                   className="w-full flex items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-accent"
-                  style={{ color: selectedGroup?.id === g.id ? "#0B7FFF" : "#e2e8f0", fontSize: "14px" }}
+                  style={{ color: selectedGroup?.id === g.id ? "#0B7FFF" : "var(--foreground)", fontSize: "14px" }}
                 >
                   <Users size={14} style={{ color: selectedGroup?.id === g.id ? "#0B7FFF" : "#4a5578", flexShrink: 0 }} />
                   <div className="min-w-0">
@@ -1359,9 +1365,9 @@ export function GroupWorkspace() {
                 onClick={() => { setTab(t.id); setSearchTerm("") }}
                 className="flex items-center gap-2 px-4 py-2 rounded-lg transition-all text-sm font-semibold"
                 style={{
-                  background: tab === t.id ? "rgba(11,127,255,0.2)" : "transparent",
+                  background: tab === t.id ? "var(--background)" : "transparent",
                   color:      tab === t.id ? "#0B7FFF" : "#6b7fa8",
-                  border:     tab === t.id ? "1px solid rgba(11,127,255,0.3)" : "1px solid transparent",
+                  border:     tab === t.id ? "1px solid var(--border)" : "1px solid transparent",
                 }}
               >
                 {t.icon} {t.label}
@@ -1381,7 +1387,7 @@ export function GroupWorkspace() {
               <div className="flex items-center gap-3">
                 <div
                   className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
-                  style={{ background: "rgba(0,210,255,0.1)" }}
+                  style={{ background: "var(--background)" }}
                 >
                   {groupQuota.hasQuota
                     ? <HardDrive size={18} style={{ color: "#00d2ff" }} strokeWidth={1.8} />
@@ -1426,7 +1432,7 @@ export function GroupWorkspace() {
                 const colors = getQuotaColor(percent)
                 return (
                   <>
-                    <div className="relative w-full overflow-hidden" style={{ height: "6px", borderRadius: "3px", background: "rgba(255,255,255,0.06)" }}>
+                    <div className="relative w-full overflow-hidden" style={{ height: "6px", borderRadius: "3px", background: "var(--background)" }}>
                       <div
                         className="absolute inset-y-0 left-0 transition-all duration-700 ease-out"
                         style={{
@@ -1463,7 +1469,7 @@ export function GroupWorkspace() {
                     style={{ fontSize: "12px", color: currentFolderId === null ? "#e2e8f0" : "#64748b" }}
                   >
                     <Home size={13} />
-                    <span>Root Workspace</span>
+                    <span style={{ color: "var(--foreground)" }}>Root Workspace</span>
                   </button>
                   {getBreadcrumbs().slice(1).map((crumb, idx, arr) => (
                     <span key={crumb.id || "root"} className="flex items-center gap-1">
@@ -1604,15 +1610,15 @@ export function GroupWorkspace() {
               onDragLeave={onZoneDragLeave}
               onDrop={onZoneDrop}
               style={{
-                background: isDragOver ? "rgba(11,127,255,0.02)" : "transparent",
-                border: isDragOver ? "1px dashed rgba(11,127,255,0.4)" : "1px solid transparent",
+                background: isDragOver ? "var(--background)" : "transparent",
+                border: isDragOver ? "1px dashed var(--border)" : "1px solid transparent",
                 borderRadius: "12px",
-                transition: "all 0.2s"
+                transition: "all 0.2s ease"
               }}
             >
               {isLoadingFiles ? (
-                <div className="flex flex-col items-center justify-center py-24 rounded-xl text-white/40"
-                  style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
+                <div className="flex flex-col items-center justify-center py-24 rounded-xl"
+                  style={{ background: "var(--card)", border: "1px solid var(--border)", color: "var(--foreground)" }}>
                   <Loader2 size={40} className="animate-spin text-[#0B7FFF] mb-4" />
                   <p className="text-[10px] font-black uppercase tracking-[0.4em]">Loading Files...</p>
                 </div>
@@ -1624,7 +1630,7 @@ export function GroupWorkspace() {
                 </div>
               ) : filteredTransfers.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-24 rounded-xl border border-dashed border-white/10"
-                  style={{ background: "rgba(255,255,255,0.01)" }}>
+                  style={{ background: "var(--background)" }}>
                   <FolderOpen size={40} style={{ color: "var(--muted-foreground)", marginBottom: "16px" }} />
                   <p style={{ color: "var(--muted-foreground)", fontSize: "14px" }}>
                     {searchTerm ? "No files match your search." : "This directory is empty. Add a folder or drop files here."}
@@ -1650,8 +1656,8 @@ export function GroupWorkspace() {
           {tab === "members" && (
             <div className="flex flex-col gap-3">
               {isLoadingMembers ? (
-                <div className="flex flex-col items-center justify-center py-24 rounded-xl text-white/40"
-                  style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
+                <div className="flex flex-col items-center justify-center py-24 rounded-xl"
+                  style={{ background: "var(--card)", border: "1px solid var(--border)", color: "var(--foreground)" }}>
                   <Loader2 size={40} className="animate-spin text-[#0B7FFF] mb-4" />
                   <p className="text-[10px] font-black uppercase tracking-[0.4em]">Loading Members...</p>
                 </div>
@@ -1676,7 +1682,7 @@ export function GroupWorkspace() {
                       className="flex items-center gap-3 p-4 rounded-xl"
                       style={{ background: "var(--card)", border: "1px solid var(--border)" }}
                     >
-                      <div className="w-10 h-10 rounded-full flex items-center justify-center shrink-0 text-sm font-bold text-white animate-pulse"
+                      <div className="w-10 h-10 rounded-full flex items-center justify-center shrink-0 text-sm font-bold text-white"
                         style={{ background: "linear-gradient(135deg, #0B7FFF 0%, #0960D9 100%)" }}>
                         {member.userAvatar || member.userName.charAt(0).toUpperCase()}
                       </div>
@@ -1712,7 +1718,7 @@ export function GroupWorkspace() {
 
       {/* Item Details Side Dialog */}
       <Dialog open={!!detailsFile} onOpenChange={() => setDetailsFile(null)}>
-        <DialogContent style={{ background: "linear-gradient(180deg, #0d1228 0%, #0b0f20 100%)", border: "1px solid var(--border)", maxWidth: "500px" }}>
+        <DialogContent style={{ background: "var(--card-background)", border: "1px solid var(--border)", maxWidth: "500px" }}>
           {detailsFile && (
             <>
               <DialogHeader>
@@ -1754,7 +1760,7 @@ export function GroupWorkspace() {
                         <button
                           disabled={isUploadingVersion}
                           onClick={() => versionInputRef.current?.click()}
-                          className="px-2 py-1 rounded border border-white/10 hover:bg-accent text-[10px] font-bold text-white flex items-center gap-1 transition-all disabled:opacity-40"
+                          className="px-2 py-1 rounded border border-white/10 hover:bg-accent text-[10px] font-bold flex items-center gap-1 transition-all disabled:opacity-40" style={{color: "var(--foreground)"}}
                         >
                           {isUploadingVersion ? <Loader2 size={10} className="animate-spin" /> : <Upload size={10} />}
                           <span>Upload Version</span>
@@ -1775,7 +1781,7 @@ export function GroupWorkspace() {
                         <div
                           key={v.id}
                           className="flex items-center justify-between p-2.5 rounded-lg"
-                          style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.04)" }}
+                          style={{ background: "var(--card-background)", border: "1px solid var(--border)" }}
                         >
                           <div className="min-w-0">
                             <p style={{ fontSize: "12.5px", color: "var(--foreground)", fontWeight: 600 }}>
@@ -1817,10 +1823,10 @@ export function GroupWorkspace() {
                   <button
                     onClick={() => { setPreviewFile(detailsFile); setPreviewEditMode(false); setDetailsFile(null) }}
                     className="flex-1 h-10 rounded-xl font-bold text-sm transition-all hover:brightness-110 flex items-center justify-center gap-2 text-white"
-                    style={{ background: "rgba(11,127,255,0.15)", border: "1px solid rgba(11,127,255,0.3)" }}
+                    style={{ background: "var(--card-background)", border: "1px solid var(--border)" }}
                   >
                     <Eye size={14} style={{ color: "#0B7FFF" }} />
-                    <span>Preview</span>
+                    <span style={{ color: "var(--foreground)" }}>Preview</span>
                   </button>
                 )}
                 {canDownload(detailsFile) && (
@@ -1841,7 +1847,7 @@ export function GroupWorkspace() {
 
       {/* Create Folder Modal */}
       <Dialog open={isCreatingFolder} onOpenChange={() => setIsCreatingFolder(false)}>
-        <DialogContent style={{ background: "linear-gradient(180deg, #0d1228 0%, #0b0f20 100%)", border: "1px solid var(--border)", maxWidth: "400px" }}>
+        <DialogContent style={{ background: "var(--card-background)", border: "1px solid var(--border)", maxWidth: "400px" }}>
           <DialogHeader>
             <DialogTitle className="text-foreground text-lg flex items-center gap-2">
               <Folder size={18} style={{ color: "#3b82f6" }} />
@@ -1884,7 +1890,7 @@ export function GroupWorkspace() {
 
       {/* Duplicate / Version Selection Modal (Option B Choice) */}
       <Dialog open={!!conflict} onOpenChange={() => setConflict(null)}>
-        <DialogContent style={{ background: "linear-gradient(180deg, #0d1228 0%, #0b0f20 100%)", border: "1px solid var(--border)", maxWidth: "420px" }}>
+        <DialogContent style={{ background: "var(--card-background)", border: "1px solid var(--border)", maxWidth: "420px" }}>
           <DialogHeader>
             <DialogTitle className="text-foreground text-lg flex items-center gap-2">
               <FileQuestion size={18} className="text-[#f59e0b]" />
@@ -1968,7 +1974,7 @@ export function GroupWorkspace() {
 
       {/* Group Quota Management Dialog */}
       <Dialog open={showQuotaDialog} onOpenChange={setShowQuotaDialog}>
-        <DialogContent style={{ background: "linear-gradient(180deg, #0d1228 0%, #0b0f20 100%)", border: "1px solid var(--border)" }}>
+        <DialogContent style={{ background: "var(--card-background)", border: "1px solid var(--border)" }}>
           <DialogHeader>
             <DialogTitle className="text-foreground text-xl flex items-center gap-2">
               <HardDrive size={20} style={{ color: "#00d2ff" }} />
@@ -2017,7 +2023,7 @@ export function GroupWorkspace() {
                         onClick={() => setQuotaUnit(u)}
                         className="px-3 py-2.5 text-sm font-semibold transition-colors cursor-pointer"
                         style={{
-                          background: quotaUnit === u ? "rgba(0,210,255,0.15)" : "var(--input-background)",
+                          background: quotaUnit === u ? "var(--background)" : "var(--input-background)",
                           color: quotaUnit === u ? "#00d2ff" : "#6b7fa8",
                         }}>
                         {u}

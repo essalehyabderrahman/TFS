@@ -357,7 +357,7 @@ export function FileViewer({
         style={{
           inset: fullscreen ? 0 : "clamp(16px, 3vh, 32px) clamp(16px, 3vw, 48px)",
           borderRadius: fullscreen ? 0 : "20px",
-          background: "linear-gradient(160deg, #0d1525 0%, #080d1b 100%)",
+          background: "var(--card-background)",
           border: fullscreen ? "none" : "1px solid rgba(255,255,255,0.08)",
           boxShadow: "0 32px 96px rgba(0,0,0,0.7), 0 0 0 1px rgba(11,127,255,0.06)",
           overflow: "hidden",
@@ -382,7 +382,7 @@ export function FileViewer({
           </div>
 
           <div className="flex-1 min-w-0">
-            <p className="truncate" style={{ fontSize: "13px", color: "#e2e8f0", fontWeight: 600 }}>
+            <p className="truncate" style={{ fontSize: "13px", color: "var(--foreground)", fontWeight: 600 }}>
               {fileName}
             </p>
             <p style={{ fontSize: "11px", color: "#3d4f6e", textTransform: "uppercase", letterSpacing: "0.08em" }}>
@@ -452,7 +452,7 @@ export function FileViewer({
 
             {/* Download (always visible unless editing) */}
             {onDownload && !isEditing && (
-              <ToolbarBtn icon={Download} label="Download" onClick={onDownload} accent />
+              <ToolbarBtn  icon={Download} label="Download" onClick={onDownload} accent />
             )}
 
             {/* Close */}
@@ -608,7 +608,7 @@ function LoadingState({ fileName }: { fileName: string }) {
         />
       </div>
       <div className="text-center">
-        <p style={{ fontSize: "13px", color: "#94a3b8", fontWeight: 500 }}>Loading preview…</p>
+        <p style={{ fontSize: "13px", color: "var(--muted-foreground)", fontWeight: 500 }}>Loading preview…</p>
         <p style={{ fontSize: "11px", color: "#3d4f6e" }} className="mt-1 truncate max-w-xs">
           {fileName}
         </p>
@@ -643,7 +643,7 @@ function ErrorState({
         <AlertTriangle size={28} style={{ color: "#F87171" }} />
       </div>
       <div className="text-center max-w-sm">
-        <p style={{ fontSize: "15px", color: "#e2e8f0", fontWeight: 600 }} className="mb-2">
+        <p style={{ fontSize: "15px", color: "var(--foreground)", fontWeight: 600 }} className="mb-2">
           Preview unavailable
         </p>
         <p style={{ fontSize: "13px", color: "#64748b" }}>{message}</p>
@@ -652,10 +652,10 @@ function ErrorState({
         {onDownload && (
           <button
             onClick={onDownload}
-            className="px-5 py-2.5 rounded-xl transition-all hover:brightness-110"
+            className="px-5 py-2.5 rounded-xl transition-all hover:brightness-110 cursor-pointer"
             style={{
               background: "linear-gradient(135deg, #0B7FFF 0%, #0960CC 100%)",
-              color: "#fff", fontSize: "13px", fontWeight: 600,
+              color: "white", fontSize: "13px", fontWeight: 600,
               boxShadow: "0 4px 16px rgba(11,127,255,0.25)",
             }}
           >
@@ -666,8 +666,8 @@ function ErrorState({
         )}
         <button
           onClick={onClose}
-          className="px-5 py-2.5 rounded-xl transition-colors hover:bg-white/5"
-          style={{ color: "#94a3b8", fontSize: "13px", border: "1px solid rgba(255,255,255,0.1)" }}
+          className="px-5 py-2.5 rounded-xl transition-colors hover:bg-white/5 cursor-pointer"
+          style={{ color: "var(--muted-foreground)", fontSize: "13px", border: "1px solid var(--border)" }}
         >
           Close
         </button>
@@ -812,7 +812,7 @@ function TextPreview({ content, fileName }: { content: string; fileName: string 
             fontFamily: '"JetBrains Mono", "Fira Code", "Cascadia Code", monospace',
             fontSize: "12.5px",
             lineHeight: "1.7",
-            color: "#cbd5e1",
+            color: "var(--muted-foreground)",
             background: "transparent",
             whiteSpace: "pre",
             tabSize: 2,
@@ -931,7 +931,7 @@ function EditableTextArea({
             fontFamily: '"JetBrains Mono", "Fira Code", "Cascadia Code", monospace',
             fontSize: "12.5px",
             lineHeight: "1.7",
-            color: "#cbd5e1",
+            color: "var(--muted-foreground)",
             background: "transparent",
             border: "none",
             padding: "20px 20px 20px 20px",
@@ -1009,11 +1009,11 @@ function UnsupportedPreview({
         <Icon size={36} style={{ color }} strokeWidth={1.5} />
       </div>
       <div className="text-center max-w-sm">
-        <p style={{ fontSize: "16px", color: "#e2e8f0", fontWeight: 600 }} className="mb-2">
+        <p style={{ fontSize: "16px", color: "var(--foreground)", fontWeight: 600 }} className="mb-2">
           Preview not available
         </p>
         <p style={{ fontSize: "13px", color: "#64748b", lineHeight: "1.6" }}>
-          <span style={{ color: "#94a3b8", fontWeight: 500 }}>{fileName}</span>
+          <span style={{ color: "var(--muted-foreground)", fontWeight: 500 }}>{fileName}</span>
           {" "}can't be displayed in the browser. Download it to open locally.
         </p>
       </div>
@@ -1024,7 +1024,7 @@ function UnsupportedPreview({
             className="px-6 py-3 rounded-xl transition-all hover:brightness-110 flex items-center gap-2"
             style={{
               background: "linear-gradient(135deg, #0B7FFF 0%, #0960CC 100%)",
-              color: "#fff", fontSize: "13px", fontWeight: 600,
+              color: "var(--foreground)", fontSize: "13px", fontWeight: 600,
               boxShadow: "0 4px 16px rgba(11,127,255,0.25)",
             }}
           >
@@ -1034,7 +1034,7 @@ function UnsupportedPreview({
         <button
           onClick={onClose}
           className="px-6 py-3 rounded-xl transition-colors hover:bg-white/5"
-          style={{ color: "#94a3b8", fontSize: "13px", border: "1px solid rgba(255,255,255,0.1)" }}
+          style={{ color: "var(--muted-foreground)", fontSize: "13px", border: "1px solid rgba(255,255,255,0.1)" }}
         >
           Close
         </button>

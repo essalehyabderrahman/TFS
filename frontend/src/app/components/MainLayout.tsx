@@ -84,7 +84,7 @@ export function MainLayout() {
             }}
           >
             <div className="flex items-center justify-between mb-4">
-              <h2 style={{ fontSize: "16px", color: "#e2e8f0", fontWeight: 600 }}>
+              <h2 style={{ fontSize: "16px", color: "var(--foreground)", fontWeight: 600 }}>
                 New Secure Transfer
               </h2>
               <button

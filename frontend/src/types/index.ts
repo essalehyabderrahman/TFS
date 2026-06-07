@@ -7,6 +7,7 @@ export type FileType = "pdf" | "img" | "zip" | "video" | "doc" | "other"
 export interface Transfer {
   id: string
   groupId: string
+  groupName?: string | null
   fileName: string
   fileType: FileType
   recipient: string
@@ -21,12 +22,18 @@ export interface Transfer {
   expiryDate: string
   uploadedBy: string
   isLocked: boolean
+  lockedByEmail?: string | null
   currentVersion: number
+  revokedAt?: string | null
+  sentAt?: string | null
+  updatedAt?: string | null
+  parentId?: string | null
+  itemType?: string
 }
 
 // ─── Team ─────────────────────────────────────────────────────────────────────
 
-export type TeamRole = "admin" | "editor" | "viewer"
+export type TeamRole = "admin" | "moderator" | "auditor" | "user"
 
 export type MemberStatus = "active" | "pending" | "suspended"
 

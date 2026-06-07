@@ -27,6 +27,9 @@ class Transfer(db.Model):
     expiry_date      = db.Column(db.DateTime,     nullable=True,
                                  default=lambda: datetime.now(timezone.utc) + timedelta(days=180))
     is_deleted       = db.Column(db.Boolean,      default=False)
+    content_hash     = db.Column(db.String(64),   nullable=True, index=True)
+    trashed_at       = db.Column(db.DateTime,     nullable=True)
+    thumbnail_path   = db.Column(db.String(500),  nullable=True)
     revoked_at       = db.Column(db.DateTime,     nullable=True)
     sent_at          = db.Column(db.DateTime,     nullable=True)
 
@@ -103,10 +106,16 @@ class Transfer(db.Model):
             "lockedByEmail":  self.locked_by.email if self.locked_by else None,
             "currentVersion": self.current_version,
             "revokedAt":      self.revoked_at.isoformat() if self.revoked_at else None,
+            "trashedAt":      self.trashed_at.isoformat() if self.trashed_at else None,
             "sentAt":         self.sent_at.isoformat() if self.sent_at else None,
             # Hierarchy
             "parentId":       self.parent_id,
             "itemType":       self.item_type,
+            # Group info
+            "groupName":      self.group.name if self.group else None,
+            # Timestamps (ISO so frontend can parse)
+            "updatedAt":      self.updated_at.isoformat() if self.updated_at else None,
+            "hasThumbnail":   self.thumbnail_path is not None,
         }
 
     def __init__(self, **kwargs):

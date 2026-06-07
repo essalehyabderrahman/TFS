@@ -290,7 +290,7 @@ export function UserManagement() {
                 className="flex items-center gap-3 p-3 rounded-xl"
                 style={{
                   background: isSuspended ? "rgba(239,68,68,0.04)" : "rgba(255,255,255,0.03)",
-                  border: `1px solid ${isSuspended ? "rgba(239,68,68,0.15)" : "rgba(255,255,255,0.07)"}`,
+                  border: `1px solid ${isSuspended ? "var(--border)" : "var(--border-light)"}`,
                   opacity: isSuspended ? 0.75 : 1,
                 }}>
 
@@ -303,7 +303,7 @@ export function UserManagement() {
                 {/* Info */}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <p className="text-white text-sm font-semibold truncate">{member.name}</p>
+                    <p className="text-sm font-semibold truncate" style={{ color: "var(--foreground)" }}>{member.name}</p>
                     {isSelf && (
                       <span style={{ fontSize: "9px", fontWeight: 700, letterSpacing: "0.08em", color: "#00d2ff", background: "rgba(0,210,255,0.1)", padding: "1px 6px", borderRadius: "4px" }}>
                         YOU
@@ -416,7 +416,7 @@ export function UserManagement() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-white text-2xl font-bold mb-1">User Management</h1>
+          <h1 className="text-2xl font-bold mb-1" style={{ color: "var(--foreground)" }}>User Management</h1>
           <p style={{ color: "#6b7fa8", fontSize: "14px" }}>Manage platform accounts, roles and access</p>
         </div>
         <div className="flex items-center gap-3">
@@ -469,19 +469,19 @@ export function UserManagement() {
 
       {/* Invite User Dialog */}
       <Dialog open={showInviteDialog} onOpenChange={v => { setShowInviteDialog(v); setShowInviteRoleDropdown(false) }}>
-        <DialogContent style={{ background: "linear-gradient(180deg, #0d1228 0%, #0b0f20 100%)", border: "1px solid rgba(255,255,255,0.1)" }}>
-          <DialogHeader><DialogTitle className="text-white text-xl">Invite New User</DialogTitle></DialogHeader>
+        <DialogContent style={{ background: "var(--card-background)", border: "1px solid rgba(255,255,255,0.1)" }}>
+          <DialogHeader><DialogTitle className="text-xl" style={{ color: "var(--foreground)" }}>Invite New User</DialogTitle></DialogHeader>
           <div className="space-y-4">
             <div>
-              <label style={{ color: "#4a5578", fontSize: "12px", fontWeight: 600, letterSpacing: "0.05em" }}>FULL NAME</label>
+              <label style={{ color: "var(--muted-foreground)", fontSize: "12px", fontWeight: 600, letterSpacing: "0.05em" }}>FULL NAME</label>
               <input
                 type="text"
                 placeholder="Jane Smith"
                 value={inviteName}
                 onChange={e => setInviteName(e.target.value)}
                 onKeyDown={e => { if (e.key === "Enter" && !isInviting) handleInvite() }}
-                className="w-full mt-1 px-4 py-2.5 rounded-lg text-white placeholder:text-slate-500 outline-none"
-                style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", fontSize: "14px" }}
+                className="w-full mt-1 px-4 py-2.5 rounded-lg placeholder:text-slate-500 outline-none"
+                style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", fontSize: "14px", color:"var(--foreground)" }}
               />
             </div>
             <div>
@@ -492,8 +492,8 @@ export function UserManagement() {
                 value={inviteEmail}
                 onChange={e => setInviteEmail(e.target.value)}
                 onKeyDown={e => { if (e.key === "Enter" && !isInviting) handleInvite() }}
-                className="w-full mt-1 px-4 py-2.5 rounded-lg text-white placeholder:text-slate-500 outline-none"
-                style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", fontSize: "14px" }}
+                className="w-full mt-1 px-4 py-2.5 rounded-lg placeholder:text-slate-500 outline-none"
+                style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", fontSize: "14px", color: "var(--foreground)" }}
               />
             </div>
             <div>
@@ -504,8 +504,8 @@ export function UserManagement() {
                 value={invitePassword}
                 onChange={e => setInvitePassword(e.target.value)}
                 onKeyDown={e => { if (e.key === "Enter" && !isInviting && isInvitePasswordStrong) handleInvite() }}
-                className="w-full mt-1 px-4 py-2.5 rounded-lg text-white placeholder:text-slate-500 outline-none"
-                style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", fontSize: "14px" }}
+                className="w-full mt-1 px-4 py-2.5 rounded-lg placeholder:text-slate-500 outline-none"
+                style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", fontSize: "14px", color: "var(--muted-foreground)" }}
               />
               {invitePassword && (
                 <div className="grid grid-cols-2 gap-2 mt-3 p-3 rounded-xl animate-fadeIn"
@@ -514,10 +514,10 @@ export function UserManagement() {
                     <div key={i} className="flex items-center gap-2">
                       {req.test(invitePassword)
                         ? <Check size={10} style={{ color: "#00d2ff" }} />
-                        : <div className="w-1.5 h-1.5 rounded-full ml-0.5" style={{ background: "rgba(255,255,255,0.1)" }} />}
+                        : <div className="w-1.5 h-1.5 rounded-full ml-0.5" style={{ background: "var(--muted-foreground)" }} />}
                       <span style={{
                         fontSize: "9px", fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase",
-                        color: req.test(invitePassword) ? "rgba(255,255,255,0.6)" : "rgba(255,255,255,0.2)"
+                        color: req.test(invitePassword) ? "var(--foreground)" : "var(--muted-foreground)"
                       }}>{req.label}</span>
                     </div>
                   ))}
@@ -525,28 +525,28 @@ export function UserManagement() {
               )}
             </div>
             <div>
-              <label style={{ color: "#4a5578", fontSize: "12px", fontWeight: 600, letterSpacing: "0.05em" }}>ROLE</label>
+              <label style={{ color: "var(--foreground)", fontSize: "12px", fontWeight: 600, letterSpacing: "0.05em" }}>ROLE</label>
               {isRootAdmin ? (
                 <div className="relative mt-1">
                   <button
                     type="button"
                     onClick={() => setShowInviteRoleDropdown(v => !v)}
                     className="w-full flex items-center justify-between px-4 py-2.5 rounded-lg"
-                    style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "#e2e8f0", fontSize: "14px" }}
+                    style={{ background: "var(--card-background)", border: "1px solid var(--foreground)", color: "var(--foreground)", fontSize: "14px" }}
                   >
                     <span>{inviteRole === "user" ? "User — standard access" : "Admin — full platform access"}</span>
-                    <ChevronDown size={14} style={{ color: "#6b7fa8" }} />
+                    <ChevronDown size={14} style={{ color: "var(--foreground)" }} />
                   </button>
                   {showInviteRoleDropdown && (
                     <div className="absolute left-0 right-0 mt-1 rounded-lg overflow-hidden z-20"
-                      style={{ background: "#0d1228", border: "1px solid rgba(255,255,255,0.1)", boxShadow: "0 10px 40px rgba(0,0,0,0.5)" }}>
+                      style={{ background: "var(--card-background)", border: "1px solid var(--foreground)", boxShadow: "0 10px 40px rgba(0,0,0,0.5)" }}>
                       {(["user", "admin"] as const).map(r => (
                         <button
                           key={r}
                           type="button"
                           onClick={() => { setInviteRole(r); setShowInviteRoleDropdown(false) }}
                           className="w-full px-4 py-2.5 text-left transition-colors hover:bg-white/5"
-                          style={{ color: inviteRole === r ? "#0B7FFF" : "#e2e8f0", fontSize: "14px" }}
+                          style={{ color: inviteRole === r ? "#0B7FFF" : "var(--foreground)", fontSize: "14px" }}
                         >
                           {r === "user" ? "User — standard access" : "Admin — full platform access"}
                         </button>
@@ -570,7 +570,7 @@ export function UserManagement() {
           <DialogFooter className="mt-6">
             <button onClick={() => setShowInviteDialog(false)}
               className="px-4 py-2 rounded-lg"
-              style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "#e2e8f0" }}>
+              style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "var(--foreground)" }}>
               Cancel
             </button>
             <button onClick={handleInvite} disabled={isInviting || !isInvitePasswordStrong}
@@ -585,9 +585,9 @@ export function UserManagement() {
 
       {/* Confirm role change */}
       <AlertDialog open={!!pendingRoleChange} onOpenChange={() => setPendingRoleChange(null)}>
-        <AlertDialogContent style={{ background: "linear-gradient(180deg, #0d1228 0%, #0b0f20 100%)", border: "1px solid rgba(255,255,255,0.1)" }}>
+        <AlertDialogContent style={{ background: "var(--card-background)", border: "1px solid var(--foreground)" }}>
           <AlertDialogHeader>
-            <AlertDialogTitle className="text-white">
+            <AlertDialogTitle style={{ color: "var(--foreground)" }}>
               {pendingRoleChange?.newRole === "admin" ? "Promote to Admin" : "Demote to User"}
             </AlertDialogTitle>
             <AlertDialogDescription style={{ color: "#6b7fa8" }}>
@@ -597,7 +597,7 @@ export function UserManagement() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "#e2e8f0" }}>
+            <AlertDialogCancel style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "var(--foreground)" }}>
               Cancel
             </AlertDialogCancel>
             <AlertDialogAction onClick={handleRoleChange} disabled={isRoleChanging}
@@ -612,11 +612,11 @@ export function UserManagement() {
 
       {/* Set Password Dialog */}
       <Dialog open={!!passwordTarget} onOpenChange={v => { if (!v) setPasswordTarget(null) }}>
-        <DialogContent style={{ background: "linear-gradient(180deg, #0d1228 0%, #0b0f20 100%)", border: "1px solid rgba(255,255,255,0.1)" }}>
-          <DialogHeader><DialogTitle className="text-white text-xl">Set User Password</DialogTitle></DialogHeader>
+        <DialogContent style={{ background: "var(--card-background)", border: "1px solid var(--border)" }}>
+          <DialogHeader><DialogTitle style={{ color: "var(--foreground)" }}>Set User Password</DialogTitle></DialogHeader>
           <div className="space-y-4">
             <p style={{ color: "#6b7fa8", fontSize: "13px" }}>
-              Update the password for <span className="text-white font-medium">{passwordTarget?.name}</span>.
+              Update the password for <span className="font-medium" style={{ color: "var(--foreground)" }}>{passwordTarget?.name}</span>.
             </p>
             <div>
               <label style={{ color: "#4a5578", fontSize: "12px", fontWeight: 600, letterSpacing: "0.05em" }}>NEW PASSWORD</label>
@@ -626,20 +626,20 @@ export function UserManagement() {
                 value={newPassword}
                 onChange={e => setNewPassword(e.target.value)}
                 onKeyDown={e => { if (e.key === "Enter" && !isSettingPassword && isNewPasswordStrong) handleSetPassword() }}
-                className="w-full mt-1 px-4 py-2.5 rounded-lg text-white placeholder:text-slate-500 outline-none"
-                style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", fontSize: "14px" }}
+                className="w-full mt-1 px-4 py-2.5 rounded-lg placeholder:text-slate-500 outline-none"
+                style={{ background: "var(--input-background)", border: "1px solid var(--border)", fontSize: "14px", color: "var(--foreground)" }}
               />
               {newPassword && (
                 <div className="grid grid-cols-2 gap-2 mt-3 p-3 rounded-xl animate-fadeIn"
-                  style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.08)" }}>
+                  style={{ background: "var(--input-background)", border: "1px solid var(--border)" }}>
                   {passwordRequirements.map((req, i) => (
                     <div key={i} className="flex items-center gap-2">
                       {req.test(newPassword)
                         ? <Check size={10} style={{ color: "#00d2ff" }} />
-                        : <div className="w-1.5 h-1.5 rounded-full ml-0.5" style={{ background: "rgba(255,255,255,0.1)" }} />}
+                        : <div className="w-1.5 h-1.5 rounded-full ml-0.5" style={{ background: "var(--muted-foreground)" }} />}
                       <span style={{
                         fontSize: "9px", fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase",
-                        color: req.test(newPassword) ? "rgba(255,255,255,0.6)" : "rgba(255,255,255,0.2)"
+                        color: req.test(newPassword) ? "var(--foreground)" : "var(--muted-foreground)"
                       }}>{req.label}</span>
                     </div>
                   ))}
@@ -650,7 +650,7 @@ export function UserManagement() {
           <DialogFooter className="mt-6">
             <button onClick={() => setPasswordTarget(null)}
               className="px-4 py-2 rounded-lg"
-              style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "#e2e8f0" }}>
+              style={{ background: "var(--input-background)", border: "1px solid var(--border)", color: "var(--foreground)" }}>
               Cancel
             </button>
             <button onClick={handleSetPassword} disabled={isSettingPassword || !isNewPasswordStrong}
@@ -665,18 +665,18 @@ export function UserManagement() {
 
       {/* Configure Quota Dialog */}
       <Dialog open={!!quotaTarget} onOpenChange={v => { if (!v) setQuotaTarget(null) }}>
-        <DialogContent style={{ background: "linear-gradient(180deg, #0d1228 0%, #0b0f20 100%)", border: "1px solid rgba(255,255,255,0.1)" }}>
+        <DialogContent style={{ background: "var(--card-background)", border: "1px solid var(--border)" }}>
           <DialogHeader>
-            <DialogTitle className="text-white text-xl flex items-center gap-2">
+            <DialogTitle className="text-xl flex items-center gap-2" style={{ color: "var(--foreground)" }}>
               <HardDrive size={20} style={{ color: "#a855f7" }} />
               Configure Storage Quota
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <p style={{ color: "#6b7fa8", fontSize: "13px" }}>
-              Set storage quota for <span className="text-white font-medium">{quotaTarget?.name}</span>.
+              Set storage quota for <span style={{ color: "var(--foreground)" }} className="font-medium">{quotaTarget?.name}</span>.
             </p>
-            
+
             {/* Unlimited checkbox */}
             <div className="flex items-center gap-2">
               <input
@@ -687,7 +687,7 @@ export function UserManagement() {
                 className="w-4 h-4 rounded"
                 style={{ accentColor: "#a855f7" }}
               />
-              <label htmlFor="unlimited-quota" style={{ color: "#e2e8f0", fontSize: "14px", cursor: "pointer" }}>
+              <label htmlFor="unlimited-quota" style={{ color: "var(--foreground)", fontSize: "14px", cursor: "pointer" }}>
                 Unlimited Storage
               </label>
             </div>
@@ -705,12 +705,12 @@ export function UserManagement() {
                     value={quotaValue}
                     onChange={e => setQuotaValue(e.target.value)}
                     onKeyDown={e => { if (e.key === "Enter" && !isSettingQuota) handleSetQuota() }}
-                    className="flex-1 px-4 py-2.5 rounded-lg text-white placeholder:text-slate-500 outline-none"
-                    style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", fontSize: "14px" }}
+                    className="flex-1 px-4 py-2.5 rounded-lg placeholder:text-slate-500 outline-none"
+                    style={{ background: "var(--input-background)", border: "1px solid var(--border)", fontSize: "14px", color: "var(--foreground)" }}
                     min="0"
                     step="0.1"
                   />
-                  <div className="flex rounded-lg overflow-hidden" style={{ border: "1px solid rgba(255,255,255,0.08)" }}>
+                  <div className="flex rounded-lg overflow-hidden" style={{ border: "1px solid var(--border)" }}>
                     <button
                       type="button"
                       onClick={() => setQuotaUnit("MB")}
@@ -733,7 +733,7 @@ export function UserManagement() {
                         color: quotaUnit === "GB" ? "#a855f7" : "#6b7fa8",
                         fontSize: "14px",
                         fontWeight: 600,
-                        borderLeft: "1px solid rgba(255,255,255,0.08)"
+                        borderLeft: "1px solid var(--border)"
                       }}
                     >
                       GB
@@ -745,11 +745,11 @@ export function UserManagement() {
 
             {/* Current quota info */}
             {quotaTarget && (
-              <div className="p-3 rounded-lg" style={{ background: "rgba(168,85,247,0.08)", border: "1px solid rgba(168,85,247,0.2)" }}>
+              <div className="p-3 rounded-lg" style={{ background: "var(--input-background)", border: "1px solid var(--border)" }}>
                 <p style={{ color: "#a855f7", fontSize: "11px", fontWeight: 700, letterSpacing: "0.08em", marginBottom: "4px" }}>
                   CURRENT QUOTA
                 </p>
-                <p style={{ color: "#e2e8f0", fontSize: "13px" }}>
+                <p style={{ color: "var(--foreground)", fontSize: "13px" }}>
                   {quotaTarget.storageQuotaBytes === null || quotaTarget.storageQuotaBytes === undefined
                     ? "Unlimited"
                     : `${(quotaTarget.storageQuotaBytes / (1024 * 1024 * 1024)).toFixed(2)} GB`}
@@ -760,7 +760,7 @@ export function UserManagement() {
           <DialogFooter className="mt-6">
             <button onClick={() => setQuotaTarget(null)}
               className="px-4 py-2 rounded-lg"
-              style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "#e2e8f0" }}>
+              style={{ background: "var(--input-background)", border: "1px solid var(--border)", color: "var(--foreground)" }}>
               Cancel
             </button>
             <button onClick={handleSetQuota} disabled={isSettingQuota}
@@ -775,15 +775,15 @@ export function UserManagement() {
 
       {/* Confirm delete */}
       <AlertDialog open={!!memberToDelete} onOpenChange={() => setMemberToDelete(null)}>
-        <AlertDialogContent style={{ background: "linear-gradient(180deg, #0d1228 0%, #0b0f20 100%)", border: "1px solid rgba(255,255,255,0.1)" }}>
+        <AlertDialogContent style={{ background: "var(--input-background)", border: "1px solid var(--border)" }}>
           <AlertDialogHeader>
-            <AlertDialogTitle className="text-white">Delete User</AlertDialogTitle>
+            <AlertDialogTitle style={{ color: "var(--foreground)" }}>Delete User</AlertDialogTitle>
             <AlertDialogDescription style={{ color: "#6b7fa8" }}>
               Permanently delete {memberToDelete?.name} ({memberToDelete?.email})? All their uploaded files will also be removed. This cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "#e2e8f0" }}>
+            <AlertDialogCancel style={{ background: "var(--input-background)", border: "1px solid var(--border)", color: "var(--foreground)" }}>
               Cancel
             </AlertDialogCancel>
             <AlertDialogAction onClick={handleDelete} disabled={isDeleting}

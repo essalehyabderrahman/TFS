@@ -1,53 +1,137 @@
 @import "tailwindcss";
 @custom-variant dark (&:is(.dark *));
 
+/*
+ * ─────────────────────────────────────────────────────────────────────────────
+ * THEME TOKENS
+ *
+ * Structure:
+ *   :root            → theme-agnostic tokens (radius, font weights, charts)
+ *                      + the LIGHT ("Bright Mode") color palette (default fallback)
+ *   .dark            → the DARK color palette (overrides every color token)
+ *
+ * The app defaults to .dark (set by next-themes / defaultTheme="dark"), so the
+ * existing look is unchanged until the user opts into Bright Mode.
+ *
+ * IMPORTANT: every COLOR token that exists in :root MUST also exist in .dark,
+ * otherwise a dark-mode component would fall back to a light value.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+
 :root {
+  /* color-scheme drives native form controls, scrollbars, etc. */
+  color-scheme: light;
+
+  /* ── Theme-agnostic tokens (shared by both themes) ── */
   --font-size: 16px;
-  --background: #0a0e1a;
-  --foreground: #e8eaf0;
-  --card: rgba(255, 255, 255, 0.04);
-  --card-foreground: #e8eaf0;
-  --popover: #0f1420;
-  --popover-foreground: #e8eaf0;
-  --primary: #00d2ff;
-  --primary-foreground: #000000;
-  --secondary: rgba(255, 255, 255, 0.06);
-  --secondary-foreground: #e8eaf0;
-  --muted: rgba(255, 255, 255, 0.08);
-  --muted-foreground: rgba(255, 255, 255, 0.5);
-  --accent: rgba(0, 210, 255, 0.12);
-  --accent-foreground: #00d2ff;
-  --destructive: #ff4d4d;
-  --destructive-foreground: #ffffff;
-  --border: rgba(255, 255, 255, 0.08);
-  --input: rgba(255, 255, 255, 0.04);
-  --input-background: rgba(255, 255, 255, 0.04);
-  --switch-background: rgba(255, 255, 255, 0.15);
   --font-weight-medium: 500;
   --font-weight-normal: 400;
-  --ring: #00d2ff;
-  --chart-1: #00d2ff;
-  --chart-2: #7c3aed;
-  --chart-3: #ec4899;
-  --chart-4: #10b981;
-  --chart-5: #f59e0b;
   --radius: 0.625rem;
-  --sidebar: #0a0e1a;
-  --sidebar-foreground: #e8eaf0;
-  --sidebar-primary: #00d2ff;
-  --sidebar-primary-foreground: #000000;
-  --sidebar-accent: rgba(255, 255, 255, 0.06);
-  --sidebar-accent-foreground: #e8eaf0;
-  --sidebar-border: rgba(255, 255, 255, 0.08);
-  --sidebar-ring: #00d2ff;
 
-  /* Glassmorphism tokens */
-  --glass-bg: rgba(10, 14, 26, 0.75);
-  --glass-border: rgba(255, 255, 255, 0.1);
+  /* Chart palette — slightly deepened so it reads on white too */
+  --chart-1: #0096c7;
+  --chart-2: #6d28d9;
+  --chart-3: #db2777;
+  --chart-4: #059669;
+  --chart-5: #d97706;
+
+  /* ── LIGHT ("Bright Mode") palette ──
+     Backgrounds: soft off-white (never pure #fff — reduces glare/eye strain)
+     Foreground:  near-black slate (AA+ on every surface)
+     Accents:     cyan DARKENED to #007a99 so it passes AA as text on white */
+  --background: #f4f6fb;
+  --foreground: #0f1729;
+  --card: #ffffff;
+  --card-foreground: #0f1729;
+  --popover: #ffffff;
+  --popover-foreground: #0f1729;
+  --primary: #007a99;
+  /* darkened neon — AA on white (~4.8:1) */
+  --primary-foreground: #ffffff;
+  --secondary: #eef1f6;
+  --secondary-foreground: #1e293b;
+  --muted: #eef1f6;
+  --muted-foreground: #54617a;
+  /* AA on white (~4.6:1) */
+  --accent: rgba(0, 150, 199, 0.12);
+  --accent-foreground: #006080;
+  --destructive: #d92d20;
+  /* AA on white */
+  --destructive-foreground: #ffffff;
+  --success: #047857;
+  --warning: #b45309;
+  --border: rgba(15, 23, 41, 0.12);
+  --border-light: rgba(15, 23, 41, 0.04);
+  --input: #ffffff;
+  --input-background: #ffffff;
+  --switch-background: rgba(15, 23, 41, 0.25);
+  --ring: #007a99;
+  --card-background: linear-gradient(180deg, #ffffff 0%, #eef1f6 100%);
+
+  --sidebar: #ffffff;
+  --sidebar-foreground: #0f1729;
+  --sidebar-primary: #007a99;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #eef1f6;
+  --sidebar-accent-foreground: #1e293b;
+  --sidebar-border: rgba(15, 23, 41, 0.1);
+  --sidebar-ring: #007a99;
+
+  /* ── Surfaces ──
+     Replace the hardcoded rgba(255,255,255,0.0x) overlays used for panels,
+     table wrappers, rows and hover states. Those overlays are invisible on a
+     light page, so in Bright Mode they map to real light grays with a clear
+     edge against the off-white --background. */
+  --surface-1: #ffffff;
+  /* primary panel / card / table body */
+  --surface-2: #eef1f6;
+  /* nested / secondary surface */
+  --surface-hover: rgba(15, 23, 41, 0.05);
+  /* row & button hover */
+  --table-header-bg: #eef2f8;
+  /* column-header strip (was rgba(0,0,0,.15)) */
+  --row-border: rgba(15, 23, 41, 0.08);
+  /* row dividers (was rgba(255,255,255,.04)) */
+
+  /* ── Status palette (color-coded, WCAG AA on a light surface) ──
+     Each status keeps its meaning but the FG is darkened to clear ~4.5:1 on
+     white, and the BG is a soft tint of that same hue so badges stay visible
+     instead of washing out.  fg = text/icon, bg = chip background. */
+  --status-success-fg: #047857;
+  /* green  ~5.0:1 on #fff */
+  --status-success-bg: rgba(4, 120, 87, 0.10);
+  --status-warning-fg: #b45309;
+  /* amber  ~4.7:1 on #fff */
+  --status-warning-bg: rgba(180, 83, 9, 0.10);
+  --status-danger-fg: #c0271c;
+  /* red    ~5.1:1 on #fff */
+  --status-danger-bg: rgba(192, 39, 28, 0.10);
+  --status-info-fg: #1d4ed8;
+  /* blue   ~5.6:1 on #fff */
+  --status-info-bg: rgba(29, 78, 216, 0.10);
+  --status-neutral-fg: #54617a;
+  /* slate  ~4.6:1 on #fff */
+  --status-neutral-bg: rgba(84, 97, 122, 0.12);
+
+  /* Glassmorphism — light: frosted white panel */
+  --glass-bg: rgba(255, 255, 255, 0.72);
+  --glass-border: rgba(15, 23, 41, 0.1);
   --glass-blur: 16px;
+
+  /* Elevation — light mode needs DISTINCT shadows so panels don't bleed */
+  --shadow-sm: 0 1px 2px rgba(15, 23, 41, 0.06), 0 1px 3px rgba(15, 23, 41, 0.1);
+  --shadow-md: 0 4px 6px rgba(15, 23, 41, 0.07), 0 2px 4px rgba(15, 23, 41, 0.06);
+  --shadow-lg: 0 12px 24px rgba(15, 23, 41, 0.1), 0 4px 8px rgba(15, 23, 41, 0.06);
+  --shadow-xl: 0 24px 48px rgba(15, 23, 41, 0.14), 0 8px 16px rgba(15, 23, 41, 0.08);
+
+  /* Brand accent at full strength — for decorative glows where legibility
+     is not required (use --primary for anything that must be readable) */
+  --brand: #00d2ff;
 }
 
 .dark {
+  color-scheme: dark;
+
   --background: #00010c;
   --foreground: #ffffff;
   --card: rgba(255, 255, 255, 0.03);
@@ -64,16 +148,56 @@
   --accent-foreground: #00d2ff;
   --destructive: #ff4d4d;
   --destructive-foreground: #ffffff;
+  --success: #00E5A0;
+  --warning: #eab308;
   --border: rgba(255, 255, 255, 0.1);
+  --border-light: rgba(255, 255, 255, 0.02);
   --input: rgba(255, 255, 255, 0.05);
+  --input-background: rgba(255, 255, 255, 0.05);
+  --switch-background: rgba(255, 255, 255, 0.15);
   --ring: #00d2ff;
-  --font-weight-medium: 500;
-  --font-weight-normal: 400;
+  --card-background: linear-gradient(180deg, #0d1228 0%, #0b0f20 100%);
 
-  /* Glassmorphism tokens refined */
+  --sidebar: #00010c;
+  --sidebar-foreground: #ffffff;
+  --sidebar-primary: #00d2ff;
+  --sidebar-primary-foreground: #000000;
+  --sidebar-accent: rgba(255, 255, 255, 0.06);
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: rgba(255, 255, 255, 0.08);
+  --sidebar-ring: #00d2ff;
+
+  /* ── Surfaces (dark — preserve the existing white-overlay look) ── */
+  --surface-1: rgba(255, 255, 255, 0.03);
+  --surface-2: rgba(255, 255, 255, 0.05);
+  --surface-hover: rgba(255, 255, 255, 0.06);
+  --table-header-bg: rgba(0, 0, 0, 0.15);
+  --row-border: rgba(255, 255, 255, 0.04);
+
+  /* ── Status palette (dark — the current neon-on-tint look) ── */
+  --status-success-fg: #00E5A0;
+  --status-success-bg: rgba(0, 229, 160, 0.10);
+  --status-warning-fg: #FBBF24;
+  --status-warning-bg: rgba(251, 191, 36, 0.10);
+  --status-danger-fg: #F87171;
+  --status-danger-bg: rgba(248, 113, 113, 0.10);
+  --status-info-fg: #3D9FFF;
+  --status-info-bg: rgba(11, 127, 255, 0.14);
+  --status-neutral-fg: rgba(255, 255, 255, 0.6);
+  --status-neutral-bg: rgba(100, 116, 139, 0.15);
+
+  /* Glassmorphism — dark: smoked glass */
   --glass-bg: rgba(0, 1, 12, 0.7);
   --glass-border: rgba(255, 255, 255, 0.1);
   --glass-blur: 20px;
+
+  /* Elevation — dark mode shadows are subtle (mostly pure black) */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 16px 40px rgba(0, 0, 0, 0.6);
+  --shadow-xl: 0 24px 64px rgba(0, 0, 0, 0.7);
+
+  --brand: #00d2ff;
 }
 
 /* GSAP Reveal Helpers */
@@ -104,6 +228,9 @@
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-brand: var(--brand);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-input-background: var(--input-background);
@@ -131,6 +258,31 @@
   --bg-glass: var(--glass-bg);
   --border-glass: var(--glass-border);
   --blur-glass: blur(var(--glass-blur));
+
+  /* Elevation tokens (theme-aware shadows) */
+  --shadow-theme-sm: var(--shadow-sm);
+  --shadow-theme-md: var(--shadow-md);
+  --shadow-theme-lg: var(--shadow-lg);
+  --shadow-theme-xl: var(--shadow-xl);
+
+  /* Surfaces */
+  --color-surface-1: var(--surface-1);
+  --color-surface-2: var(--surface-2);
+  --color-surface-hover: var(--surface-hover);
+  --color-table-header: var(--table-header-bg);
+  --color-row-border: var(--row-border);
+
+  /* Status palette */
+  --color-status-success-fg: var(--status-success-fg);
+  --color-status-success-bg: var(--status-success-bg);
+  --color-status-warning-fg: var(--status-warning-fg);
+  --color-status-warning-bg: var(--status-warning-bg);
+  --color-status-danger-fg: var(--status-danger-fg);
+  --color-status-danger-bg: var(--status-danger-bg);
+  --color-status-info-fg: var(--status-info-fg);
+  --color-status-info-bg: var(--status-info-bg);
+  --color-status-neutral-fg: var(--status-neutral-fg);
+  --color-status-neutral-bg: var(--status-neutral-bg);
 }
 
 @layer base {
@@ -140,6 +292,18 @@
 
   body {
     @apply bg-background text-foreground;
+  }
+
+  /*
+   * Smooth theme transition. Only color-related properties transition, so
+   * GSAP transforms/opacity animations are untouched. Disabled during the
+   * very first paint via [data-theme-booting] to avoid a flash-of-transition.
+   */
+  html:not([data-theme-booting]) body *,
+  html:not([data-theme-booting]) body {
+    transition: background-color 0.25s ease, border-color 0.25s ease,
+      color 0.25s ease, fill 0.25s ease, stroke 0.25s ease,
+      box-shadow 0.25s ease;
   }
 
   /**
@@ -245,29 +409,35 @@
       -0.05em -0.025em 0 rgba(0, 255, 0, 0.75),
       -0.025em 0.05em 0 rgba(0, 0, 255, 0.75);
   }
+
   14% {
     text-shadow: 0.05em 0 0 rgba(255, 0, 0, 0.75),
       -0.05em -0.025em 0 rgba(0, 255, 0, 0.75),
       -0.025em 0.05em 0 rgba(0, 0, 255, 0.75);
   }
+
   15% {
     text-shadow: -0.05em -0.025em 0 rgba(255, 0, 0, 0.75),
       0.025em 0.025em 0 rgba(0, 255, 0, 0.75),
       -0.05em -0.05em 0 rgba(0, 0, 255, 0.75);
   }
+
   49% {
     text-shadow: -0.05em -0.025em 0 rgba(255, 0, 0, 0.75),
       0.025em 0.025em 0 rgba(0, 255, 0, 0.75),
       -0.05em -0.05em 0 rgba(0, 0, 255, 0.75);
   }
+
   50% {
     text-shadow: 0.025em 0.05em 0 rgba(255, 0, 0, 0.75),
       0.05em 0 0 rgba(0, 255, 0, 0.75), 0 -0.05em 0 rgba(0, 0, 255, 0.75);
   }
+
   99% {
     text-shadow: 0.025em 0.05em 0 rgba(255, 0, 0, 0.75),
       0.05em 0 0 rgba(0, 255, 0, 0.75), 0 -0.05em 0 rgba(0, 0, 255, 0.75);
   }
+
   100% {
     text-shadow: -0.025em 0 0 rgba(255, 0, 0, 0.75),
       -0.025em -0.025em 0 rgba(0, 255, 0, 0.75),

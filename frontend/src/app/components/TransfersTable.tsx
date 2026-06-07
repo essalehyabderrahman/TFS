@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
+import { useLocation } from "react-router";
 import { toast } from "sonner";
 import { apiRequest } from "../api/client";
 import {
@@ -114,6 +115,38 @@ export function TransfersTable({ refreshKey }: TransfersTableProps = {}) {
       return () => clearTimeout(timer);
     }
   }, [openMenu]);
+
+  // Scroll to targeted transfer if hash is present
+  const location = useLocation();
+  useEffect(() => {
+    if (location.hash && transfers.length > 0) {
+      const id = location.hash.replace("#", "");
+      let retries = 0;
+      const tryScroll = () => {
+        const el = document.getElementById(id);
+        if (el) {
+          el.scrollIntoView({ behavior: "smooth", block: "center" });
+          const originalBg = el.style.backgroundColor;
+          const originalTransition = el.style.transition;
+          el.style.transition = "background-color 0.3s ease";
+          el.style.backgroundColor = "rgba(11, 127, 255, 0.25)";
+          setTimeout(() => {
+            el.style.backgroundColor = originalBg;
+            setTimeout(() => {
+              if (el.style.transition === "background-color 0.3s ease") {
+                el.style.transition = originalTransition;
+              }
+            }, 300);
+          }, 2000);
+        } else if (retries < 15) {
+          retries++;
+          setTimeout(tryScroll, 100);
+        }
+      };
+      // Start trying to scroll
+      tryScroll();
+    }
+  }, [location.hash, transfers]);
 
   // Re-fetch when parent signals a new upload completed
   useEffect(() => {
@@ -553,6 +586,7 @@ export function TransfersTable({ refreshKey }: TransfersTableProps = {}) {
 
               return (
                 <div
+                  id={`transfer-${transfer.id}`}
                   key={transfer.id}
                   className="grid px-6 items-center transition-colors duration-150 hover:bg-white/[0.025] relative group"
                   style={{
@@ -784,6 +818,7 @@ export function TransfersTable({ refreshKey }: TransfersTableProps = {}) {
 
             return (
               <div
+                id={`transfer-${transfer.id}`}
                 key={transfer.id}
                 className="px-4 sm:px-6 py-4 transition-colors duration-150 hover:bg-white/[0.025]"
                 style={{
@@ -975,7 +1010,7 @@ export function TransfersTable({ refreshKey }: TransfersTableProps = {}) {
         <DialogContent
           className="sm:max-w-[500px] md:max-w-[580px] lg:max-w-[640px] xl:max-w-[700px] 2xl:max-w-[760px] border-0 p-0 gap-0 max-h-[90vh] overflow-y-auto"
           style={{
-            background: "#0d1321",
+            background: "var(--background)",
             boxShadow: "0 24px 64px rgba(0,0,0,0.6)",
             scrollbarWidth: "thin",
             scrollbarColor: "rgba(11,127,255,0.2) transparent",
@@ -1107,10 +1142,10 @@ export function TransfersTable({ refreshKey }: TransfersTableProps = {}) {
                       handleDownload(detailsTransfer);
                       setDetailsTransfer(null);
                     }}
-                    className="flex-1 px-4 lg:px-5 py-2.5 lg:py-3 rounded-xl transition-all hover:brightness-110"
+                    className="flex-1 px-4 lg:px-5 py-2.5 lg:py-3 rounded-xl transition-all hover:brightness-110 cursor-pointer"
                     style={{
                       background: "linear-gradient(135deg, #0B7FFF 0%, #0960CC 100%)",
-                      color: "#ffffff",
+                      color: "white",
                       fontSize: "13px",
                       fontWeight: 600,
                       boxShadow: "0 4px 16px rgba(11,127,255,0.25)",
@@ -1123,7 +1158,7 @@ export function TransfersTable({ refreshKey }: TransfersTableProps = {}) {
                       setPreviewTransfer(detailsTransfer);
                       setDetailsTransfer(null);
                     }}
-                    className="px-4 lg:px-5 py-2.5 lg:py-3 rounded-xl transition-colors hover:bg-accent"
+                    className="px-4 lg:px-5 py-2.5 lg:py-3 rounded-xl transition-colors hover:bg-accent cursor-pointer"
                     style={{
                       fontSize: "13px",
                       color: "var(--muted-foreground)",
@@ -1137,7 +1172,7 @@ export function TransfersTable({ refreshKey }: TransfersTableProps = {}) {
                       setResendTransfer(detailsTransfer);
                       setDetailsTransfer(null);
                     }}
-                    className="px-4 lg:px-5 py-2.5 lg:py-3 rounded-xl transition-colors hover:bg-accent"
+                    className="px-4 lg:px-5 py-2.5 lg:py-3 rounded-xl transition-colors hover:bg-accent cursor-pointer"
                     style={{
                       fontSize: "13px",
                       color: "var(--muted-foreground)",
@@ -1158,7 +1193,7 @@ export function TransfersTable({ refreshKey }: TransfersTableProps = {}) {
         <AlertDialogContent
           className="sm:max-w-[420px] border-0 p-0 gap-0"
           style={{
-            background: "#0d1321",
+            background: "var(--background)",
             boxShadow: "0 24px 64px rgba(0,0,0,0.6)",
           }}
         >
@@ -1188,7 +1223,7 @@ export function TransfersTable({ refreshKey }: TransfersTableProps = {}) {
           </AlertDialogHeader>
           <AlertDialogFooter className="px-6 pb-6 pt-2">
             <AlertDialogCancel
-              className="rounded-xl"
+              className="rounded-xl hover:cursor-pointer"
               style={{
                 fontSize: "13px",
                 color: "var(--muted-foreground)",
@@ -1200,10 +1235,10 @@ export function TransfersTable({ refreshKey }: TransfersTableProps = {}) {
             </AlertDialogCancel>
             <AlertDialogAction
               onClick={() => deleteTransfer && handleDelete(deleteTransfer)}
-              className="rounded-xl"
+              className="rounded-xl hover:cursor-pointer"
               style={{
                 background: "linear-gradient(135deg, #F87171 0%, #DC2626 100%)",
-                color: "#ffffff",
+                color: "white",
                 fontSize: "13px",
                 fontWeight: 600,
               }}
@@ -1219,7 +1254,7 @@ export function TransfersTable({ refreshKey }: TransfersTableProps = {}) {
         <AlertDialogContent
           className="sm:max-w-[420px] border-0 p-0 gap-0"
           style={{
-            background: "#0d1321",
+            background: "var(--background)",
             boxShadow: "0 24px 64px rgba(0,0,0,0.6)",
           }}
         >
@@ -1249,7 +1284,7 @@ export function TransfersTable({ refreshKey }: TransfersTableProps = {}) {
           </AlertDialogHeader>
           <AlertDialogFooter className="px-6 pb-6 pt-2">
             <AlertDialogCancel
-              className="rounded-xl"
+              className="rounded-xl hover:cursor-pointer"
               style={{
                 fontSize: "13px",
                 color: "var(--muted-foreground)",
@@ -1261,10 +1296,10 @@ export function TransfersTable({ refreshKey }: TransfersTableProps = {}) {
             </AlertDialogCancel>
             <AlertDialogAction
               onClick={() => revokeTransfer && handleRevokeAccess(revokeTransfer)}
-              className="rounded-xl"
+              className="rounded-xl hover:cursor-pointer"
               style={{
                 background: "linear-gradient(135deg, #FBBF24 0%, #D97706 100%)",
-                color: "#000000",
+                color: "var(--foreground)",
                 fontSize: "13px",
                 fontWeight: 600,
               }}
@@ -1280,7 +1315,7 @@ export function TransfersTable({ refreshKey }: TransfersTableProps = {}) {
         <AlertDialogContent
           className="sm:max-w-[420px] border-0 p-0 gap-0"
           style={{
-            background: "#0d1321",
+            background: "var(--background)",
             boxShadow: "0 24px 64px rgba(0,0,0,0.6)",
           }}
         >
@@ -1314,7 +1349,7 @@ export function TransfersTable({ refreshKey }: TransfersTableProps = {}) {
           </AlertDialogHeader>
           <AlertDialogFooter className="px-6 pb-6 pt-2">
             <AlertDialogCancel
-              className="rounded-xl"
+              className="rounded-xl hover:cursor-pointer"
               style={{
                 fontSize: "13px",
                 color: "var(--muted-foreground)",
@@ -1326,10 +1361,10 @@ export function TransfersTable({ refreshKey }: TransfersTableProps = {}) {
             </AlertDialogCancel>
             <AlertDialogAction
               onClick={() => resendTransfer && handleResend(resendTransfer)}
-              className="rounded-xl"
+              className="rounded-xl hover:cursor-pointer"
               style={{
                 background: "linear-gradient(135deg, #0B7FFF 0%, #0960CC 100%)",
-                color: "#ffffff",
+                color: "white",
                 fontSize: "13px",
                 fontWeight: 600,
                 boxShadow: "0 4px 16px rgba(11,127,255,0.25)",

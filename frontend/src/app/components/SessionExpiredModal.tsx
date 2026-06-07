@@ -78,7 +78,7 @@ export function SessionExpiredModal({ reason, onClose }: Props) {
       <div
         className="relative w-full max-w-sm rounded-2xl p-8 flex flex-col items-center gap-5 text-center"
         style={{
-          background: "linear-gradient(180deg, #0d1228 0%, #0b0f20 100%)",
+          background: "var(--card-background)",
           border: `1px solid ${accent}30`,
           boxShadow: `0 0 60px ${accent}18`,
         }}
@@ -96,7 +96,7 @@ export function SessionExpiredModal({ reason, onClose }: Props) {
         <div>
           <h2
             id="session-expired-title"
-            className="text-white text-xl font-bold mb-2"
+            className="text-foreground text-xl font-bold mb-2"
           >
             {title}
           </h2>
@@ -108,7 +108,7 @@ export function SessionExpiredModal({ reason, onClose }: Props) {
           ref={btnRef}
           onClick={handleClose}
           className="w-full h-12 rounded-xl font-black uppercase tracking-widest transition-all hover:opacity-90 active:scale-95"
-          style={{ background: accent, color: accent === "#0B7FFF" ? "white" : "black", fontSize: "13px" }}
+          style={{ background: accent, color: "white", fontSize: "13px" }}
         >
           Return to Home
         </button>

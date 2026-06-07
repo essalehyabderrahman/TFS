@@ -252,7 +252,7 @@ export function AuditLogs() {
             style={{
               background: "rgba(255,255,255,0.04)",
               border: "1px solid rgba(255,255,255,0.08)",
-              color: "#e2e8f0",
+              color: "var(--foreground)",
               fontSize: "14px",
             }}
           >
@@ -347,13 +347,13 @@ export function AuditLogs() {
                       borderBottom: index < filteredLogs.length - 1 ? "1px solid rgba(255,255,255,0.05)" : "none",
                     }}
                   >
-                  <td className="px-4 py-3" style={{ color: "#e2e8f0", fontSize: "13px" }}>
+                  <td className="px-4 py-3" style={{ color: "var(--foreground)", fontSize: "13px" }}>
                     {format(log.timestamp, "MMM d, h:mm a")}
                   </td>
-                  <td className="px-4 py-3" style={{ color: "#e2e8f0", fontSize: "13px" }}>
+                  <td className="px-4 py-3" style={{ color: "var(--foreground)", fontSize: "13px" }}>
                     {log.user}
                   </td>
-                  <td className="px-4 py-3" style={{ color: "#e2e8f0", fontSize: "13px" }}>
+                  <td className="px-4 py-3" style={{ color: "var(--foreground)", fontSize: "13px" }}>
                     {log.action}
                   </td>
                   <td className="px-4 py-3" style={{ color: "#6b7fa8", fontSize: "13px" }}>
@@ -396,14 +396,14 @@ export function AuditLogs() {
         <DialogContent
           className="w-[calc(100vw-2rem)] sm:max-w-2xl max-h-[85vh] overflow-y-auto rounded-2xl"
           style={{
-            background: "linear-gradient(180deg, #0d1228 0%, #0b0f20 100%)",
-            border: "1px solid rgba(255,255,255,0.1)",
+            background: "var(--card-background)",
+            border: "1px solid var(--border)",
           }}
         >
           {selectedLog && (
             <>
               <DialogHeader>
-                <DialogTitle className="text-white text-lg sm:text-xl">Audit Log Details</DialogTitle>
+                <DialogTitle className="text-foreground text-lg sm:text-xl">Audit Log Details</DialogTitle>
               </DialogHeader>
               <div className="space-y-4">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -411,19 +411,19 @@ export function AuditLogs() {
                     <label style={{ color: "#4a5578", fontSize: "12px", fontWeight: 600, letterSpacing: "0.05em" }}>
                       TIMESTAMP
                     </label>
-                    <p className="text-white mt-1 text-sm">{format(selectedLog.timestamp, "MMMM d, yyyy 'at' h:mm:ss a")}</p>
+                    <p className="text-foreground mt-1 text-sm">{format(selectedLog.timestamp, "MMMM d, yyyy 'at' h:mm:ss a")}</p>
                   </div>
                   <div>
                     <label style={{ color: "#4a5578", fontSize: "12px", fontWeight: 600, letterSpacing: "0.05em" }}>
                       USER
                     </label>
-                    <p className="text-white mt-1 text-sm">{selectedLog.user}</p>
+                    <p className="text-foreground mt-1 text-sm">{selectedLog.user}</p>
                   </div>
                   <div>
                     <label style={{ color: "#4a5578", fontSize: "12px", fontWeight: 600, letterSpacing: "0.05em" }}>
                       ACTION
                     </label>
-                    <p className="text-white mt-1 text-sm">{selectedLog.action}</p>
+                    <p className="text-foreground mt-1 text-sm">{selectedLog.action}</p>
                   </div>
                   <div>
                     <label style={{ color: "#4a5578", fontSize: "12px", fontWeight: 600, letterSpacing: "0.05em" }}>
@@ -449,26 +449,26 @@ export function AuditLogs() {
                     <label style={{ color: "#4a5578", fontSize: "12px", fontWeight: 600, letterSpacing: "0.05em" }}>
                       IP ADDRESS
                     </label>
-                    <p className="text-white mt-1 text-sm">{selectedLog.ipAddress}</p>
+                    <p className="text-foreground mt-1 text-sm">{selectedLog.ipAddress}</p>
                   </div>
                   <div>
                     <label style={{ color: "#4a5578", fontSize: "12px", fontWeight: 600, letterSpacing: "0.05em" }}>
                       LOCATION
                     </label>
-                    <p className="text-white mt-1 text-sm">{selectedLog.location}</p>
+                    <p className="text-foreground mt-1 text-sm">{selectedLog.location}</p>
                   </div>
                 </div>
                 <div>
                   <label style={{ color: "#4a5578", fontSize: "12px", fontWeight: 600, letterSpacing: "0.05em" }}>
                     RESOURCE
                   </label>
-                  <p className="text-white mt-1 text-sm">{selectedLog.resource}</p>
+                  <p className="text-foreground mt-1 text-sm">{selectedLog.resource}</p>
                 </div>
                 <div>
                   <label style={{ color: "#4a5578", fontSize: "12px", fontWeight: 600, letterSpacing: "0.05em" }}>
                     DETAILS
                   </label>
-                  <p className="text-white mt-1 text-sm">{selectedLog.details}</p>
+                  <p className="text-foreground mt-1 text-sm">{selectedLog.details}</p>
                 </div>
               </div>
             </>

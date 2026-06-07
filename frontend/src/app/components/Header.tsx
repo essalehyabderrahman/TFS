@@ -2,9 +2,10 @@ import { useMemo, useRef, useState, useEffect } from "react";
 import { Search, Bell, ShieldCheck, Menu, ArrowRight, Zap, ZapOff, Loader2 } from "lucide-react";
 import { useLocation, useNavigate } from "react-router";
 import { useAuth } from "../hooks/useAuth";
+import { useTransfers } from "../hooks/useTransfers";
 import { fetchNotifications, markNotificationRead, markAllNotificationsRead, DashboardNotification } from "../api/notifications";
 import { formatDistanceToNow, parseISO } from "date-fns";
-
+import { ThemeToggle } from "./ThemeToggle";
 interface HeaderProps {
   onMenuClick: () => void;
 }
@@ -61,77 +62,16 @@ export function Header({ onMenuClick }: HeaderProps) {
     return "TFS Dashboard";
   };
 
-  const searchItems = useMemo(
-    () => [
-      {
-        type: "section",
-        label: "Active Transfers",
-        description: "View and manage ongoing secure transfers",
-        path: "/dashboard/active",
-      },
-      {
-        type: "section",
-        label: "Received Files",
-        description: "Files that have been shared with you",
-        path: "/dashboard/received",
-      },
-      {
-        type: "section",
-        label: "Audit & Compliance Logs",
-        description: "Security and compliance activity history",
-        path: "/dashboard/audit",
-      },
-      {
-        type: "section",
-        label: "Team Management",
-        description: "Manage team members and roles",
-        path: "/dashboard/team",
-      },
-      {
-        type: "section",
-        label: "Security Settings",
-        description: "Authentication and file security controls",
-        path: "/dashboard/security",
-      },
-      {
-        type: "section",
-        label: "Account Management",
-        description: "Profile, subscription, and organization settings",
-        path: "/dashboard/account",
-      },
-      {
-        type: "file",
-        label: "Q4_Financial_Report_2025.pdf",
-        description: "Recent transfer in Active Transfers",
-        path: "/dashboard/active",
-      },
-      {
-        type: "file",
-        label: "Q1_Financial_Report.pdf",
-        description: "Received financial report",
-        path: "/dashboard/received",
-      },
-      {
-        type: "file",
-        label: "Q1_Financial_Report.pdf",
-        description: "Received financial report",
-        path: "/dashboard/received",
-      },
-      {
-        type: "option",
-        label: "New Secure Transfer",
-        description: "Open Active Transfers to start a new upload",
-        path: "/dashboard/active",
-      },
-      {
-        type: "option",
-        label: "Edit Organization Details",
-        description: "Organization settings in Account Management",
-        path: "/dashboard/account",
-      },
-    ],
-    [],
-  );
+  const { transfers } = useTransfers();
+
+  const searchItems = useMemo(() => {
+    return transfers.map((t) => ({
+      type: "file",
+      label: t.fileName,
+      description: `Recipient: ${t.recipient} • Size: ${t.size}`,
+      path: `/dashboard/active#transfer-${t.id}`,
+    }));
+  }, [transfers]);
 
   const filteredResults = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -173,7 +113,7 @@ export function Header({ onMenuClick }: HeaderProps) {
           <div className="flex items-center gap-2">
             <h1
               className="hidden sm:block"
-              style={{ fontSize: "17px", color: "#f1f5f9", fontWeight: 600, lineHeight: 1.3 }}
+              style={{ fontSize: "17px", color: "var(--foreground)", fontWeight: 600, lineHeight: 1.3 }}
             >
               {getPageTitle()}
             </h1>
@@ -191,7 +131,7 @@ export function Header({ onMenuClick }: HeaderProps) {
           </div>
           <h1
             className="sm:hidden"
-            style={{ fontSize: "15px", color: "#f1f5f9", fontWeight: 600, lineHeight: 1.3 }}
+            style={{ fontSize: "15px", color: "var(--foreground)", fontWeight: 600, lineHeight: 1.3 }}
           >
             TFS Dashboard
           </h1>
@@ -215,16 +155,19 @@ export function Header({ onMenuClick }: HeaderProps) {
           <div
             className="flex items-center gap-2 px-2.5 py-2 rounded-xl"
             style={{
-              background: "rgba(255,255,255,0.04)",
-              border: "1px solid rgba(255,255,255,0.08)",
+              background: "var(--background)",
+              border: "1px solid var(--border)",
             }}
           >
-            <Search size={14} style={{ color: "#4a5578" }} />
+            <Search size={14} style={{ color: "var(--foreground)" }} />
             <input
               type="text"
               ref={searchInputRef}
               value={query}
-              onChange={(e) => setQuery(e.target.value)}
+              onChange={(e) => {
+                setQuery(e.target.value);
+                if (!searchFocused) setSearchFocused(true);
+              }}
               onFocus={() => setSearchFocused(true)}
               onBlur={() => {
                 // allow click on results via timeout
@@ -237,12 +180,13 @@ export function Header({ onMenuClick }: HeaderProps) {
                     navigate(first.path);
                     setQuery("");
                     setSearchFocused(false);
+                    searchInputRef.current?.blur();
                   }
                 }
               }}
               placeholder={window.innerWidth < 640 ? "Search" : "Search"}
               className="bg-transparent outline-none w-full"
-              style={{ fontSize: "12px", color: "#94a3b8" }}
+              style={{ fontSize: "12px", color: "var(--muted-foreground)" }}
             />
           </div>
 
@@ -250,18 +194,20 @@ export function Header({ onMenuClick }: HeaderProps) {
             <div
               className="absolute mt-2 w-full rounded-xl overflow-hidden z-40"
               style={{
-                background: "#0b0f20",
-                border: "1px solid rgba(255,255,255,0.08)",
+                background: "var(--background)",
+                border: "1px solid var(--border)",
                 boxShadow: "0 16px 40px rgba(0,0,0,0.6)",
               }}
             >
               {filteredResults.slice(0, 6).map((item) => (
                 <button
-                  key={`${item.type}-${item.label}`}
-                  onClick={() => {
+                  key={item.path}
+                  onMouseDown={(e) => {
+                    e.preventDefault(); // Prevent input from losing focus immediately
                     navigate(item.path);
                     setQuery("");
                     setSearchFocused(false);
+                    searchInputRef.current?.blur();
                   }}
                   className="w-full flex items-start gap-2 px-3.5 py-2.5 hover:bg-white/5 text-left transition-colors"
                 >
@@ -280,7 +226,7 @@ export function Header({ onMenuClick }: HeaderProps) {
                     <div className="flex items-center justify-between gap-2">
                       <span
                         className="truncate"
-                        style={{ fontSize: "13px", color: "#e2e8f0", fontWeight: 500 }}
+                        style={{ fontSize: "13px", color: "var(--foreground)", fontWeight: 500 }}
                       >
                         {item.label}
                       </span>
@@ -321,6 +267,8 @@ export function Header({ onMenuClick }: HeaderProps) {
           <Search size={16} style={{ color: "#6b7fa8" }} />
         </button>
 
+        <ThemeToggle />
+
         {/* Bell */}
         <button
           className="relative w-9 h-9 flex items-center justify-center rounded-xl transition-colors duration-200 hover:bg-white/5"
@@ -359,7 +307,7 @@ export function Header({ onMenuClick }: HeaderProps) {
               className="absolute right-0 top-12 w-[calc(100vw-2rem)] sm:w-80 max-w-sm rounded-xl overflow-hidden"
               style={{
                 zIndex: 100,
-                background: "#0b0f20",
+                background: "var(--background)",
                 border: "1px solid rgba(255,255,255,0.08)",
                 boxShadow: "0 18px 45px rgba(0,0,0,0.75)",
               }}
@@ -372,7 +320,7 @@ export function Header({ onMenuClick }: HeaderProps) {
                   <p
                     style={{
                       fontSize: "13px",
-                      color: "#e2e8f0",
+                      color: "var(--foreground)",
                       fontWeight: 600,
                     }}
                   >
@@ -427,7 +375,7 @@ export function Header({ onMenuClick }: HeaderProps) {
                             className="truncate"
                             style={{ 
                               fontSize: "13px", 
-                              color: n.isRead ? "#cbd5e1" : "#ffffff", 
+                              color: n.isRead ? "var(--muted-foreground)" : "var(--foreground)", 
                               fontWeight: n.isRead ? 500 : 700 
                             }}
                           >
@@ -436,7 +384,7 @@ export function Header({ onMenuClick }: HeaderProps) {
                           <p
                             style={{ 
                               fontSize: "11px", 
-                              color: "#94a3b8", 
+                              color: "var(--muted-foreground)", 
                               marginTop: 2,
                               whiteSpace: "normal" 
                             }}
