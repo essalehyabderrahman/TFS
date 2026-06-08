@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react"
 import { useAuth } from "../hooks/useAuth"
 import { toast } from "sonner"
-import { ArrowUpCircle, Check, X, Loader2, Filter } from "lucide-react"
+import { ArrowUpCircle, Check, X, Loader2 } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "../components/ui/dialog"
 import { fetchPendingQuotaRequests, resolveQuotaRequest, type QuotaRequestData } from "../api/quota-requests"
 
@@ -86,20 +86,24 @@ export function QuotaRequests() {
         </div>
 
         {/* Filter */}
-        <div className="flex items-center gap-2">
-          <Filter size={14} style={{ color: "var(--muted-foreground)" }} />
-          <select
-            value={statusFilter}
-            onChange={e => setStatusFilter(e.target.value as "pending" | "all")}
-            className="px-3 py-2 rounded-lg text-sm outline-none"
-            style={{
-              background: "var(--input-background)",
-              border: "1px solid var(--border)",
-              color: "var(--foreground)",
-            }}>
-            <option value="pending">Pending Only</option>
-            <option value="all">All Requests</option>
-          </select>
+        <div className="flex items-center gap-1 p-1 rounded-xl" style={{ background: "var(--background)", border: "1px solid var(--border)" }}>
+          {([
+            { value: "pending", label: "Pending Only" },
+            { value: "all",     label: "All Requests" },
+          ] as const).map(tab => (
+            <button
+              key={tab.value}
+              onClick={() => setStatusFilter(tab.value)}
+              className="px-3 py-1.5 rounded-lg text-sm font-medium transition-all"
+              style={
+                statusFilter === tab.value
+                  ? { background: "var(--card-background)", color: "#0B7FFF", border: "1px solid var(--border)" }
+                  : { color: "var(--muted-foreground)", border: "1px solid var(--border)" }
+              }
+            >
+              {tab.label}
+            </button>
+          ))}
         </div>
       </div>
 

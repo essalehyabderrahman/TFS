@@ -44,25 +44,23 @@ export function ProtectedRoute() {
     return <Navigate to="/signin" replace />
   }
 
-  // [Security] Force password change if required by admin
-  // This takes precedence over MFA setup if the admin just reset the account.
-  if (isPasswordResetRequired) {
-    if (location.pathname !== "/dashboard/account") {
-      return <Navigate to="/dashboard/account" replace />
-    }
-  }
-
   // MFA Flow Enforcement: If session is partial, only allow /mfa-verify or /dashboard/mfa-setup
+  // This must take precedence over password reset because the backend requires a fully authenticated
+  // (non-MFA-pending) token to access the change-password endpoint.
   if (isMfaPending) {
     const allowedFlows = ["/mfa-verify", "/dashboard/mfa-setup"]
     if (!allowedFlows.includes(location.pathname)) {
       const targetFlow = user?.mfaEnabled ? "/mfa-verify" : "/dashboard/mfa-setup"
       return <Navigate to={targetFlow} replace />
     }
+    return <Outlet />
   }
 
-  if (!isAuthenticated && !sessionExpiredReason) {
-    return <Navigate to="/signin" replace />
+  // [Security] Force password change if required by admin
+  if (isPasswordResetRequired) {
+    if (location.pathname !== "/dashboard/account") {
+      return <Navigate to="/dashboard/account" replace />
+    }
   }
 
   return <Outlet />

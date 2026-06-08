@@ -312,7 +312,7 @@ export function AccountManagement() {
         </div>
         <div className="flex items-center gap-4 mb-6">
           <div className="w-16 h-16 rounded-full flex items-center justify-center shrink-0"
-            style={{ background: "linear-gradient(135deg, #0B7FFF 0%, #0960D9 100%)", fontSize: "20px", fontWeight: 700, color: "#0f1729" }}>
+            style={{ background: "linear-gradient(135deg, #0B7FFF 0%, #0960D9 100%)", fontSize: "20px", fontWeight: 700, color: "white" }}>
             {account.avatar}
           </div>
           <div>

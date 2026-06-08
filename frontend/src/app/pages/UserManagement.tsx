@@ -585,7 +585,7 @@ export function UserManagement() {
 
       {/* Confirm role change */}
       <AlertDialog open={!!pendingRoleChange} onOpenChange={() => setPendingRoleChange(null)}>
-        <AlertDialogContent style={{ background: "var(--card-background)", border: "1px solid var(--foreground)" }}>
+        <AlertDialogContent style={{ background: "var(--card-background)", border: "1px solid var(--background)" }}>
           <AlertDialogHeader>
             <AlertDialogTitle style={{ color: "var(--foreground)" }}>
               {pendingRoleChange?.newRole === "admin" ? "Promote to Admin" : "Demote to User"}
@@ -775,7 +775,7 @@ export function UserManagement() {
 
       {/* Confirm delete */}
       <AlertDialog open={!!memberToDelete} onOpenChange={() => setMemberToDelete(null)}>
-        <AlertDialogContent style={{ background: "var(--input-background)", border: "1px solid var(--border)" }}>
+        <AlertDialogContent style={{ background: "var(--card-background)", border: "1px solid var(--border)" }}>
           <AlertDialogHeader>
             <AlertDialogTitle style={{ color: "var(--foreground)" }}>Delete User</AlertDialogTitle>
             <AlertDialogDescription style={{ color: "#6b7fa8" }}>
